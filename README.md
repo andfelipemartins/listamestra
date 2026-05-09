@@ -110,7 +110,7 @@ Exemplo: `DE-15.25.00.00-6A1-1001`
 | 3     | Importador do ID/Índice           | ✅ Concluído  |
 | 4     | Banco SQLite (estrutura base)     | ✅ Concluído  |
 | 5     | Dashboard inicial                 | ✅ Concluído  |
-| 6     | Comparação ID x Lista             | 🔲 Pendente   |
+| 6     | Comparação ID x Lista             | ✅ Concluído  |
 | 7     | Leitor de pasta SharePoint/local  | 🔲 Pendente   |
 | 8     | Cadastro manual                   | 🔲 Pendente   |
 | 9     | Motor de status                   | 🔲 Pendente   |
