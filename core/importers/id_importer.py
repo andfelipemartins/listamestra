@@ -64,12 +64,21 @@ class IdImporter:
 
     def _ler_planilha(self, arquivo: str) -> pd.DataFrame:
         xl = pd.ExcelFile(arquivo)
-        # Detecta aba cujo nome começa com "ID" (ex: "ID 24-04-2026")
         sheet = next(
             (s for s in xl.sheet_names if s.strip().upper().startswith("ID")),
-            xl.sheet_names[0],
+            None,
         )
+        if sheet is None:
+            raise ValueError(
+                f"Nenhuma aba com prefixo 'ID' encontrada em '{os.path.basename(arquivo)}'. "
+                f"Abas disponíveis: {xl.sheet_names}"
+            )
         df = pd.read_excel(arquivo, sheet_name=sheet, header=_HEADER_ROW)
+        if df.shape[1] < 2:
+            raise ValueError(
+                f"A aba '{sheet}' tem apenas {df.shape[1]} coluna(s). "
+                f"São necessárias pelo menos 2 (CÓDIGO e TÍTULO)."
+            )
         codigo_col = df.iloc[:, _COL_CODIGO].astype(str).str.strip()
         mask = codigo_col.notna() & (codigo_col != "") & (codigo_col.str.lower() != "nan")
         return df[mask].reset_index(drop=True)

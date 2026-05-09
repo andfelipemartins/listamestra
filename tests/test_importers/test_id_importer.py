@@ -10,6 +10,7 @@ Execute com:
 import os
 import sys
 
+import openpyxl
 import pandas as pd
 import pytest
 
@@ -324,3 +325,105 @@ class TestRegistroImportacao:
 
         assert imp["total_novos"] == 2
         assert imp["total_atualizados"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Testes de _ler_planilha com arquivo Excel real
+# ---------------------------------------------------------------------------
+
+def _criar_excel(path: str, sheet_name: str, rows: list, n_colunas: int = 2):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = sheet_name
+    for row in rows:
+        ws.append(row[:n_colunas])
+    wb.save(path)
+
+
+class TestLerPlanilha:
+
+    def test_detecta_aba_pelo_prefixo_id(self, tmp_path, db):
+        arquivo = str(tmp_path / "lista_mestra.xlsx")
+        _criar_excel(arquivo, "ID 24-04-2026", [
+            ["CÓDIGO (IDs)", "TÍTULO"],
+            ["RT-15.25.00.00-6A1-1001", "Relatório Técnico"],
+            ["DE-15.25.00.00-6A1-1001", "Desenho"],
+        ])
+
+        db_path, _ = db
+        importer = IdImporter(db_path=db_path)
+        df = importer._ler_planilha(arquivo)
+
+        assert len(df) == 2
+        assert str(df.iloc[0, 0]).strip() == "RT-15.25.00.00-6A1-1001"
+        assert str(df.iloc[1, 0]).strip() == "DE-15.25.00.00-6A1-1001"
+
+    def test_linhas_com_codigo_vazio_sao_filtradas(self, tmp_path, db):
+        arquivo = str(tmp_path / "lista_mestra.xlsx")
+        _criar_excel(arquivo, "ID 24-04-2026", [
+            ["CÓDIGO (IDs)", "TÍTULO"],
+            ["DE-15.25.00.00-6A1-1001", "Desenho válido"],
+            ["", "Linha sem código"],
+            [None, "Linha com código nulo"],
+            ["RT-15.25.00.00-6A1-1001", "Outro válido"],
+        ])
+
+        db_path, _ = db
+        importer = IdImporter(db_path=db_path)
+        df = importer._ler_planilha(arquivo)
+
+        assert len(df) == 2  # apenas as linhas com código preenchido
+
+    def test_sem_aba_id_levanta_erro_claro(self, tmp_path):
+        arquivo = str(tmp_path / "errado.xlsx")
+        _criar_excel(arquivo, "Lista de documentos", [
+            ["CÓDIGO", "TÍTULO"],
+            ["DE-15.25.00.00-6A1-1001", "Desenho"],
+        ])
+
+        importer = IdImporter()
+        with pytest.raises(ValueError, match="Nenhuma aba com prefixo 'ID'"):
+            importer._ler_planilha(arquivo)
+
+    def test_erro_menciona_abas_disponiveis(self, tmp_path):
+        arquivo = str(tmp_path / "errado.xlsx")
+        _criar_excel(arquivo, "Resumo", [["A", "B"]])
+
+        importer = IdImporter()
+        with pytest.raises(ValueError, match="Resumo"):
+            importer._ler_planilha(arquivo)
+
+    def test_aba_com_uma_coluna_levanta_erro(self, tmp_path):
+        arquivo = str(tmp_path / "incompleto.xlsx")
+        _criar_excel(arquivo, "ID Incompleto", [
+            ["CÓDIGO"],
+            ["DE-15.25.00.00-6A1-1001"],
+        ], n_colunas=1)
+
+        importer = IdImporter()
+        with pytest.raises(ValueError, match="coluna"):
+            importer._ler_planilha(arquivo)
+
+    def test_importar_arquivo_real_end_to_end(self, tmp_path, db):
+        arquivo = str(tmp_path / "ID 24-04-2026.xlsx")
+        _criar_excel(arquivo, "ID 24-04-2026", [
+            ["CÓDIGO (IDs)", "TÍTULO"],
+            ["RT-15.25.00.00-6A1-1001", "Relatório Técnico de Metodologia"],
+            ["DE-15.23.17.84-6B3-1001", "Projeto de Arquitetura - São Mateus"],
+            ["ID-15.25.00.00-6A9-1001", "Índice de Documentos - Civil"],
+        ])
+
+        db_path, contrato_id = db
+        importer = IdImporter(db_path=db_path)
+        resultado = importer.importar(arquivo, contrato_id)
+
+        assert resultado.novos == 3
+        assert resultado.erros == 0
+        assert resultado.total_inconsistencias == 0
+
+        with get_connection(db_path) as conn:
+            total = conn.execute(
+                "SELECT COUNT(*) AS n FROM documentos_previstos WHERE contrato_id = ?",
+                (contrato_id,),
+            ).fetchone()["n"]
+        assert total == 3
