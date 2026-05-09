@@ -93,7 +93,8 @@ CREATE TABLE IF NOT EXISTS revisoes (
     ultima_revisao      INTEGER DEFAULT 0,
     origem              TEXT DEFAULT 'importacao_lista',
     importacao_id       INTEGER,
-    criado_em           TEXT DEFAULT (datetime('now'))
+    criado_em           TEXT DEFAULT (datetime('now')),
+    UNIQUE(documento_id, revisao, versao)
 );
 
 -- ============================================================

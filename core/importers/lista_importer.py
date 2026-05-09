@@ -88,6 +88,10 @@ class ResultadoImportacao:
     def total_revisoes(self) -> int:
         return self.novas_revisoes + self.revisoes_atualizadas
 
+    @property
+    def total_inconsistencias(self) -> int:
+        return len(self.inconsistencias)
+
 
 class ListaImporter:
 
@@ -323,6 +327,9 @@ class ListaImporter:
         return cur.lastrowid
 
     def _finalizar_importacao(self, conn, imp_id, resultado):
+        # total_erros = falhas de processamento + inconsistências de validação
+        # O detalhe de cada inconsistência está na tabela inconsistencias
+        total_erros = resultado.erros + resultado.total_inconsistencias
         conn.execute(
             """
             UPDATE importacoes SET
@@ -333,7 +340,7 @@ class ListaImporter:
                 confirmado_em     = datetime('now')
             WHERE id = ?
             """,
-            (resultado.erros, resultado.novos_documentos, resultado.documentos_atualizados, imp_id),
+            (total_erros, resultado.novos_documentos, resultado.documentos_atualizados, imp_id),
         )
 
     def _salvar_inconsistencia(self, conn, imp_id, codigo, tipo, descricao):

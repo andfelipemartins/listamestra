@@ -415,7 +415,7 @@ class TestRegistroImportacao:
 
         assert imp["total_novos"] == 2
         assert imp["total_atualizados"] == 0
-        assert imp["total_erros"] == 0
+        assert imp["total_erros"] == 0  # nenhuma inconsistência nem exceção
 
 
 # ---------------------------------------------------------------------------
@@ -444,3 +444,72 @@ class TestResultadoImportacao:
         )
         assert resultado.total_revisoes == resultado.novas_revisoes + resultado.revisoes_atualizadas
         assert resultado.total_revisoes == 2
+
+    def test_total_inconsistencias_reflete_lista(self, db, importer):
+        db_path, contrato_id = db
+        resultado = importer._importar_df(
+            _df(_linha("CODIGO_INVALIDO")), "test.xlsx", contrato_id
+        )
+        assert resultado.total_inconsistencias == len(resultado.inconsistencias)
+        assert resultado.total_inconsistencias >= 1
+
+
+# ---------------------------------------------------------------------------
+# Testes de semântica do log de importação (total_erros)
+# ---------------------------------------------------------------------------
+
+class TestTotalErros:
+
+    def test_codigo_invalido_aparece_em_total_erros(self, db, importer):
+        db_path, contrato_id = db
+        resultado = importer._importar_df(
+            _df(_linha("CODIGO_INVALIDO")), "test.xlsx", contrato_id
+        )
+
+        with get_connection(db_path) as conn:
+            imp = conn.execute(
+                "SELECT total_erros FROM importacoes WHERE id = ?", (resultado.importacao_id,)
+            ).fetchone()
+
+        # total_erros inclui inconsistências de validação, não só exceções
+        assert imp["total_erros"] >= 1
+
+    def test_importacao_limpa_tem_zero_erros(self, db, importer):
+        db_path, contrato_id = db
+        resultado = importer._importar_df(
+            _df(_linha("DE-15.25.00.00-6N3-1001")), "test.xlsx", contrato_id
+        )
+
+        with get_connection(db_path) as conn:
+            imp = conn.execute(
+                "SELECT total_erros FROM importacoes WHERE id = ?", (resultado.importacao_id,)
+            ).fetchone()
+
+        assert imp["total_erros"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Testes de integridade de schema (UNIQUE em revisoes)
+# ---------------------------------------------------------------------------
+
+class TestIntegridadeSchema:
+
+    def test_unique_revisao_impedido_por_insert_direto(self, db):
+        db_path, contrato_id = db
+        import sqlite3
+
+        with get_connection(db_path) as conn:
+            conn.execute(
+                "INSERT INTO documentos (contrato_id, codigo, tipo) VALUES (?, ?, ?)",
+                (contrato_id, "DE-15.25.00.00-6N3-9999", "DE"),
+            )
+            doc_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+            conn.execute(
+                "INSERT INTO revisoes (documento_id, revisao, versao) VALUES (?, 1, 1)",
+                (doc_id,),
+            )
+            with pytest.raises(sqlite3.IntegrityError):
+                conn.execute(
+                    "INSERT INTO revisoes (documento_id, revisao, versao) VALUES (?, 1, 1)",
+                    (doc_id,),
+                )
