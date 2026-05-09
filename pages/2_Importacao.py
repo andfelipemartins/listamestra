@@ -14,6 +14,7 @@ import streamlit as st
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from core.importers.lista_importer import ListaImporter
 from core.importers.id_importer import IdImporter
+from core.importers.arquivos_importer import ArquivosImporter
 from db.connection import get_connection
 
 # ---------------------------------------------------------------------------
@@ -168,6 +169,62 @@ def _tab_id(contrato_id: int):
                     st.error(f"Erro na importação: {e}")
 
 
+def _tab_arquivos(contrato_id: int):
+    st.markdown(
+        "Importa um arquivo de texto com nomes de arquivos gerado pelo Windows "
+        "(`dir /b /o:n >nomes.txt` ou `dir /b /s /o:n >nomes.txt` para subpastas). "
+        "Arquivos em pastas **OBSOLETO** são ignorados automaticamente."
+    )
+    with st.expander("Como gerar o nomes.txt"):
+        st.code(
+            ":: Abra o Prompt de Comando na pasta sincronizada do SharePoint\n"
+            ":: Apenas a pasta atual:\n"
+            "dir /b /o:n >nomes.txt\n\n"
+            ":: Recursivo (inclui subpastas — recomendado):\n"
+            "dir /b /s /o:n >nomes.txt",
+            language="bat",
+        )
+
+    arquivo = st.file_uploader(
+        "Arquivo de nomes (.txt)", type=["txt"], key="upload_nomes"
+    )
+    if arquivo:
+        st.caption(f"Arquivo selecionado: **{arquivo.name}** ({arquivo.size} bytes)")
+        if st.button("Importar lista de arquivos", type="primary", key="btn_nomes"):
+            with st.spinner("Processando…"):
+                try:
+                    conteudo = arquivo.read().decode("utf-8", errors="replace")
+                    resultado = ArquivosImporter().importar_texto(
+                        conteudo, contrato_id, arquivo.name
+                    )
+                    st.success(
+                        f"Concluído — **{resultado.novos}** arquivo(s) novo(s) registrado(s), "
+                        f"**{resultado.ja_existentes}** já existiam."
+                    )
+                    col1, col2, col3 = st.columns(3)
+                    col1.metric("Sem documento no banco", resultado.sem_documento)
+                    col2.metric("Não reconhecidos", resultado.nao_reconhecidos)
+                    col3.metric("OBSOLETO ignorados", resultado.obsoletos_ignorados)
+
+                    if resultado.sem_doc_codigos:
+                        with st.expander(
+                            f"Códigos sem documento no banco ({len(resultado.sem_doc_codigos)})"
+                        ):
+                            for c in resultado.sem_doc_codigos[:50]:
+                                st.markdown(f"- `{c}`")
+                            if len(resultado.sem_doc_codigos) > 50:
+                                st.caption(f"… e mais {len(resultado.sem_doc_codigos) - 50}.")
+
+                    if resultado.erros_parse:
+                        with st.expander(
+                            f"Nomes não reconhecidos ({len(resultado.erros_parse)})"
+                        ):
+                            for e in resultado.erros_parse[:30]:
+                                st.markdown(f"- {e}")
+                except Exception as e:
+                    st.error(f"Erro ao processar o arquivo: {e}")
+
+
 def _historico(contrato_id: int):
     historico = _historico_importacoes(contrato_id)
     if not historico:
@@ -205,9 +262,10 @@ if contrato_id is None:
 
 st.divider()
 
-tab_lista, tab_id, tab_hist = st.tabs([
+tab_lista, tab_id, tab_arq, tab_hist = st.tabs([
     "📋 Lista de Documentos",
     "📑 Índice de Documentos (ID)",
+    "📁 Arquivos (nomes.txt)",
     "🕘 Histórico",
 ])
 
@@ -216,6 +274,9 @@ with tab_lista:
 
 with tab_id:
     _tab_id(contrato_id)
+
+with tab_arq:
+    _tab_arquivos(contrato_id)
 
 with tab_hist:
     _historico(contrato_id)

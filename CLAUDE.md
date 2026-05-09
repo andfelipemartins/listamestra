@@ -46,13 +46,15 @@ sclme/
 │   ├── 2_Importacao.py         # Upload de Excel + criação de contrato
 │   └── 3_Comparacao.py         # Comparação ID × Lista (ausentes, extras, divergências)
 ├── core/
-│   ├── parsers/                # Interpretação de códigos documentais
+│   ├── parsers/                # Interpretação de códigos e nomes de arquivo
 │   │   ├── base_parser.py      # Contrato (BaseParser, CodigoParseado, ErroDeparse)
 │   │   ├── linha15_parser.py   # Parser da Linha 15 — Metrô SP
-│   │   └── registry.py         # Seleção automática de parser por contrato
-│   ├── importers/              # Leitura de Excel
+│   │   ├── registry.py         # Seleção automática de parser por contrato
+│   │   └── arquivo_parser.py   # Parser de nome de arquivo (CODIGO-REV-VER.ext)
+│   ├── importers/              # Leitura de Excel e arquivos externos
 │   │   ├── lista_importer.py   # Lista de Documentos → documentos + revisoes
-│   │   └── id_importer.py      # Índice de Documentos → documentos_previstos
+│   │   ├── id_importer.py      # Índice de Documentos → documentos_previstos
+│   │   └── arquivos_importer.py# nomes.txt → arquivos (vincula arquivo ao documento)
 │   ├── engine/                 # Regras de negócio
 │   │   ├── status.py           # Classificação de status documental
 │   │   └── comparacao.py       # Comparação ID × Lista (ResultadoComparacao)
@@ -166,7 +168,7 @@ with get_connection() as conn:
 | 4 | Banco SQLite (estrutura base) | ✅ Concluído |
 | 5 | Dashboard inicial | ✅ Concluído |
 | 6 | Comparação ID × Lista | ✅ Concluído |
-| 7 | Leitor de pasta SharePoint/local | 🔲 Pendente |
+| 7 | Leitor de pasta SharePoint/local | ✅ Concluído |
 | 8 | Cadastro manual | 🔲 Pendente |
 | 9 | Motor de status | 🔲 Pendente |
 | 10 | Exportação de relatórios | 🔲 Pendente |
