@@ -43,7 +43,8 @@ sclme/
 ├── main.py                     # Home page Streamlit (estado do sistema + links)
 ├── pages/                      # Páginas Streamlit (multi-page app — ao lado do main.py)
 │   ├── 1_Dashboard.py          # Dashboard de progresso por status e trecho
-│   └── 2_Importacao.py         # Upload de Excel + criação de contrato
+│   ├── 2_Importacao.py         # Upload de Excel + criação de contrato
+│   └── 3_Comparacao.py         # Comparação ID × Lista (ausentes, extras, divergências)
 ├── core/
 │   ├── parsers/                # Interpretação de códigos documentais
 │   │   ├── base_parser.py      # Contrato (BaseParser, CodigoParseado, ErroDeparse)
@@ -53,7 +54,8 @@ sclme/
 │   │   ├── lista_importer.py   # Lista de Documentos → documentos + revisoes
 │   │   └── id_importer.py      # Índice de Documentos → documentos_previstos
 │   ├── engine/                 # Regras de negócio
-│   │   └── status.py           # Classificação de status documental
+│   │   ├── status.py           # Classificação de status documental
+│   │   └── comparacao.py       # Comparação ID × Lista (ResultadoComparacao)
 │   └── exporters/              # Geração de relatórios (Marco 10+)
 ├── app/
 │   └── components/             # Widgets reutilizáveis (futuro)
@@ -163,7 +165,7 @@ with get_connection() as conn:
 | 3 | Importador do ID/Índice | ✅ Concluído |
 | 4 | Banco SQLite (estrutura base) | ✅ Concluído |
 | 5 | Dashboard inicial | ✅ Concluído |
-| 6 | Comparação ID × Lista | 🔲 Pendente |
+| 6 | Comparação ID × Lista | ✅ Concluído |
 | 7 | Leitor de pasta SharePoint/local | 🔲 Pendente |
 | 8 | Cadastro manual | 🔲 Pendente |
 | 9 | Motor de status | 🔲 Pendente |
