@@ -8,25 +8,16 @@ Exibe progresso por status e por trecho para o contrato ativo.
 import os
 import sys
 
-import pandas as pd
 import plotly.express as px
 import streamlit as st
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from db.connection import get_connection
-
-# ---------------------------------------------------------------------------
-# Configuração de domínio
-# ---------------------------------------------------------------------------
-
-NOME_TRECHO = {
-    "00": "Geral",
-    "19": "Oratório",
-    "23": "São Mateus",
-    "25": "Ragueb Chohfi",
-}
-
-STATUS_ORDEM = ["Em Elaboração", "Em Análise", "Em Revisão", "Aprovado"]
+from core.engine.status import (
+    STATUS_ORDEM,
+    NOME_TRECHO,
+    carregar_progresso,
+)
 
 STATUS_COR = {
     "Em Elaboração": "#95a5a6",
@@ -45,52 +36,6 @@ def _contrato_ativo():
             "SELECT id, nome, cliente FROM contratos WHERE ativo = 1 ORDER BY id LIMIT 1"
         ).fetchone()
     return dict(row) if row else None
-
-
-def _carregar_documentos(contrato_id: int) -> pd.DataFrame:
-    """
-    Retorna um DataFrame com status calculado para cada documento previsto.
-
-    Lógica de status (baseada na última revisão):
-    - Aprovado      : situacao contém "APROVADO" e não contém "NÃO"
-    - Em Revisão    : situacao contém "NÃO APROVADO"
-    - Em Análise    : tem data_emissao, mas situacao ainda não é final
-    - Em Elaboração : sem data_emissao (não emitido ao cliente)
-    """
-    with get_connection() as conn:
-        rows = conn.execute(
-            """
-            SELECT
-                dp.codigo,
-                dp.titulo,
-                COALESCE(dp.trecho, '00') AS trecho,
-                dp.tipo,
-                r.situacao,
-                r.data_emissao,
-                CASE
-                    WHEN UPPER(COALESCE(r.situacao,'')) LIKE '%APROVADO%'
-                         AND UPPER(COALESCE(r.situacao,'')) NOT LIKE '%NÃO%'
-                         THEN 'Aprovado'
-                    WHEN UPPER(COALESCE(r.situacao,'')) LIKE '%NÃO APROVADO%'
-                         THEN 'Em Revisão'
-                    WHEN r.data_emissao IS NOT NULL
-                         THEN 'Em Análise'
-                    ELSE 'Em Elaboração'
-                END AS status
-            FROM documentos_previstos dp
-            LEFT JOIN documentos d
-                   ON d.contrato_id = dp.contrato_id AND d.codigo = dp.codigo
-            LEFT JOIN revisoes r
-                   ON r.documento_id = d.id AND r.ultima_revisao = 1
-            WHERE dp.contrato_id = ? AND dp.ativo = 1
-            ORDER BY dp.trecho, dp.codigo
-            """,
-            (contrato_id,),
-        ).fetchall()
-    df = pd.DataFrame([dict(r) for r in rows])
-    if not df.empty:
-        df["nome_trecho"] = df["trecho"].map(NOME_TRECHO).fillna(df["trecho"])
-    return df
 
 
 def _ultima_importacao(contrato_id: int) -> dict | None:
@@ -236,7 +181,7 @@ if ultima:
         f"{ultima['total_novos']} novos, {ultima['total_atualizados']} atualizados"
     )
 
-df = _carregar_documentos(contrato["id"])
+df = carregar_progresso(contrato["id"])
 
 if df.empty:
     st.info(

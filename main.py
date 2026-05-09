@@ -5,7 +5,13 @@ Execute com:
     streamlit run main.py
 """
 
+import os
+import sys
+
 import streamlit as st
+
+sys.path.insert(0, os.path.dirname(__file__))
+from db.connection import get_connection
 
 st.set_page_config(
     page_title="SCLME — Controle de Lista Mestra",
@@ -13,53 +19,66 @@ st.set_page_config(
     layout="wide",
 )
 
-st.title("📋 SCLME — Sistema de Controle de Lista Mestra")
-st.caption("Sistema de Controle de Projetos Executivos · Linha 15 — Metrô de SP")
+st.title("📋 SCLME")
+st.caption("Sistema de Controle de Lista Mestra de Projetos Executivos · Linha 15 — Metrô de SP")
 
-st.info(
-    "🔧 Sistema em desenvolvimento. "
-    "Navegue pelas páginas no menu lateral quando disponíveis.",
-    icon="ℹ️",
-)
+# ---------------------------------------------------------------------------
+# Estado do sistema
+# ---------------------------------------------------------------------------
 
-# --- Demonstração do parser (Marco 1) ---
+def _resumo():
+    try:
+        with get_connection() as conn:
+            contratos = conn.execute(
+                "SELECT COUNT(*) AS n FROM contratos WHERE ativo = 1"
+            ).fetchone()["n"]
+            previstos = conn.execute(
+                "SELECT COUNT(*) AS n FROM documentos_previstos"
+            ).fetchone()["n"]
+            documentos = conn.execute(
+                "SELECT COUNT(*) AS n FROM documentos"
+            ).fetchone()["n"]
+            revisoes = conn.execute(
+                "SELECT COUNT(*) AS n FROM revisoes"
+            ).fetchone()["n"]
+        return dict(contratos=contratos, previstos=previstos,
+                    documentos=documentos, revisoes=revisoes)
+    except Exception:
+        return None
+
+
+resumo = _resumo()
+
+if resumo is None:
+    st.error("Banco de dados não encontrado. Execute `python scripts/init_db.py` primeiro.")
+    st.stop()
+
+# ---------------------------------------------------------------------------
+# Cards de estado
+# ---------------------------------------------------------------------------
+
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("Contratos", resumo["contratos"])
+c2.metric("Docs Previstos (ID)", resumo["previstos"])
+c3.metric("Docs na Lista", resumo["documentos"])
+c4.metric("Revisões", resumo["revisoes"])
+
 st.divider()
-st.subheader("🔍 Teste do Parser de Código Documental")
 
-from core.parsers.registry import ParserRegistry
-from core.parsers.base_parser import CodigoParseado
+# ---------------------------------------------------------------------------
+# Ações rápidas
+# ---------------------------------------------------------------------------
 
-registry = ParserRegistry()
+if resumo["contratos"] == 0 or resumo["previstos"] == 0:
+    st.info(
+        "**Primeiros passos:** acesse **Importação** no menu lateral para criar o contrato "
+        "e carregar o Índice de Documentos (ID) e a Lista de Documentos."
+    )
+else:
+    st.info("Acesse o **Dashboard** no menu lateral para ver o progresso do contrato.")
 
-codigo = st.text_input(
-    "Informe um código documental:",
-    value="DE-15.25.00.00-6A1-1001",
-    help="Exemplo: DE-15.25.00.00-6A1-1001",
-)
-
-if codigo:
-    resultado = registry.parse(codigo)
-
-    if isinstance(resultado, CodigoParseado):
-        st.success(f"✅ Código válido — {resultado.descricao_tipo}")
-
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Tipo", resultado.tipo)
-        col1.metric("Descrição", resultado.descricao_tipo)
-
-        col2.metric("Trecho", resultado.extras.get("nome_trecho", "—"))
-        col2.metric("Etapa", resultado.extras.get("etapa", "—"))
-
-        col3.metric("Classe", resultado.extras.get("descricao_classe", "—"))
-        col3.metric("Sequencial", resultado.extras.get("sequencial", "—"))
-
-        st.caption(f"Identificador base: `{resultado.identificador_base}`")
-        st.caption(f"Parser usado: `{resultado.parser_usado}`")
-
-        if resultado.extras.get("avisos"):
-            for aviso in resultado.extras["avisos"]:
-                st.warning(f"⚠️ {aviso}")
-    else:
-        st.error(f"❌ {resultado.mensagem}")
-        if resultado.detalhe:
-            st.caption(f"Detalhe técnico: {resultado.detalhe}")
+col_dash, col_imp = st.columns(2)
+with col_dash:
+    st.page_link("pages/1_Dashboard.py", label="Ir para o Dashboard", icon="📊")
+with col_imp:
+    st.page_link("pages/2_Importacao.py", label="Ir para Importação", icon="📥")

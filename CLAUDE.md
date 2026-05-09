@@ -40,18 +40,23 @@ pytest tests/ -v --cov=core --cov-report=term-missing
 
 ```
 sclme/
-├── main.py                     # Ponto de entrada Streamlit
+├── main.py                     # Home page Streamlit (estado do sistema + links)
+├── pages/                      # Páginas Streamlit (multi-page app — ao lado do main.py)
+│   ├── 1_Dashboard.py          # Dashboard de progresso por status e trecho
+│   └── 2_Importacao.py         # Upload de Excel + criação de contrato
 ├── core/
 │   ├── parsers/                # Interpretação de códigos documentais
 │   │   ├── base_parser.py      # Contrato (BaseParser, CodigoParseado, ErroDeparse)
 │   │   ├── linha15_parser.py   # Parser da Linha 15 — Metrô SP
 │   │   └── registry.py         # Seleção automática de parser por contrato
-│   ├── importers/              # Leitura de Excel / CSV / pasta (Marco 2+)
-│   ├── exporters/              # Geração de relatórios (Marco 10+)
-│   └── engine/                 # Motor de status documental (Marco 9+)
+│   ├── importers/              # Leitura de Excel
+│   │   ├── lista_importer.py   # Lista de Documentos → documentos + revisoes
+│   │   └── id_importer.py      # Índice de Documentos → documentos_previstos
+│   ├── engine/                 # Regras de negócio
+│   │   └── status.py           # Classificação de status documental
+│   └── exporters/              # Geração de relatórios (Marco 10+)
 ├── app/
-│   ├── pages/                  # Páginas Streamlit (multi-page app)
-│   └── components/             # Widgets reutilizáveis
+│   └── components/             # Widgets reutilizáveis (futuro)
 ├── db/
 │   ├── connection.py           # Fábrica de conexões SQLite (FK + row_factory)
 │   └── sclme.db                # Banco gerado localmente (não versionado)
@@ -67,9 +72,9 @@ sclme/
 | Camada | Responsabilidade |
 |--------|-----------------|
 | `core/parsers` | Interpretação e validação de códigos documentais |
-| `core/importers` | Leitura de fontes externas (Excel, CSV, pasta) |
+| `core/importers` | Leitura de fontes externas (Excel) |
 | `core/engine` | Regras de negócio (status, comparações, alertas) |
-| `app/` | Interface Streamlit, sem lógica de negócio |
+| `pages/` | Interface Streamlit — sem lógica de negócio; consome `core/` |
 | `db/` | Acesso ao SQLite via `get_connection()` |
 
 ---
