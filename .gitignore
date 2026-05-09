@@ -1,0 +1,54 @@
+# Ambiente virtual Python
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Banco de dados (gerado localmente)
+db/sclme.db
+db/sclme.db-shm
+db/sclme.db-wal
+
+# Dados sensíveis / arquivos locais
+data/real/
+data/confidential/
+config/local.py
+config/local.yaml
+*.env
+.env
+
+# Streamlit
+.streamlit/secrets.toml
+
+# pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Distribuição / build
+dist/
+build/
+*.egg-info/
+
+# Logs
+*.log
+logs/
+
+# Claude Code (configurações locais do editor)
+.claude/
