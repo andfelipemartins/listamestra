@@ -8,6 +8,7 @@ Exibe progresso por status e por trecho para o contrato ativo.
 import os
 import sys
 
+import pandas as pd
 import plotly.express as px
 import streamlit as st
 
