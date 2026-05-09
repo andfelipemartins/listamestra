@@ -21,13 +21,13 @@ from core.parsers.arquivo_parser import parsear_arquivo, ArquivoParseado, ErroPa
 
 @dataclass
 class ResultadoArquivos:
-    novos:            int = 0
-    ja_existentes:    int = 0
-    sem_documento:    int = 0
-    nao_reconhecidos: int = 0
+    novos:               int = 0
+    ja_existentes:       int = 0
+    sem_documento:       int = 0
+    nao_reconhecidos:    int = 0
     obsoletos_ignorados: int = 0
-    erros_parse:      List[str] = field(default_factory=list)
-    sem_doc_codigos:  List[str] = field(default_factory=list)
+    erros_parse:         List[str] = field(default_factory=list)
+    sem_doc_codigos:     List[str] = field(default_factory=list)
 
     @property
     def total_linhas(self) -> int:
@@ -79,8 +79,12 @@ class ArquivosImporter:
 
         if isinstance(parseado, ErroParsearArquivo):
             resultado.nao_reconhecidos += 1
-            resultado.erros_parse.append(
-                f"{parseado.nome_arquivo}: {parseado.motivo}"
+            resultado.erros_parse.append(f"{parseado.nome_arquivo}: {parseado.motivo}")
+            self._registrar_inconsistencia(
+                conn, importacao_id,
+                documento_codigo=parseado.nome_arquivo,
+                tipo="arquivo_nao_reconhecido",
+                descricao=parseado.motivo,
             )
             return
 
@@ -88,10 +92,12 @@ class ArquivosImporter:
         if documento_id is None:
             resultado.sem_documento += 1
             resultado.sem_doc_codigos.append(parseado.codigo)
-            return
-
-        if self._ja_existe(conn, documento_id, parseado.nome_arquivo):
-            resultado.ja_existentes += 1
+            self._registrar_inconsistencia(
+                conn, importacao_id,
+                documento_codigo=parseado.codigo,
+                tipo="arquivo_sem_documento",
+                descricao=f"Arquivo '{parseado.nome_arquivo}' reconhecido mas código não encontrado no banco",
+            )
             return
 
         caminho = linha.strip() if os.path.basename(linha.strip()) != linha.strip() else None
@@ -100,9 +106,9 @@ class ArquivosImporter:
             if parseado.versao is not None
             else parseado.label_revisao
         )
-        conn.execute(
+        cur = conn.execute(
             """
-            INSERT INTO arquivos
+            INSERT OR IGNORE INTO arquivos
                 (documento_id, nome_arquivo, extensao, caminho,
                  origem, revisao_detectada, tipo_detectado, importacao_id)
             VALUES (?, ?, ?, ?, 'importacao_nomes', ?, ?, ?)
@@ -117,7 +123,10 @@ class ArquivosImporter:
                 importacao_id,
             ),
         )
-        resultado.novos += 1
+        if cur.rowcount > 0:
+            resultado.novos += 1
+        else:
+            resultado.ja_existentes += 1
 
     def _buscar_documento(self, conn, contrato_id: int, codigo: str) -> Optional[int]:
         row = conn.execute(
@@ -126,11 +135,15 @@ class ArquivosImporter:
         ).fetchone()
         return row[0] if row else None
 
-    def _ja_existe(self, conn, documento_id: int, nome_arquivo: str) -> bool:
-        return conn.execute(
-            "SELECT 1 FROM arquivos WHERE documento_id = ? AND nome_arquivo = ?",
-            (documento_id, nome_arquivo),
-        ).fetchone() is not None
+    def _registrar_inconsistencia(self, conn, importacao_id, documento_codigo, tipo, descricao):
+        conn.execute(
+            """
+            INSERT INTO inconsistencias
+                (importacao_id, documento_codigo, tipo_inconsistencia, descricao)
+            VALUES (?, ?, ?, ?)
+            """,
+            (importacao_id, documento_codigo, tipo, descricao),
+        )
 
     def _registrar_importacao(self, conn, contrato_id, arquivo, total_linhas) -> int:
         conn.execute(

@@ -192,3 +192,69 @@ class TestTotais:
         with get_connection(db_path) as conn:
             row = conn.execute("SELECT caminho FROM arquivos").fetchone()
         assert row["caminho"] is None
+
+
+# ---------------------------------------------------------------------------
+# Idempotência garantida pelo banco (UNIQUE no schema)
+# ---------------------------------------------------------------------------
+
+class TestUniqueConstraint:
+
+    def test_banco_rejeita_duplicata_direta(self, db):
+        """UNIQUE(documento_id, nome_arquivo) impede duplicata mesmo por INSERT direto."""
+        import sqlite3
+        _importar(db, "DE-15.25.00.00-6A1-1001-1-1.pdf\n")
+        db_path, _ = db
+        with get_connection(db_path) as conn:
+            doc_id = conn.execute("SELECT id FROM documentos LIMIT 1").fetchone()[0]
+            with pytest.raises(sqlite3.IntegrityError):
+                conn.execute(
+                    "INSERT INTO arquivos (documento_id, nome_arquivo) VALUES (?, ?)",
+                    (doc_id, "DE-15.25.00.00-6A1-1001-1-1.pdf"),
+                )
+
+
+# ---------------------------------------------------------------------------
+# Persistência de erros em inconsistencias
+# ---------------------------------------------------------------------------
+
+class TestInconsistencias:
+
+    def test_nao_reconhecido_salvo_em_inconsistencias(self, db):
+        _importar(db, "planilha_ruim.xlsx\n")
+        db_path, _ = db
+        with get_connection(db_path) as conn:
+            row = conn.execute(
+                "SELECT tipo_inconsistencia, documento_codigo FROM inconsistencias"
+            ).fetchone()
+        assert row["tipo_inconsistencia"] == "arquivo_nao_reconhecido"
+        assert "planilha_ruim.xlsx" in row["documento_codigo"]
+
+    def test_sem_documento_salvo_em_inconsistencias(self, db):
+        _importar(db, "DE-15.25.00.00-6A1-9999-1-1.pdf\n")
+        db_path, _ = db
+        with get_connection(db_path) as conn:
+            row = conn.execute(
+                "SELECT tipo_inconsistencia, documento_codigo FROM inconsistencias"
+            ).fetchone()
+        assert row["tipo_inconsistencia"] == "arquivo_sem_documento"
+        assert row["documento_codigo"] == "DE-15.25.00.00-6A1-9999"
+
+    def test_inconsistencias_vinculadas_a_importacao(self, db):
+        _importar(db, "DE-15.25.00.00-6A1-9999-1-1.pdf\n")
+        db_path, cid = db
+        with get_connection(db_path) as conn:
+            imp_id = conn.execute(
+                "SELECT id FROM importacoes WHERE contrato_id=?", (cid,)
+            ).fetchone()[0]
+            inc = conn.execute(
+                "SELECT importacao_id FROM inconsistencias"
+            ).fetchone()
+        assert inc["importacao_id"] == imp_id
+
+    def test_arquivo_valido_nao_gera_inconsistencia(self, db):
+        _importar(db, "DE-15.25.00.00-6A1-1001-1-1.pdf\n")
+        db_path, _ = db
+        with get_connection(db_path) as conn:
+            n = conn.execute("SELECT COUNT(*) FROM inconsistencias").fetchone()[0]
+        assert n == 0

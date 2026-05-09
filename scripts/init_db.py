@@ -112,7 +112,8 @@ CREATE TABLE IF NOT EXISTS arquivos (
     revisao_detectada   TEXT,
     tipo_detectado      TEXT,
     importacao_id       INTEGER,
-    criado_em           TEXT DEFAULT (datetime('now'))
+    criado_em           TEXT DEFAULT (datetime('now')),
+    UNIQUE(documento_id, nome_arquivo)
 );
 
 -- ============================================================
