@@ -157,7 +157,7 @@ with get_connection() as conn:
 | 2 | Importador da Lista de Documentos (Excel) | ✅ Concluído |
 | 3 | Importador do ID/Índice | ✅ Concluído |
 | 4 | Banco SQLite (estrutura base) | ✅ Concluído |
-| 5 | Dashboard inicial | 🔲 Pendente |
+| 5 | Dashboard inicial | ✅ Concluído |
 | 6 | Comparação ID × Lista | 🔲 Pendente |
 | 7 | Leitor de pasta SharePoint/local | 🔲 Pendente |
 | 8 | Cadastro manual | 🔲 Pendente |
