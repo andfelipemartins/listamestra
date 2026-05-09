@@ -107,7 +107,7 @@ Exemplo: `DE-15.25.00.00-6A1-1001`
 | 0     | Estrutura e base do projeto       | ✅ Concluído  |
 | 1     | Parser de código documental       | ✅ Concluído  |
 | 2     | Importador da Lista de Documentos | ✅ Concluído  |
-| 3     | Importador do ID/Índice           | 🔲 Próximo    |
+| 3     | Importador do ID/Índice           | ✅ Concluído  |
 | 4     | Banco SQLite (estrutura base)     | ✅ Concluído  |
 | 5     | Dashboard inicial                 | 🔲 Pendente   |
 | 6     | Comparação ID x Lista             | 🔲 Pendente   |

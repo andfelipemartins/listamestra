@@ -155,7 +155,7 @@ with get_connection() as conn:
 | 0 | Estrutura e base do projeto | ✅ Concluído |
 | 1 | Parser de código documental | ✅ Concluído |
 | 2 | Importador da Lista de Documentos (Excel) | ✅ Concluído |
-| 3 | Importador do ID/Índice | 🔲 Próximo |
+| 3 | Importador do ID/Índice | ✅ Concluído |
 | 4 | Banco SQLite (estrutura base) | ✅ Concluído |
 | 5 | Dashboard inicial | 🔲 Pendente |
 | 6 | Comparação ID × Lista | 🔲 Pendente |
