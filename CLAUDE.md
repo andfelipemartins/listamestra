@@ -154,8 +154,8 @@ with get_connection() as conn:
 |-------|-----------|--------|
 | 0 | Estrutura e base do projeto | ✅ Concluído |
 | 1 | Parser de código documental | ✅ Concluído |
-| 2 | Importador da Lista de Documentos (Excel) | 🔲 Próximo |
-| 3 | Importador do ID/Índice | 🔲 Pendente |
+| 2 | Importador da Lista de Documentos (Excel) | ✅ Concluído |
+| 3 | Importador do ID/Índice | 🔲 Próximo |
 | 4 | Banco SQLite (estrutura base) | ✅ Concluído |
 | 5 | Dashboard inicial | 🔲 Pendente |
 | 6 | Comparação ID × Lista | 🔲 Pendente |
@@ -166,10 +166,34 @@ with get_connection() as conn:
 
 ---
 
+## Importadores — ListaImporter (Marco 2)
+
+`core/importers/lista_importer.py` — importa a aba "Lista de documentos" do Excel.
+
+**Detalhes técnicos críticos:**
+- A planilha tem **dois níveis de cabeçalho**: linha 1 = grupos (ALYA, METRÔ…), linha 2 = nomes reais.  
+  Lemos com `header=1` (pandas) = Excel linha 2.
+- Há **nomes de colunas duplicados** (GRD, DATA ENVIO, SITUAÇÃO, MEDIÇÃO, TOTAL CONTRATO…).  
+  O acesso é **sempre por posição** (`iloc`), nunca por nome. As posições estão em `_COL` no módulo.
+- Cada linha Excel = 1 revisão. O mesmo CÓDIGO aparece N vezes (Rev 1, Rev 2…).
+- `ultima_revisao` é calculado ao final da importação (max revisão por documento).
+- Reimportação é **idempotente** — upsert tanto em `documentos` quanto em `revisoes`.
+- Erros por linha não abortam as demais — são gravados em `inconsistencias`.
+
+```python
+from core.importers.lista_importer import ListaImporter
+
+importer = ListaImporter()                          # usa db/sclme.db
+resultado = importer.importar("Lista Mestra.xlsx", contrato_id=1)
+print(resultado.novos_documentos, resultado.novas_revisoes)
+```
+
+---
+
 ## Convenções
 
 - **Sem comentários óbvios** — o código se documenta pelos nomes; comentários só para WHY não-óbvio
-- **Sem mocks no banco** — testes de importação devem usar SQLite em memória (`:memory:`), nunca mocks
+- **Sem mocks no banco** — testes de importação devem usar SQLite em arquivo temporário (`tmp_path`), nunca mocks
 - **`get_connection()`** — toda conexão ao banco passa por aqui (garante `PRAGMA foreign_keys = ON`)
 - **`ErroDeparse` é retorno, não exceção** — parsers nunca lançam exceção; erros são valores tipados
 - **Commits em português** — mensagens de commit seguem o idioma do projeto
