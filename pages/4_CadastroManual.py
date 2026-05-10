@@ -325,35 +325,35 @@ for codigo, parsed in list(validos):
         revisoes_ex = _listar_revisoes(existing["id"])
         header += f" *(já existe — {len(revisoes_ex)} revisão(ões))*"
 
-    with st.expander(header, expanded=True):
-        # Botão de remoção individual no topo direito do expander
-        _, col_rem = st.columns([8, 1])
-        with col_rem:
-            if st.button("✕", key=f"cm_btn_remover_{ks}", help="Remover este documento da lista"):
-                _limpar_codigo(codigo)
-                st.session_state["cm_validos"] = [
-                    (c, p) for c, p in validos if c != codigo
-                ]
-                st.rerun()
+    # Botão de remoção fica fora do expander, sempre visível à direita do cabeçalho
+    col_exp, col_rem = st.columns([20, 1])
+    with col_rem:
+        if st.button("✕", key=f"cm_btn_remover_{ks}", help="Remover este documento da lista"):
+            _limpar_codigo(codigo)
+            st.session_state["cm_validos"] = [
+                (c, p) for c, p in validos if c != codigo
+            ]
+            st.rerun()
+    with col_exp:
+        with st.expander(header, expanded=False):
+            e = parsed.extras
+            st.caption(
+                f"**{parsed.tipo}** — {parsed.descricao_tipo} · "
+                f"Trecho: **{e.get('nome_trecho', '—')}** · "
+                f"Etapa: **{e.get('etapa', '—')}** · "
+                f"Disciplina: **{e.get('classe', '')}{e.get('subclasse', '')}**"
+            )
 
-        e = parsed.extras
-        st.caption(
-            f"**{parsed.tipo}** — {parsed.descricao_tipo} · "
-            f"Trecho: **{e.get('nome_trecho', '—')}** · "
-            f"Etapa: **{e.get('etapa', '—')}** · "
-            f"Disciplina: **{e.get('classe', '')}{e.get('subclasse', '')}**"
-        )
+            st.markdown("**Dados do Documento**")
+            _secao_documento(codigo, existing)
 
-        st.markdown("**Dados do Documento**")
-        _secao_documento(codigo, existing)
+            st.divider()
+            st.markdown("**Dados da Revisão**")
+            _secao_revisao(codigo)
 
-        st.divider()
-        st.markdown("**Dados da Revisão**")
-        _secao_revisao(codigo)
-
-        st.divider()
-        st.markdown("**GRD — opcional**")
-        _secao_grds(codigo)
+            st.divider()
+            st.markdown("**GRD — opcional**")
+            _secao_grds(codigo)
 
 # ---------------------------------------------------------------------------
 # Botão de salvamento
