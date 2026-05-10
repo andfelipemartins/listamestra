@@ -11,6 +11,7 @@ Esta é a fundação do Motor de Status completo (Marco 9).
 
 import os
 import sys
+from datetime import date
 from typing import Optional
 
 import pandas as pd
@@ -62,6 +63,78 @@ def classificar_status(
     if de:
         return "Em Análise"
     return "Em Elaboração"
+
+
+def carregar_alertas(
+    contrato_id: int,
+    dias_analise: int = 30,
+    db_path: Optional[str] = None,
+) -> list[dict]:
+    """
+    Retorna alertas documentais que requerem atenção.
+
+    Tipos:
+    - 'analise_prolongada': última revisão emitida mas não aprovada há > dias_analise dias
+    - 'sem_inicio': previsto no ID mas sem nenhuma revisão lançada
+
+    Cada item: tipo, codigo, titulo, dias, data_referencia, mensagem
+    """
+    kwargs = {"db_path": db_path} if db_path else {}
+    alertas: list[dict] = []
+
+    with get_connection(**kwargs) as conn:
+        # Previstos com última revisão emitida — filtra os não-aprovados em Python
+        rows = conn.execute(
+            """
+            SELECT dp.codigo,
+                   COALESCE(d.titulo, dp.titulo) AS titulo,
+                   r.situacao,
+                   r.data_emissao,
+                   CAST(julianday('now') - julianday(r.data_emissao) AS INTEGER) AS dias
+            FROM documentos_previstos dp
+            JOIN documentos d ON d.contrato_id = dp.contrato_id AND d.codigo = dp.codigo
+            JOIN revisoes r ON r.documento_id = d.id AND r.ultima_revisao = 1
+            WHERE dp.contrato_id = ? AND dp.ativo = 1
+              AND r.data_emissao IS NOT NULL
+            """,
+            (contrato_id,),
+        ).fetchall()
+
+        for row in rows:
+            status = classificar_status(row["situacao"], row["data_emissao"])
+            if status in ("Em Análise", "Em Revisão") and row["dias"] > dias_analise:
+                alertas.append({
+                    "tipo": "analise_prolongada",
+                    "codigo": row["codigo"],
+                    "titulo": row["titulo"] or "—",
+                    "dias": row["dias"],
+                    "data_referencia": row["data_emissao"],
+                    "mensagem": f"Em {status.lower()} há {row['dias']} dias",
+                })
+
+        # Previstos sem nenhuma revisão
+        rows_sem = conn.execute(
+            """
+            SELECT dp.codigo, COALESCE(dp.titulo, '') AS titulo
+            FROM documentos_previstos dp
+            LEFT JOIN documentos d ON d.contrato_id = dp.contrato_id AND d.codigo = dp.codigo
+            LEFT JOIN revisoes r ON r.documento_id = d.id
+            WHERE dp.contrato_id = ? AND dp.ativo = 1 AND r.id IS NULL
+            """,
+            (contrato_id,),
+        ).fetchall()
+
+        for row in rows_sem:
+            alertas.append({
+                "tipo": "sem_inicio",
+                "codigo": row["codigo"],
+                "titulo": row["titulo"] or "—",
+                "dias": None,
+                "data_referencia": None,
+                "mensagem": "Previsto no ID mas sem revisão lançada",
+            })
+
+    return alertas
 
 
 def carregar_progresso(

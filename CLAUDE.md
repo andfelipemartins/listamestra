@@ -45,7 +45,8 @@ sclme/
 │   ├── 1_Dashboard.py          # Dashboard de progresso por status e trecho
 │   ├── 2_Importacao.py         # Upload de Excel + nomes.txt (com preview de arquivos)
 │   ├── 3_Comparacao.py         # Comparação ID × Lista (ausentes, extras, divergências)
-│   └── 4_CadastroManual.py     # Cadastro manual linha a linha (documento + revisão + GRD)
+│   ├── 4_CadastroManual.py     # Cadastro manual linha a linha (documento + revisão + GRD)
+│   └── 5_Documento.py          # Detalhe por documento: ficha, linha do tempo, arquivos, GRDs
 ├── core/
 │   ├── parsers/                # Interpretação de códigos e nomes de arquivo
 │   │   ├── base_parser.py      # Contrato (BaseParser, CodigoParseado, ErroDeparse)
@@ -57,7 +58,7 @@ sclme/
 │   │   ├── id_importer.py      # Índice de Documentos → documentos_previstos
 │   │   └── arquivos_importer.py# nomes.txt → arquivos (vincula arquivo ao documento)
 │   ├── engine/                 # Regras de negócio
-│   │   ├── status.py           # Classificação de status + NOME_TRECHO
+│   │   ├── status.py           # Classificação de status, carregar_progresso, carregar_alertas
 │   │   ├── comparacao.py       # Comparação ID × Lista (ResultadoComparacao)
 │   │   ├── preview_arquivos.py # Preview dry-run de importação de arquivos
 │   │   ├── disciplinas.py      # Tabela A1–Z2 de estruturas/disciplinas + SITUACOES
@@ -183,7 +184,7 @@ with get_connection() as conn:
 | 6 | Comparação ID × Lista | ✅ Concluído |
 | 7 | Leitor de pasta SharePoint/local | ✅ Concluído |
 | 8 | Cadastro manual | ✅ Concluído |
-| 9 | Motor de status | 🔲 Pendente |
+| 9 | Motor de status | ✅ Concluído |
 | 10 | Exportação de relatórios | 🔲 Pendente |
 
 ---

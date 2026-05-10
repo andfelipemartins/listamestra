@@ -2,7 +2,7 @@
 pages/1_Dashboard.py
 
 Dashboard principal do SCLME.
-Exibe progresso por status e por trecho para o contrato ativo.
+Exibe progresso por status, pizzas por trecho, alertas e barra de progresso geral.
 """
 
 import os
@@ -18,6 +18,7 @@ from core.engine.status import (
     STATUS_ORDEM,
     NOME_TRECHO,
     carregar_progresso,
+    carregar_alertas,
 )
 
 STATUS_COR = {
@@ -70,84 +71,178 @@ def _kpis(df: pd.DataFrame):
         col.metric(status, n, f"{pct:.1f}%")
 
 
-def _barra_progresso(df: pd.DataFrame):
+def _progresso_e_pizza_geral(df: pd.DataFrame):
     total = len(df)
     aprovados = int((df["status"] == "Aprovado").sum())
     pct = aprovados / total * 100 if total else 0
-    st.markdown(f"#### Progresso geral: **{pct:.1f}%** aprovado &nbsp;({aprovados} / {total})")
-    st.progress(pct / 100)
+
+    col_bar, col_pizza = st.columns([2, 1])
+
+    with col_bar:
+        st.markdown(
+            f"#### Progresso geral: **{pct:.1f}%** aprovado &nbsp;({aprovados} / {total})"
+        )
+        st.progress(pct / 100)
+
+        # Barra empilhada por trecho
+        contagem = (
+            df.groupby(["nome_trecho", "status"])
+            .size()
+            .reset_index(name="qtd")
+        )
+        trechos = contagem["nome_trecho"].unique().tolist()
+        completo = pd.MultiIndex.from_product(
+            [trechos, STATUS_ORDEM], names=["nome_trecho", "status"]
+        )
+        contagem = (
+            contagem.set_index(["nome_trecho", "status"])
+            .reindex(completo, fill_value=0)
+            .reset_index()
+        )
+        fig_bar = px.bar(
+            contagem,
+            x="nome_trecho",
+            y="qtd",
+            color="status",
+            color_discrete_map=STATUS_COR,
+            category_orders={"status": STATUS_ORDEM},
+            barmode="stack",
+            labels={"nome_trecho": "Trecho", "qtd": "Documentos", "status": "Status"},
+        )
+        fig_bar.update_layout(
+            legend_title_text="Status",
+            xaxis_title="",
+            margin=dict(t=20, b=0),
+        )
+        st.plotly_chart(fig_bar, use_container_width=True)
+
+    with col_pizza:
+        contagem_geral = (
+            df["status"]
+            .value_counts()
+            .reindex(STATUS_ORDEM, fill_value=0)
+            .reset_index()
+        )
+        contagem_geral.columns = ["status", "qtd"]
+        contagem_geral = contagem_geral[contagem_geral["qtd"] > 0]
+        fig_geral = px.pie(
+            contagem_geral,
+            names="status",
+            values="qtd",
+            title="Contrato Geral",
+            color="status",
+            color_discrete_map=STATUS_COR,
+        )
+        fig_geral.update_traces(textinfo="percent+label", textposition="inside")
+        fig_geral.update_layout(
+            showlegend=False,
+            margin=dict(t=40, b=0, l=0, r=0),
+        )
+        st.plotly_chart(fig_geral, use_container_width=True)
 
 
-def _grafico_geral(df: pd.DataFrame):
-    contagem = (
-        df.groupby(["nome_trecho", "status"])
-        .size()
-        .reset_index(name="qtd")
-    )
-    # Garante que todos os status aparecem em todos os trechos (mesmo com qtd=0)
-    trechos = contagem["nome_trecho"].unique().tolist()
-    completo = pd.MultiIndex.from_product(
-        [trechos, STATUS_ORDEM], names=["nome_trecho", "status"]
-    )
-    contagem = (
-        contagem.set_index(["nome_trecho", "status"])
-        .reindex(completo, fill_value=0)
-        .reset_index()
-    )
+def _pizzas_por_trecho(df: pd.DataFrame):
+    trechos = sorted(df["trecho"].unique())
+    if not trechos:
+        return
 
-    fig = px.bar(
-        contagem,
-        x="nome_trecho",
-        y="qtd",
-        color="status",
-        color_discrete_map=STATUS_COR,
-        category_orders={"status": STATUS_ORDEM},
-        barmode="stack",
-        title="Documentos por Trecho e Status",
-        labels={"nome_trecho": "Trecho", "qtd": "Documentos", "status": "Status"},
-    )
-    fig.update_layout(legend_title_text="Status", xaxis_title="")
-    st.plotly_chart(fig, use_container_width=True)
+    st.subheader("Por Trecho")
+    cols = st.columns(len(trechos))
+
+    for col, trecho in zip(cols, trechos):
+        df_t = df[df["trecho"] == trecho]
+        nome = NOME_TRECHO.get(trecho, trecho)
+
+        contagem = (
+            df_t["status"]
+            .value_counts()
+            .reindex(STATUS_ORDEM, fill_value=0)
+            .reset_index()
+        )
+        contagem.columns = ["status", "qtd"]
+        contagem = contagem[contagem["qtd"] > 0]
+
+        fig = px.pie(
+            contagem,
+            names="status",
+            values="qtd",
+            title=nome.upper(),
+            color="status",
+            color_discrete_map=STATUS_COR,
+        )
+        fig.update_traces(textinfo="percent", textposition="inside")
+        fig.update_layout(
+            showlegend=False,
+            margin=dict(t=40, b=0, l=0, r=0),
+        )
+        col.plotly_chart(fig, use_container_width=True)
+
+        # Métricas resumidas embaixo de cada pizza
+        total_t = len(df_t)
+        aprovados_t = int((df_t["status"] == "Aprovado").sum())
+        pct_t = aprovados_t / total_t * 100 if total_t else 0
+        col.progress(pct_t / 100, text=f"{pct_t:.0f}% aprovado ({aprovados_t}/{total_t})")
 
 
-def _detalhe_por_trecho(df: pd.DataFrame):
-    trechos_presentes = sorted(df["trecho"].unique())
-    nomes = [NOME_TRECHO.get(t, t) for t in trechos_presentes]
-    tabs = st.tabs(nomes)
+def _alertas(alertas: list[dict], dias: int):
+    if not alertas:
+        return
 
-    for tab, trecho in zip(tabs, trechos_presentes):
-        with tab:
-            df_t = df[df["trecho"] == trecho]
-            total_t = len(df_t)
-            counts_t = df_t["status"].value_counts()
-            aprovados_t = int(counts_t.get("Aprovado", 0))
-            pct_t = aprovados_t / total_t * 100 if total_t else 0
+    n_analise = sum(1 for a in alertas if a["tipo"] == "analise_prolongada")
+    n_sem     = sum(1 for a in alertas if a["tipo"] == "sem_inicio")
+    titulo    = f"{len(alertas)} alerta(s)"
+    if n_analise:
+        titulo += f" — {n_analise} em análise prolongada (>{dias} dias)"
+    if n_sem:
+        titulo += f" — {n_sem} sem revisão"
 
-            c1, c2, c3, c4 = st.columns(4)
-            for col, status in zip([c1, c2, c3, c4], STATUS_ORDEM):
-                n = int(counts_t.get(status, 0))
-                col.metric(status, n, f"{n/total_t*100:.1f}%" if total_t else "—")
+    with st.expander(f"⚠️ {titulo}"):
+        if n_analise:
+            st.markdown(f"**Em análise ou revisão há mais de {dias} dias**")
+            rows = [a for a in alertas if a["tipo"] == "analise_prolongada"]
+            df_a = pd.DataFrame(rows)[["codigo", "titulo", "dias", "data_referencia", "mensagem"]]
+            df_a.columns = ["Código", "Título", "Dias", "Emitido em", "Situação"]
+            st.dataframe(df_a, hide_index=True, use_container_width=True)
 
-            st.progress(pct_t / 100, text=f"{pct_t:.1f}% aprovado  ({aprovados_t}/{total_t})")
+        if n_sem:
+            st.markdown("**Previstos sem revisão lançada**")
+            rows = [a for a in alertas if a["tipo"] == "sem_inicio"]
+            df_s = pd.DataFrame(rows)[["codigo", "titulo"]]
+            df_s.columns = ["Código", "Título"]
+            st.dataframe(df_s, hide_index=True, use_container_width=True)
 
 
 def _tabela_documentos(df: pd.DataFrame):
-    with st.expander("Tabela de documentos previstos", expanded=False):
-        status_filtro = st.multiselect(
-            "Filtrar por status",
-            STATUS_ORDEM,
-            default=STATUS_ORDEM,
-            key="filtro_status",
-        )
-        df_filtrado = df[df["status"].isin(status_filtro)] if status_filtro else df
+    with st.expander("Tabela de documentos previstos"):
+        c1, c2 = st.columns([3, 1])
+        with c1:
+            status_filtro = st.multiselect(
+                "Filtrar por status",
+                STATUS_ORDEM,
+                default=STATUS_ORDEM,
+                key="filtro_status",
+            )
+        with c2:
+            tipo_filtro = st.multiselect(
+                "Tipo",
+                sorted(df["tipo"].dropna().unique()),
+                key="filtro_tipo",
+            )
+
+        df_filtrado = df.copy()
+        if status_filtro:
+            df_filtrado = df_filtrado[df_filtrado["status"].isin(status_filtro)]
+        if tipo_filtro:
+            df_filtrado = df_filtrado[df_filtrado["tipo"].isin(tipo_filtro)]
+
         st.dataframe(
             df_filtrado[["codigo", "tipo", "nome_trecho", "status", "titulo"]]
             .rename(columns={
-                "codigo": "Código",
-                "tipo": "Tipo",
-                "nome_trecho": "Trecho",
-                "status": "Status",
-                "titulo": "Título",
+                "codigo":     "Código",
+                "tipo":       "Tipo",
+                "nome_trecho":"Trecho",
+                "status":     "Status",
+                "titulo":     "Título",
             }),
             use_container_width=True,
             hide_index=True,
@@ -178,7 +273,7 @@ ultima = _ultima_importacao(contrato["id"])
 if ultima:
     st.caption(
         f"Última importação: **{ultima['arquivo_importado']}** "
-        f"em {ultima['confirmado_em'][:16].replace('T',' ')} — "
+        f"em {ultima['confirmado_em'][:16].replace('T', ' ')} — "
         f"{ultima['total_novos']} novos, {ultima['total_atualizados']} atualizados"
     )
 
@@ -191,13 +286,27 @@ if df.empty:
     )
     st.stop()
 
+# Alertas (threshold configurável na sidebar)
+with st.sidebar:
+    st.markdown("### Alertas")
+    dias_alerta = st.number_input(
+        "Dias em análise para alertar",
+        min_value=1,
+        max_value=365,
+        value=30,
+        step=5,
+        key="dias_alerta",
+    )
+
+alertas = carregar_alertas(contrato["id"], dias_analise=dias_alerta)
+if alertas:
+    _alertas(alertas, dias_alerta)
+    st.divider()
+
 _kpis(df)
 st.divider()
-_barra_progresso(df)
+_progresso_e_pizza_geral(df)
 st.divider()
-_grafico_geral(df)
-st.divider()
-st.subheader("Por Trecho")
-_detalhe_por_trecho(df)
+_pizzas_por_trecho(df)
 st.divider()
 _tabela_documentos(df)
