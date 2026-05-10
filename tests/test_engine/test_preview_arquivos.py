@@ -199,17 +199,41 @@ class TestFluxoCompleto:
             ).fetchone()
         assert row["titulo"] == "Novo Objeto Confirmado"
 
-    def test_confirmar_nao_atualiza_titulo_se_igual(self, db):
+    def test_objeto_salvo_imutavel_em_arquivos(self, db):
+        """O Objeto confirmado fica gravado em arquivos.objeto — histórico preservado."""
         db_path, cid = db
         preview = gerar_preview("DE-15.25.00.00-6A1-1001-1-1.pdf\n", cid, db_path)
-        titulos = {"DE-15.25.00.00-6A1-1001": "Fundações Bloco A"}  # mesmo título
+        titulos = {"DE-15.25.00.00-6A1-1001": "Fundações Bloco A"}
         ArquivosImporter().confirmar_preview(preview, titulos, cid, db_path=db_path)
         with get_connection(db_path) as conn:
-            row = conn.execute(
+            row = conn.execute("SELECT objeto FROM arquivos").fetchone()
+        assert row["objeto"] == "Fundações Bloco A"
+
+    def test_objeto_muda_entre_revisoes_historico_preservado(self, db):
+        """Rev 1 com Objeto A, Rev 2 com Objeto B — ambos preservados em arquivos."""
+        db_path, cid = db
+        # Rev 1 → Objeto antigo
+        preview1 = gerar_preview("DE-15.25.00.00-6A1-1001-1-1.pdf\n", cid, db_path)
+        ArquivosImporter().confirmar_preview(
+            preview1, {"DE-15.25.00.00-6A1-1001": "Planta Baixa Geral"}, cid, db_path=db_path
+        )
+        # Rev 2 → Objeto novo (conceito mudou)
+        preview2 = gerar_preview("DE-15.25.00.00-6A1-1001-2-1.pdf\n", cid, db_path)
+        ArquivosImporter().confirmar_preview(
+            preview2, {"DE-15.25.00.00-6A1-1001": "Planta de Detalhes"}, cid, db_path=db_path
+        )
+        with get_connection(db_path) as conn:
+            objetos = [
+                r["objeto"] for r in
+                conn.execute("SELECT objeto FROM arquivos ORDER BY id").fetchall()
+            ]
+            titulo_atual = conn.execute(
                 "SELECT titulo FROM documentos WHERE codigo = ?",
                 ("DE-15.25.00.00-6A1-1001",),
-            ).fetchone()
-        assert row["titulo"] == "Fundações Bloco A"
+            ).fetchone()["titulo"]
+
+        assert objetos == ["Planta Baixa Geral", "Planta de Detalhes"]
+        assert titulo_atual == "Planta de Detalhes"  # exibição sempre mostra o mais recente
 
     def test_confirmar_pdf_e_dwg_do_mesmo_documento(self, db):
         db_path, cid = db

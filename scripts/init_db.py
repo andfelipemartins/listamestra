@@ -105,6 +105,7 @@ CREATE TABLE IF NOT EXISTS arquivos (
     documento_id        INTEGER REFERENCES documentos(id),
     nome_arquivo        TEXT NOT NULL,
     extensao            TEXT,
+    objeto              TEXT,    -- Objeto (título) no momento do registro — imutável
     caminho             TEXT,
     origem              TEXT,
     data_modificacao    TEXT,

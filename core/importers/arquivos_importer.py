@@ -201,13 +201,13 @@ class ArquivosImporter:
 
             for codigo, items in preview.novos_por_codigo.items():
                 titulo_novo = (titulos.get(codigo) or "").strip()
-                titulo_anterior = items[0].titulo_atual
 
-                if titulo_novo and titulo_novo != titulo_anterior:
-                    conn.execute(
-                        "UPDATE documentos SET titulo = ? WHERE id = ?",
-                        (titulo_novo, items[0].documento_id),
-                    )
+                # Atualiza o título corrente do documento (para exibição no Dashboard).
+                # O histórico fica preservado imutavelmente em arquivos.objeto.
+                conn.execute(
+                    "UPDATE documentos SET titulo = ? WHERE id = ?",
+                    (titulo_novo, items[0].documento_id),
+                )
 
                 for item in items:
                     revisao_detectada = (
@@ -218,14 +218,15 @@ class ArquivosImporter:
                     cur = conn.execute(
                         """
                         INSERT OR IGNORE INTO arquivos
-                            (documento_id, nome_arquivo, extensao, caminho,
+                            (documento_id, nome_arquivo, extensao, objeto, caminho,
                              origem, revisao_detectada, tipo_detectado, importacao_id)
-                        VALUES (?, ?, ?, ?, 'importacao_nomes', ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, 'importacao_nomes', ?, ?, ?)
                         """,
                         (
                             item.documento_id,
                             item.nome_arquivo,
                             item.extensao,
+                            titulo_novo,   # imutável — Objeto no momento do registro
                             item.caminho,
                             revisao_detectada,
                             codigo.split("-")[0],
