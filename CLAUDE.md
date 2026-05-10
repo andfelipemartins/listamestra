@@ -192,9 +192,6 @@ with get_connection() as conn:
 | 8 | Cadastro manual | ✅ Concluído |
 | 9 | Motor de status | ✅ Concluído |
 | 10 | Exportação de relatórios | ✅ Concluído |
-| 11 | Home com cards de contratos + sessão | ✅ Concluído |
-| 12 | Perfis e permissões (session_state) | ✅ Concluído |
-| 13 | Builder segmentado de código no Cadastro Manual | ✅ Concluído |
 
 ---
 

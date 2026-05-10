@@ -9,13 +9,13 @@ escalável à planilha Excel atual.
 
 ## Stack
 
-| Camada         | Tecnologia   |
-|----------------|--------------|
-| Interface       | Streamlit    |
-| Banco de dados  | SQLite       |
-| Processamento   | Pandas       |
-| Excel I/O       | OpenPyXL     |
-| Visualização    | Plotly       |
+| Camada          | Tecnologia |
+|-----------------|------------|
+| Interface        | Streamlit  |
+| Banco de dados   | SQLite     |
+| Processamento    | Pandas     |
+| Excel I/O        | OpenPyXL   |
+| Visualização     | Plotly     |
 
 ---
 
@@ -23,28 +23,48 @@ escalável à planilha Excel atual.
 
 ```
 sclme/
-├── app/                    # Interface Streamlit
-│   ├── pages/              # Páginas do app (multi-page)
-│   └── components/         # Componentes reutilizáveis
-├── core/                   # Lógica de negócio
+├── main.py                         # Home page — grade de contratos (ponto de entrada)
+├── pages/                          # Páginas Streamlit (multi-page app)
+│   ├── 1_Dashboard.py              # Dashboard de progresso por status e trecho
+│   ├── 2_Importacao.py             # Upload de Excel + nomes.txt
+│   ├── 3_Comparacao.py             # Comparação ID × Lista
+│   ├── 4_CadastroManual.py         # Cadastro manual com builder de código
+│   └── 5_Documento.py              # Detalhe por documento
+├── app/
+│   ├── session.py                  # Contrato ativo e helpers de sessão
+│   └── components/                 # Widgets reutilizáveis (reservado)
+├── core/
 │   ├── parsers/
-│   │   ├── base_parser.py      # Interface abstrata (BaseParser)
-│   │   ├── linha15_parser.py   # Parser da Linha 15 — Metrô SP
-│   │   └── registry.py         # Registro e seleção de parsers
-│   ├── importers/          # Importadores (Excel, CSV, pasta)
-│   ├── exporters/          # Exportadores (Excel, relatórios)
-│   └── engine/             # Motor de status e regras
+│   │   ├── base_parser.py          # Interface abstrata (BaseParser, CodigoParseado)
+│   │   ├── linha15_parser.py       # Parser da Linha 15 — Metrô SP
+│   │   ├── registry.py             # Registro e seleção automática de parsers
+│   │   ├── arquivo_parser.py       # Parser de nome de arquivo (CODIGO-REV-VER.ext)
+│   │   └── codigo_builder.py       # Montagem/desmontagem de código Linha 15
+│   ├── importers/
+│   │   ├── lista_importer.py       # Lista de Documentos → documentos + revisoes
+│   │   ├── id_importer.py          # Índice de Documentos → documentos_previstos
+│   │   └── arquivos_importer.py    # nomes.txt → arquivos vinculados
+│   ├── engine/
+│   │   ├── status.py               # Classificação de status, alertas, progresso
+│   │   ├── comparacao.py           # Comparação ID × Lista (ResultadoComparacao)
+│   │   ├── preview_arquivos.py     # Preview dry-run de importação de arquivos
+│   │   ├── disciplinas.py          # Tabela A1–Z2 de estruturas/disciplinas
+│   │   └── emissao_inicial.py      # Recalculo cronológico de EMISSÃO INICIAL
+│   ├── exporters/
+│   │   └── excel_exporter.py       # Geração de relatórios Excel (.xlsx)
+│   └── auth/
+│       └── permissions.py          # Perfis e permissões (can_perfil, can, require_permission)
 ├── db/
-│   └── sclme.db            # Banco SQLite (gerado por scripts/init_db.py)
-├── config/                 # Configurações por contrato
-├── tests/
-│   └── test_parsers/
-│       └── test_linha15_parser.py   # 47 testes — 100% passando
-├── docs/                   # Documentação técnica
+│   ├── connection.py               # Fábrica de conexões SQLite (FK + row_factory)
+│   └── sclme.db                    # Banco gerado localmente (não versionado)
 ├── scripts/
-│   └── init_db.py          # Inicializa o banco de dados
-├── data/samples/           # Dados de exemplo para testes
-├── main.py                 # Ponto de entrada do Streamlit
+│   └── init_db.py                  # Cria tabelas e migra colunas novas (idempotente)
+├── tests/
+│   ├── test_parsers/
+│   ├── test_importers/
+│   ├── test_engine/
+│   ├── test_exporters/
+│   └── test_auth/
 ├── requirements.txt
 └── README.md
 ```
@@ -75,7 +95,7 @@ streamlit run main.py
 ```bash
 pytest tests/ -v
 # ou com cobertura:
-pytest tests/ -v --cov=core/parsers --cov-report=term-missing
+pytest tests/ -v --cov=core --cov-report=term-missing
 ```
 
 ---
@@ -102,16 +122,16 @@ Exemplo: `DE-15.25.00.00-6A1-1001`
 
 ## Roadmap
 
-| Marco | Descrição                         | Status       |
-|-------|-----------------------------------|--------------|
-| 0     | Estrutura e base do projeto       | ✅ Concluído  |
-| 1     | Parser de código documental       | ✅ Concluído  |
-| 2     | Importador da Lista de Documentos | ✅ Concluído  |
-| 3     | Importador do ID/Índice           | ✅ Concluído  |
-| 4     | Banco SQLite (estrutura base)     | ✅ Concluído  |
-| 5     | Dashboard inicial                 | ✅ Concluído  |
-| 6     | Comparação ID x Lista             | ✅ Concluído  |
-| 7     | Leitor de pasta SharePoint/local  | ✅ Concluído  |
-| 8     | Cadastro manual                   | ✅ Concluído  |
-| 9     | Motor de status                   | ✅ Concluído  |
-| 10    | Exportação de relatórios          | ✅ Concluído  |
+| Marco | Descrição                              | Status      |
+|-------|----------------------------------------|-------------|
+| 0     | Estrutura e base do projeto            | ✅ Concluído |
+| 1     | Parser de código documental            | ✅ Concluído |
+| 2     | Importador da Lista de Documentos      | ✅ Concluído |
+| 3     | Importador do ID/Índice                | ✅ Concluído |
+| 4     | Banco SQLite (estrutura base)          | ✅ Concluído |
+| 5     | Dashboard inicial                      | ✅ Concluído |
+| 6     | Comparação ID × Lista                  | ✅ Concluído |
+| 7     | Leitor de pasta SharePoint/local       | ✅ Concluído |
+| 8     | Cadastro manual                        | ✅ Concluído |
+| 9     | Motor de status                        | ✅ Concluído |
+| 10    | Exportação de relatórios               | ✅ Concluído |
