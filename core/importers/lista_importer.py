@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 from db.connection import get_connection
 from core.parsers.registry import ParserRegistry
+from core.engine.emissao_inicial import recalcular_emissao_inicial
 
 # Posições das colunas (índice 0) na aba "Lista de documentos"
 # A planilha tem dois níveis de cabeçalho: linha 1 = grupos (ALYA, METRÔ...),
@@ -118,6 +119,7 @@ class ListaImporter:
             resultado = ResultadoImportacao(importacao_id=imp_id, total_lidas=len(df))
             self._processar_linhas(conn, df, contrato_id, imp_id, resultado)
             self._marcar_ultimas_revisoes(conn, contrato_id)
+            self._recalcular_emissao_inicial(conn, contrato_id)
             self._finalizar_importacao(conn, imp_id, resultado)
         return resultado
 
@@ -154,6 +156,7 @@ class ListaImporter:
             "trecho": self._trecho(row),
             "nome_trecho": self._str(row, "nome_trecho"),
             "responsavel": self._str(row, "elaboracao"),
+            "fase": self._str(row, "fase"),
         }
 
         doc_id, novo = self._upsert_documento(conn, doc_data)
@@ -178,6 +181,7 @@ class ListaImporter:
             "retorno": self._str(row, "retorno"),
             "emissao_circular": self._str(row, "num_circular"),
             "analise_circular": self._str(row, "analise_interna"),
+            "data_circular": self._data(row, "data_circular"),
             "importacao_id": imp_id,
         }
 
@@ -205,13 +209,14 @@ class ListaImporter:
                     trecho       = COALESCE(?, trecho),
                     nome_trecho  = COALESCE(?, nome_trecho),
                     responsavel  = COALESCE(?, responsavel),
+                    fase         = COALESCE(?, fase),
                     atualizado_em = datetime('now')
                 WHERE id = ?
                 """,
                 (
                     data["tipo"], data["titulo"], data["disciplina"],
                     data["modalidade"], data["trecho"], data["nome_trecho"],
-                    data["responsavel"], row["id"],
+                    data["responsavel"], data["fase"], row["id"],
                 ),
             )
             return row["id"], False
@@ -220,13 +225,13 @@ class ListaImporter:
             """
             INSERT INTO documentos
                 (contrato_id, codigo, tipo, titulo, disciplina, modalidade,
-                 trecho, nome_trecho, responsavel, origem)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'importacao_lista')
+                 trecho, nome_trecho, responsavel, fase, origem)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'importacao_lista')
             """,
             (
                 data["contrato_id"], data["codigo"], data["tipo"], data["titulo"],
                 data["disciplina"], data["modalidade"], data["trecho"],
-                data["nome_trecho"], data["responsavel"],
+                data["nome_trecho"], data["responsavel"], data["fase"],
             ),
         )
         return cur.lastrowid, True
@@ -250,14 +255,16 @@ class ListaImporter:
                     situacao         = COALESCE(?, situacao),
                     retorno          = COALESCE(?, retorno),
                     emissao_circular = COALESCE(?, emissao_circular),
-                    analise_circular = COALESCE(?, analise_circular)
+                    analise_circular = COALESCE(?, analise_circular),
+                    data_circular    = COALESCE(?, data_circular)
                 WHERE id = ?
                 """,
                 (
                     data["label_revisao"], data["data_elaboracao"], data["data_emissao"],
                     data["data_analise"], data["dias_elaboracao"], data["dias_analise"],
                     data["situacao_real"], data["situacao"], data["retorno"],
-                    data["emissao_circular"], data["analise_circular"], row["id"],
+                    data["emissao_circular"], data["analise_circular"],
+                    data["data_circular"], row["id"],
                 ),
             )
             return False
@@ -269,20 +276,28 @@ class ListaImporter:
                  data_elaboracao, data_emissao, data_analise,
                  dias_elaboracao, dias_analise,
                  situacao_real, situacao, retorno,
-                 emissao_circular, analise_circular,
+                 emissao_circular, analise_circular, data_circular,
                  ultima_revisao, importacao_id, origem)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'importacao_lista')
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'importacao_lista')
             """,
             (
                 data["documento_id"], data["revisao"], data["versao"], data["label_revisao"],
                 data["data_elaboracao"], data["data_emissao"], data["data_analise"],
                 data["dias_elaboracao"], data["dias_analise"],
                 data["situacao_real"], data["situacao"], data["retorno"],
-                data["emissao_circular"], data["analise_circular"],
+                data["emissao_circular"], data["analise_circular"], data["data_circular"],
                 data["importacao_id"],
             ),
         )
         return True
+
+    def _recalcular_emissao_inicial(self, conn, contrato_id: int) -> None:
+        doc_ids = conn.execute(
+            "SELECT id FROM documentos WHERE contrato_id = ?",
+            (contrato_id,),
+        ).fetchall()
+        for row in doc_ids:
+            recalcular_emissao_inicial(conn, row["id"])
 
     def _marcar_ultimas_revisoes(self, conn, contrato_id):
         conn.execute(

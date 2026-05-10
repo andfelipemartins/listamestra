@@ -43,8 +43,9 @@ sclme/
 ├── main.py                     # Home page Streamlit (estado do sistema + links)
 ├── pages/                      # Páginas Streamlit (multi-page app — ao lado do main.py)
 │   ├── 1_Dashboard.py          # Dashboard de progresso por status e trecho
-│   ├── 2_Importacao.py         # Upload de Excel + criação de contrato
-│   └── 3_Comparacao.py         # Comparação ID × Lista (ausentes, extras, divergências)
+│   ├── 2_Importacao.py         # Upload de Excel + nomes.txt (com preview de arquivos)
+│   ├── 3_Comparacao.py         # Comparação ID × Lista (ausentes, extras, divergências)
+│   └── 4_CadastroManual.py     # Cadastro manual linha a linha (documento + revisão + GRD)
 ├── core/
 │   ├── parsers/                # Interpretação de códigos e nomes de arquivo
 │   │   ├── base_parser.py      # Contrato (BaseParser, CodigoParseado, ErroDeparse)
@@ -56,9 +57,11 @@ sclme/
 │   │   ├── id_importer.py      # Índice de Documentos → documentos_previstos
 │   │   └── arquivos_importer.py# nomes.txt → arquivos (vincula arquivo ao documento)
 │   ├── engine/                 # Regras de negócio
-│   │   ├── status.py           # Classificação de status documental
+│   │   ├── status.py           # Classificação de status + NOME_TRECHO
 │   │   ├── comparacao.py       # Comparação ID × Lista (ResultadoComparacao)
-│   │   └── preview_arquivos.py # Preview dry-run de importação de arquivos
+│   │   ├── preview_arquivos.py # Preview dry-run de importação de arquivos
+│   │   ├── disciplinas.py      # Tabela A1–Z2 de estruturas/disciplinas + SITUACOES
+│   │   └── emissao_inicial.py  # Recalculo cronológico de EMISSÃO INICIAL por documento
 │   └── exporters/              # Geração de relatórios (Marco 10+)
 ├── app/
 │   └── components/             # Widgets reutilizáveis (futuro)
@@ -66,10 +69,11 @@ sclme/
 │   ├── connection.py           # Fábrica de conexões SQLite (FK + row_factory)
 │   └── sclme.db                # Banco gerado localmente (não versionado)
 ├── scripts/
-│   └── init_db.py              # Cria todas as tabelas (idempotente)
+│   └── init_db.py              # Cria tabelas + migra colunas novas (idempotente)
 └── tests/
-    └── test_parsers/
-        └── test_linha15_parser.py   # 49 testes — 100% passando
+    ├── test_parsers/
+    ├── test_importers/
+    └── test_engine/
 ```
 
 ### Camadas e responsabilidades
@@ -137,11 +141,19 @@ with get_connection() as conn:
 |--------|-----------|
 | `contratos` | Obras/contratos gerenciados |
 | `documentos` | Documentos controlados (código base, sem revisão) |
-| `revisoes` | Histórico de revisões/versões de cada documento |
+| `revisoes` | Histórico de revisões — inclui `emissao_inicial` e `data_circular` |
 | `documentos_previstos` | Escopo previsto (vindo do Índice de Documentos) |
-| `arquivos` | Arquivos físicos/digitais encontrados |
+| `arquivos` | Arquivos físicos/digitais — `objeto` imutável por arquivo |
+| `grds` | GRDs por revisão e setor (Produção, Topografia, Qualidade) |
 | `importacoes` | Rastreabilidade de cada lote importado |
 | `inconsistencias` | Erros/alertas detectados durante importações |
+
+**Campos notáveis:**
+- `documentos.disciplina` — código A1–Z2 da disciplina (chamado "ESTRUTURA" no Excel)
+- `documentos.fase` — fase do projeto (ex: EXECUTIVO)
+- `revisoes.emissao_inicial` — rótulo cronológico calculado: "EMISSÃO INICIAL", "REVISÃO 1"…, "REVISÃO FINAL"
+- `revisoes.emissao_circular` — Nº Circular; `revisoes.analise_circular` — Análise Interna
+- `arquivos.objeto` — Objeto no momento do registro; imutável (histórico preservado)
 
 ---
 

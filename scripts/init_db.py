@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS documentos (
     trecho          TEXT,
     nome_trecho     TEXT,
     responsavel     TEXT,
+    fase            TEXT,
     origem          TEXT DEFAULT 'importacao_lista',
     observacoes     TEXT,
     criado_em       TEXT DEFAULT (datetime('now')),
@@ -80,6 +81,7 @@ CREATE TABLE IF NOT EXISTS revisoes (
     revisao             INTEGER,
     versao              INTEGER,
     label_revisao       TEXT,
+    emissao_inicial     TEXT,    -- rótulo cronológico: "EMISSÃO INICIAL", "REVISÃO 1"…
     data_elaboracao     TEXT,
     data_emissao        TEXT,
     data_analise        TEXT,
@@ -88,8 +90,9 @@ CREATE TABLE IF NOT EXISTS revisoes (
     situacao_real       TEXT,
     situacao            TEXT,
     retorno             TEXT,
-    emissao_circular    TEXT,
-    analise_circular    TEXT,
+    emissao_circular    TEXT,    -- Nº Circular
+    analise_circular    TEXT,    -- Análise Interna
+    data_circular       TEXT,    -- Data do Circular
     ultima_revisao      INTEGER DEFAULT 0,
     origem              TEXT DEFAULT 'importacao_lista',
     importacao_id       INTEGER,
@@ -149,6 +152,19 @@ CREATE TABLE IF NOT EXISTS inconsistencias (
 );
 
 -- ============================================================
+-- GRDs (Guias de Remessa de Documentos)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS grds (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    revisao_id  INTEGER NOT NULL REFERENCES revisoes(id),
+    setor       TEXT NOT NULL,    -- 'producao' | 'topografia' | 'qualidade'
+    numero_grd  TEXT,
+    data_envio  TEXT,
+    criado_em   TEXT DEFAULT (datetime('now')),
+    UNIQUE(revisao_id, setor)
+);
+
+-- ============================================================
 -- Índices para performance
 -- ============================================================
 CREATE INDEX IF NOT EXISTS idx_documentos_codigo    ON documentos(codigo);
@@ -156,7 +172,25 @@ CREATE INDEX IF NOT EXISTS idx_documentos_contrato  ON documentos(contrato_id);
 CREATE INDEX IF NOT EXISTS idx_revisoes_documento   ON revisoes(documento_id);
 CREATE INDEX IF NOT EXISTS idx_revisoes_situacao    ON revisoes(situacao);
 CREATE INDEX IF NOT EXISTS idx_previstos_codigo     ON documentos_previstos(codigo);
+CREATE INDEX IF NOT EXISTS idx_grds_revisao         ON grds(revisao_id);
 """
+
+
+_MIGRACOES = [
+    # (tabela, coluna, definição SQL)
+    ("documentos", "fase",           "TEXT"),
+    ("revisoes",   "emissao_inicial", "TEXT"),
+    ("revisoes",   "data_circular",   "TEXT"),
+    ("arquivos",   "objeto",          "TEXT"),   # Marco 8 — imutável por arquivo
+]
+
+
+def _migrar_esquema(conn: sqlite3.Connection) -> None:
+    """Adiciona colunas ausentes em bancos já existentes (idempotente)."""
+    for tabela, coluna, defn in _MIGRACOES:
+        colunas = {row[1] for row in conn.execute(f"PRAGMA table_info({tabela})")}
+        if coluna not in colunas:
+            conn.execute(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {defn}")
 
 
 def init_db(db_path: str = DB_PATH, verbose: bool = True):
@@ -165,15 +199,16 @@ def init_db(db_path: str = DB_PATH, verbose: bool = True):
     with sqlite3.connect(db_path) as conn:
         conn.execute("PRAGMA foreign_keys = ON")
         conn.executescript(DDL)
+        _migrar_esquema(conn)
         conn.commit()
 
     if verbose:
-        print(f"✅ Banco inicializado em: {db_path}")
+        print(f"Banco inicializado em: {db_path}")
         with sqlite3.connect(db_path) as conn:
             tabelas = conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
             ).fetchall()
-            print(f"   Tabelas criadas: {[t[0] for t in tabelas]}")
+            print(f"   Tabelas: {[t[0] for t in tabelas]}")
 
 
 if __name__ == "__main__":
