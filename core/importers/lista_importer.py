@@ -105,9 +105,9 @@ class ListaImporter:
         return self._importar_df(df, os.path.basename(arquivo), contrato_id)
 
     def _ler_planilha(self, arquivo: str) -> pd.DataFrame:
-        xl = pd.ExcelFile(arquivo)
-        sheet = next((s for s in _SHEET_NAMES if s in xl.sheet_names), xl.sheet_names[0])
-        df = pd.read_excel(arquivo, sheet_name=sheet, header=_HEADER_ROW)
+        with pd.ExcelFile(arquivo) as xl:
+            sheet = next((s for s in _SHEET_NAMES if s in xl.sheet_names), xl.sheet_names[0])
+            df = xl.parse(sheet_name=sheet, header=_HEADER_ROW)
         codigo_col = df.iloc[:, _COL["codigo"]].astype(str).str.strip()
         mask = codigo_col.notna() & (codigo_col != "") & (codigo_col.str.lower() != "nan")
         return df[mask].reset_index(drop=True)

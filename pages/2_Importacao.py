@@ -69,7 +69,10 @@ def _importar_arquivo(conteudo: bytes, contrato_id: int, origem: str):
         else:
             return IdImporter().importar(tmp, contrato_id)
     finally:
-        os.unlink(tmp)
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass  # Windows pode atrasar liberação de handle; OS limpa o temp eventualmente
 
 
 # ---------------------------------------------------------------------------

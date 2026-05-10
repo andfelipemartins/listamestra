@@ -63,17 +63,17 @@ class IdImporter:
         return self._importar_df(df, os.path.basename(arquivo), contrato_id)
 
     def _ler_planilha(self, arquivo: str) -> pd.DataFrame:
-        xl = pd.ExcelFile(arquivo)
-        sheet = next(
-            (s for s in xl.sheet_names if s.strip().upper().startswith("ID")),
-            None,
-        )
-        if sheet is None:
-            raise ValueError(
-                f"Nenhuma aba com prefixo 'ID' encontrada em '{os.path.basename(arquivo)}'. "
-                f"Abas disponíveis: {xl.sheet_names}"
+        with pd.ExcelFile(arquivo) as xl:
+            sheet = next(
+                (s for s in xl.sheet_names if s.strip().upper().startswith("ID")),
+                None,
             )
-        df = pd.read_excel(arquivo, sheet_name=sheet, header=_HEADER_ROW)
+            if sheet is None:
+                raise ValueError(
+                    f"Nenhuma aba com prefixo 'ID' encontrada em '{os.path.basename(arquivo)}'. "
+                    f"Abas disponíveis: {xl.sheet_names}"
+                )
+            df = xl.parse(sheet_name=sheet, header=_HEADER_ROW)
         if df.shape[1] < 2:
             raise ValueError(
                 f"A aba '{sheet}' tem apenas {df.shape[1]} coluna(s). "
