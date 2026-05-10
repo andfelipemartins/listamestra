@@ -11,34 +11,17 @@ import sys
 import streamlit as st
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from db.connection import get_connection
 from core.engine.comparacao import comparar_id_lista
 from core.exporters.excel_exporter import exportar_comparacao
+from app.session import require_contrato, sidebar_contexto
+from core.auth.permissions import widget_seletor_perfil, require_permission
 
 st.set_page_config(page_title="Comparação ID × Lista — SCLME", page_icon="🔍", layout="wide")
 
-
-# ---------------------------------------------------------------------------
-# Contrato ativo
-# ---------------------------------------------------------------------------
-
-def _contrato_ativo():
-    with get_connection() as conn:
-        row = conn.execute(
-            "SELECT id, nome, cliente FROM contratos WHERE ativo = 1 ORDER BY id LIMIT 1"
-        ).fetchone()
-    return dict(row) if row else None
-
-
-contrato = _contrato_ativo()
-
-if contrato is None:
-    st.title("🔍 Comparação ID × Lista")
-    st.warning(
-        "Nenhum contrato encontrado. "
-        "Acesse **Importação** no menu lateral para criar o contrato e carregar os dados."
-    )
-    st.stop()
+widget_seletor_perfil()
+contrato = require_contrato()
+sidebar_contexto()
+require_permission("view_comparison")
 
 st.title(f"🔍 Comparação ID × Lista — {contrato['nome']}")
 if contrato.get("cliente"):

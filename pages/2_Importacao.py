@@ -20,6 +20,8 @@ from core.importers.arquivos_importer import ArquivosImporter
 from core.engine.preview_arquivos import gerar_preview
 from core.engine.status import NOME_TRECHO
 from db.connection import get_connection
+from app.session import set_contrato_ativo, sidebar_contexto
+from core.auth.permissions import widget_seletor_perfil, require_permission
 
 # ---------------------------------------------------------------------------
 # Acesso a dados
@@ -84,6 +86,8 @@ def _secao_contrato() -> int | None:
         opcoes = {c["nome"]: c["id"] for c in contratos}
         nome_sel = st.selectbox("Contrato ativo", list(opcoes.keys()))
         contrato_id = opcoes[nome_sel]
+        cliente_sel = next((c.get("cliente") or "" for c in contratos if c["nome"] == nome_sel), "")
+        set_contrato_ativo(contrato_id, nome_sel, cliente_sel)
     else:
         st.info("Nenhum contrato cadastrado. Crie um abaixo para começar.")
         contrato_id = None
@@ -352,6 +356,10 @@ def _historico(contrato_id: int):
 # ---------------------------------------------------------------------------
 
 st.set_page_config(page_title="Importação — SCLME", page_icon="📥", layout="wide")
+
+widget_seletor_perfil()
+sidebar_contexto()
+require_permission("import_data")
 
 st.title("📥 Importação de Dados")
 

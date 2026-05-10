@@ -40,19 +40,20 @@ pytest tests/ -v --cov=core --cov-report=term-missing
 
 ```
 sclme/
-├── main.py                     # Home page Streamlit (estado do sistema + links)
+├── main.py                     # Home page — grade de contratos com cards e métricas
 ├── pages/                      # Páginas Streamlit (multi-page app — ao lado do main.py)
 │   ├── 1_Dashboard.py          # Dashboard de progresso por status e trecho
 │   ├── 2_Importacao.py         # Upload de Excel + nomes.txt (com preview de arquivos)
 │   ├── 3_Comparacao.py         # Comparação ID × Lista (ausentes, extras, divergências)
-│   ├── 4_CadastroManual.py     # Cadastro manual linha a linha (documento + revisão + GRD)
+│   ├── 4_CadastroManual.py     # Cadastro manual: builder segmentado + revisão + GRD
 │   └── 5_Documento.py          # Detalhe por documento: ficha, linha do tempo, arquivos, GRDs
 ├── core/
 │   ├── parsers/                # Interpretação de códigos e nomes de arquivo
 │   │   ├── base_parser.py      # Contrato (BaseParser, CodigoParseado, ErroDeparse)
 │   │   ├── linha15_parser.py   # Parser da Linha 15 — Metrô SP
 │   │   ├── registry.py         # Seleção automática de parser por contrato
-│   │   └── arquivo_parser.py   # Parser de nome de arquivo (CODIGO-REV-VER.ext)
+│   │   ├── arquivo_parser.py   # Parser de nome de arquivo (CODIGO-REV-VER.ext)
+│   │   └── codigo_builder.py   # Montagem/desmontagem de código Linha 15 (LINHA15_TIPOS, CLASSES)
 │   ├── importers/              # Leitura de Excel e arquivos externos
 │   │   ├── lista_importer.py   # Lista de Documentos → documentos + revisoes
 │   │   ├── id_importer.py      # Índice de Documentos → documentos_previstos
@@ -63,8 +64,11 @@ sclme/
 │   │   ├── preview_arquivos.py # Preview dry-run de importação de arquivos
 │   │   ├── disciplinas.py      # Tabela A1–Z2 de estruturas/disciplinas + SITUACOES
 │   │   └── emissao_inicial.py  # Recalculo cronológico de EMISSÃO INICIAL por documento
-│   └── exporters/              # Geração de relatórios (Marco 10+)
+│   ├── exporters/              # Geração de relatórios
+│   └── auth/
+│       └── permissions.py      # Perfis e permissões (can_perfil, can, require_permission)
 ├── app/
+│   ├── session.py              # Estado de sessão: require_contrato, set_contrato_ativo
 │   └── components/             # Widgets reutilizáveis (futuro)
 ├── db/
 │   ├── connection.py           # Fábrica de conexões SQLite (FK + row_factory)
@@ -81,10 +85,12 @@ sclme/
 
 | Camada | Responsabilidade |
 |--------|-----------------|
-| `core/parsers` | Interpretação e validação de códigos documentais |
+| `core/parsers` | Interpretação e validação de códigos documentais; `codigo_builder` monta/desmonta |
 | `core/importers` | Leitura de fontes externas (Excel) |
 | `core/engine` | Regras de negócio (status, comparações, alertas) |
-| `pages/` | Interface Streamlit — sem lógica de negócio; consome `core/` |
+| `core/auth` | Perfis e permissões (`can_perfil` pura + `can` via session_state) |
+| `app/session` | Contrato ativo na sessão (`require_contrato`, `set_contrato_ativo`) |
+| `pages/` | Interface Streamlit — sem lógica de negócio; consome `core/` e `app/` |
 | `db/` | Acesso ao SQLite via `get_connection()` |
 
 ---
@@ -186,6 +192,9 @@ with get_connection() as conn:
 | 8 | Cadastro manual | ✅ Concluído |
 | 9 | Motor de status | ✅ Concluído |
 | 10 | Exportação de relatórios | ✅ Concluído |
+| 11 | Home com cards de contratos + sessão | ✅ Concluído |
+| 12 | Perfis e permissões (session_state) | ✅ Concluído |
+| 13 | Builder segmentado de código no Cadastro Manual | ✅ Concluído |
 
 ---
 

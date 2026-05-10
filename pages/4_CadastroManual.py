@@ -15,8 +15,14 @@ import streamlit as st
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from core.parsers.registry import ParserRegistry
+from core.parsers.codigo_builder import (
+    LINHA15_TIPOS,
+    LINHA15_TRECHOS,
+    LINHA15_CLASSES,
+    montar_codigo_linha15,
+    desmontar_codigo_linha15,
+)
 from core.engine.disciplinas import (
-    ESTRUTURA,
     ESTRUTURA_OPCOES,
     MODALIDADES,
     SITUACOES,
@@ -24,38 +30,42 @@ from core.engine.disciplinas import (
     opcao_para_codigo,
 )
 from core.engine.emissao_inicial import recalcular_emissao_inicial
-from core.engine.status import NOME_TRECHO
+from app.session import require_contrato, sidebar_contexto
+from core.auth.permissions import require_permission, widget_seletor_perfil
 from db.connection import get_connection
+
+st.set_page_config(
+    page_title="Cadastro Manual — SCLME",
+    page_icon="📝",
+    layout="wide",
+)
+
+widget_seletor_perfil()
+sidebar_contexto()
+
+st.title("📝 Cadastro Manual")
+st.caption(
+    "Registre documentos e revisões individualmente — "
+    "complementa as importações em lote via Excel."
+)
+
+contrato = require_contrato()
+require_permission("create_document")
 
 _registry = ParserRegistry()
 
+st.caption(f"Contrato: **{contrato['nome']}**")
+st.divider()
 
 # ---------------------------------------------------------------------------
 # Dados
 # ---------------------------------------------------------------------------
-
-def _listar_contratos() -> list[dict]:
-    with get_connection() as conn:
-        rows = conn.execute(
-            "SELECT id, nome FROM contratos WHERE ativo = 1 ORDER BY nome"
-        ).fetchall()
-    return [dict(r) for r in rows]
-
 
 def _buscar_documento(contrato_id: int, codigo: str) -> Optional[dict]:
     with get_connection() as conn:
         row = conn.execute(
             "SELECT * FROM documentos WHERE contrato_id = ? AND codigo = ?",
             (contrato_id, codigo),
-        ).fetchone()
-    return dict(row) if row else None
-
-
-def _buscar_revisao(documento_id: int, label_revisao: str, versao: int) -> Optional[dict]:
-    with get_connection() as conn:
-        row = conn.execute(
-            "SELECT * FROM revisoes WHERE documento_id = ? AND label_revisao = ? AND versao = ?",
-            (documento_id, label_revisao, versao),
         ).fetchone()
     return dict(row) if row else None
 
@@ -85,12 +95,7 @@ def _salvar(
     rev_fields: dict,
     grds: list[dict],
 ) -> str:
-    """
-    Salva ou atualiza o documento, insere a revisão e salva os GRDs.
-    Retorna mensagem de resultado.
-    """
     with get_connection() as conn:
-        # Upsert documento
         row = conn.execute(
             "SELECT id FROM documentos WHERE contrato_id = ? AND codigo = ?",
             (contrato_id, codigo),
@@ -144,7 +149,6 @@ def _salvar(
             doc_id = cur.lastrowid
             doc_novo = True
 
-        # Verifica duplicidade de revisão
         rev_existe = conn.execute(
             "SELECT id FROM revisoes WHERE documento_id = ? AND label_revisao = ? AND versao = ?",
             (doc_id, rev_fields["label_revisao"], rev_fields["versao"]),
@@ -152,7 +156,6 @@ def _salvar(
         if rev_existe:
             return f"Revisão {rev_fields['label_revisao']} Versão {rev_fields['versao']} já existe para este documento."
 
-        # Determina revisao (int) a partir do label
         try:
             revisao_int = int(rev_fields["label_revisao"])
         except (ValueError, TypeError):
@@ -185,7 +188,6 @@ def _salvar(
         )
         rev_id = cur.lastrowid
 
-        # Recalcula ultima_revisao para o documento
         conn.execute(
             "UPDATE revisoes SET ultima_revisao = 0 WHERE documento_id = ?",
             (doc_id,),
@@ -207,10 +209,8 @@ def _salvar(
                 (ultima["id"],),
             )
 
-        # Recalcula emissão inicial para o documento
         recalcular_emissao_inicial(conn, doc_id)
 
-        # Salva GRDs
         for grd in grds:
             if grd.get("numero_grd") or grd.get("data_envio"):
                 conn.execute(
@@ -226,21 +226,10 @@ def _salvar(
 
 
 # ---------------------------------------------------------------------------
-# UI
+# UI helpers
 # ---------------------------------------------------------------------------
 
-def _secao_contrato() -> Optional[int]:
-    contratos = _listar_contratos()
-    if not contratos:
-        st.warning("Nenhum contrato cadastrado. Acesse a página **Importação** para criar um.")
-        return None
-    opcoes = {c["nome"]: c["id"] for c in contratos}
-    nome_sel = st.selectbox("Contrato", list(opcoes.keys()))
-    return opcoes[nome_sel]
-
-
 def _campo_data(label: str, key: str, valor: Optional[str] = None) -> Optional[str]:
-    """Retorna data como string ISO ou None."""
     default = None
     if valor:
         try:
@@ -254,8 +243,84 @@ def _campo_data(label: str, key: str, valor: Optional[str] = None) -> Optional[s
     return None
 
 
+# ---------------------------------------------------------------------------
+# Builder de código segmentado
+# ---------------------------------------------------------------------------
+
+def _secao_codigo() -> str:
+    """
+    Exibe o builder segmentado ou o campo livre (toggle), retorna o código montado.
+    """
+    colar = st.toggle("Colar código completo", key="toggle_colar", value=False)
+
+    if colar:
+        codigo = st.text_input(
+            "Código do Documento",
+            placeholder="Ex: DE-15.25.00.00-6A1-1001",
+            key="inp_codigo_livre",
+        ).strip().upper()
+        return codigo
+
+    # ── Builder segmentado ──────────────────────────────────────────────
+    tipos_opts    = list(LINHA15_TIPOS.keys())
+    trechos_opts  = list(LINHA15_TRECHOS.keys())
+    classes_opts  = list(LINHA15_CLASSES.keys())
+
+    st.markdown("**Código do Documento**")
+    c1, c2, c3, c4, c5, c6, c7, c8 = st.columns([2, 2, 2, 2, 1, 1, 1, 2])
+
+    with c1:
+        tipo = st.selectbox(
+            "Tipo",
+            tipos_opts,
+            format_func=lambda k: f"{k} — {LINHA15_TIPOS[k]}",
+            key="bld_tipo",
+        )
+    with c2:
+        trecho = st.selectbox(
+            "Trecho",
+            trechos_opts,
+            format_func=lambda k: f"{k} — {LINHA15_TRECHOS[k]}",
+            key="bld_trecho",
+        )
+    with c3:
+        subtrecho = st.text_input("Subtrecho", value="00", max_chars=2, key="bld_subtrecho")
+    with c4:
+        unidade = st.text_input("Unidade", value="00", max_chars=2, key="bld_unidade")
+    with c5:
+        etapa = st.text_input("Etapa", value="6", max_chars=1, key="bld_etapa")
+    with c6:
+        classe = st.selectbox(
+            "Classe",
+            classes_opts,
+            format_func=lambda k: f"{k} — {LINHA15_CLASSES[k]}",
+            key="bld_classe",
+        )
+    with c7:
+        subclasse = st.text_input("Subcls", value="1", max_chars=2, key="bld_subclasse")
+    with c8:
+        sequencial = st.text_input("Sequencial", value="0001", max_chars=4, key="bld_sequencial")
+
+    codigo = montar_codigo_linha15(
+        tipo,
+        trecho.zfill(2) if trecho.isdigit() else "00",
+        subtrecho.zfill(2) if subtrecho.isdigit() else "00",
+        unidade.zfill(2) if unidade.isdigit() else "00",
+        etapa if etapa.isdigit() else "6",
+        classe,
+        subclasse if subclasse.isdigit() else "1",
+        sequencial.zfill(4) if sequencial.isdigit() else "0001",
+    )
+
+    st.code(codigo, language=None)
+    return codigo
+
+
+# ---------------------------------------------------------------------------
+# Seções do formulário
+# ---------------------------------------------------------------------------
+
 def _secao_documento(existing: Optional[dict]) -> dict:
-    """Renderiza o grupo de campos do nível de documento. Retorna os valores."""
     st.markdown("**Dados do Documento**")
 
     c1, c2 = st.columns(2)
@@ -264,7 +329,6 @@ def _secao_documento(existing: Optional[dict]) -> dict:
             "Descrição / Objeto *",
             value=existing.get("titulo") or "" if existing else "",
             key="inp_titulo",
-            help="Nome do projeto ou objeto do documento.",
         )
     with c2:
         responsavel = st.text_input(
@@ -277,12 +341,7 @@ def _secao_documento(existing: Optional[dict]) -> dict:
     with c3:
         modalidade_val = existing.get("modalidade") or "" if existing else ""
         modalidade_idx = MODALIDADES.index(modalidade_val) if modalidade_val in MODALIDADES else None
-        modalidade = st.selectbox(
-            "Modalidade",
-            options=MODALIDADES,
-            index=modalidade_idx,
-            key="sel_modalidade",
-        )
+        modalidade = st.selectbox("Modalidade", options=MODALIDADES, index=modalidade_idx, key="sel_modalidade")
     with c4:
         disciplina_val = existing.get("disciplina") or "" if existing else ""
         opcao_atual = codigo_para_opcao(disciplina_val)
@@ -292,48 +351,33 @@ def _secao_documento(existing: Optional[dict]) -> dict:
             else None
         )
         estrutura_opcao = st.selectbox(
-            "Estrutura (disciplina)",
-            options=ESTRUTURA_OPCOES,
-            index=estrutura_idx,
-            key="sel_estrutura",
+            "Estrutura (disciplina)", options=ESTRUTURA_OPCOES, index=estrutura_idx, key="sel_estrutura"
         )
     with c5:
         fase = st.text_input(
-            "Fase",
-            value=existing.get("fase") or "" if existing else "",
-            key="inp_fase",
-            placeholder="Ex: EXECUTIVO",
+            "Fase", value=existing.get("fase") or "" if existing else "",
+            key="inp_fase", placeholder="Ex: EXECUTIVO",
         )
 
     return {
-        "titulo": titulo,
+        "titulo":      titulo,
         "responsavel": responsavel,
-        "modalidade": modalidade,
-        "disciplina": opcao_para_codigo(estrutura_opcao),
-        "fase": fase,
+        "modalidade":  modalidade,
+        "disciplina":  opcao_para_codigo(estrutura_opcao),
+        "fase":        fase,
     }
 
 
 def _secao_revisao() -> dict:
-    """Renderiza o grupo de campos do nível de revisão. Retorna os valores."""
     st.markdown("**Dados da Revisão**")
 
     c1, c2 = st.columns(2)
     with c1:
         label_revisao = st.text_input(
-            "Revisão *",
-            key="inp_revisao",
-            placeholder="Ex: 0, 1, A, A1",
-            help="Identificador da revisão conforme o nome do arquivo.",
+            "Revisão *", key="inp_revisao", placeholder="Ex: 0, 1, A, A1",
         )
     with c2:
-        versao = st.number_input(
-            "Versão *",
-            min_value=1,
-            value=1,
-            step=1,
-            key="inp_versao",
-        )
+        versao = st.number_input("Versão *", min_value=1, value=1, step=1, key="inp_versao")
 
     c3, c4, c5 = st.columns(3)
     with c3:
@@ -345,63 +389,41 @@ def _secao_revisao() -> dict:
 
     c6, c7 = st.columns(2)
     with c6:
-        situacao = st.selectbox(
-            "Situação",
-            options=[""] + SITUACOES,
-            index=0,
-            key="sel_situacao",
-        )
+        situacao = st.selectbox("Situação", options=[""] + SITUACOES, index=0, key="sel_situacao")
     with c7:
-        situacao_real = st.text_input(
-            "Situação Real",
-            key="inp_situacao_real",
-            placeholder="Ex: NÃO APROVADO",
-        )
+        situacao_real = st.text_input("Situação Real", key="inp_situacao_real", placeholder="Ex: NÃO APROVADO")
 
     c8, c9, c10 = st.columns(3)
     with c8:
-        analise_interna = st.text_input(
-            "Análise Interna",
-            key="inp_analise_interna",
-            placeholder="Ex: AI-001",
-        )
+        analise_interna = st.text_input("Análise Interna", key="inp_analise_interna", placeholder="Ex: AI-001")
     with c9:
         data_circular = _campo_data("Data Circular", "date_circular")
     with c10:
-        num_circular = st.text_input(
-            "Nº Circular",
-            key="inp_num_circular",
-            placeholder="Ex: 558/2024",
-        )
+        num_circular = st.text_input("Nº Circular", key="inp_num_circular", placeholder="Ex: 558/2024")
 
     return {
-        "label_revisao": label_revisao.strip(),
-        "versao": int(versao),
+        "label_revisao":  label_revisao.strip(),
+        "versao":         int(versao),
         "data_elaboracao": data_elaboracao,
-        "data_emissao": data_emissao,
-        "data_analise": data_analise,
-        "situacao": situacao or None,
-        "situacao_real": situacao_real.strip() or None,
+        "data_emissao":   data_emissao,
+        "data_analise":   data_analise,
+        "situacao":       situacao or None,
+        "situacao_real":  situacao_real.strip() or None,
         "analise_interna": analise_interna.strip() or None,
-        "data_circular": data_circular,
-        "num_circular": num_circular.strip() or None,
+        "data_circular":  data_circular,
+        "num_circular":   num_circular.strip() or None,
     }
 
 
 def _secao_grds() -> list[dict]:
-    """Renderiza os campos de GRD para Produção, Topografia, Qualidade."""
     st.markdown("**GRD — Distribuição**")
-    setores = [
-        ("producao",   "Produção"),
-        ("topografia", "Topografia"),
-        ("qualidade",  "Qualidade"),
-    ]
+    setores = [("producao", "Produção"), ("topografia", "Topografia"), ("qualidade", "Qualidade")]
     grds = []
     cols = st.columns(len(setores))
     for col, (setor, nome) in zip(cols, setores):
         with col:
             st.markdown(f"*{nome}*")
-            num = st.text_input(f"Nº GRD", key=f"grd_num_{setor}", placeholder="Ex: GRD-001")
+            num  = st.text_input(f"Nº GRD", key=f"grd_num_{setor}", placeholder="Ex: GRD-001")
             data = _campo_data("Data Envio", f"grd_data_{setor}")
             grds.append({"setor": setor, "numero_grd": num.strip() or None, "data_envio": data})
     return grds
@@ -411,109 +433,71 @@ def _secao_grds() -> list[dict]:
 # Página
 # ---------------------------------------------------------------------------
 
-st.set_page_config(
-    page_title="Cadastro Manual — SCLME",
-    page_icon="📝",
-    layout="wide",
-)
-st.title("📝 Cadastro Manual")
-st.caption(
-    "Registre documentos e revisões individualmente — "
-    "complementa as importações em lote via Excel."
-)
-
-contrato_id = _secao_contrato()
-if contrato_id is None:
-    st.stop()
-
-st.divider()
-
-# ── Código ──────────────────────────────────────────────────────────────────
-col_cod, col_btn = st.columns([3, 1])
-with col_cod:
-    codigo_input = st.text_input(
-        "Código do Documento",
-        placeholder="Ex: DE-15.25.00.00-6A1-1001",
-        key="inp_codigo",
-    ).strip().upper()
-with col_btn:
-    st.markdown("<br>", unsafe_allow_html=True)
-    validar = st.button("Validar", type="primary", key="btn_validar")
+codigo_input = _secao_codigo()
 
 if not codigo_input:
-    st.info("Digite o código do documento para começar.")
+    st.info("Preencha o código do documento para continuar.")
     st.stop()
 
 parsed = _registry.parse(codigo_input)
-existing_doc = _buscar_documento(contrato_id, codigo_input)
+existing_doc = _buscar_documento(contrato["id"], codigo_input)
 
-if validar or existing_doc is not None or (not validar and codigo_input):
-    # Validação do parser
-    if not parsed.valido:
-        st.error(f"Código inválido: {parsed.mensagem}")
-        st.stop()
+if not parsed.valido:
+    st.error(f"Código inválido: {parsed.mensagem}")
+    st.stop()
 
-    # Status do documento
-    if existing_doc:
-        revisoes = _listar_revisoes(existing_doc["id"])
-        st.success(
-            f"Documento encontrado — {len(revisoes)} revisão(ões) registrada(s)."
-        )
-        if revisoes:
-            with st.expander("Ver histórico de revisões"):
-                for rev in revisoes:
-                    ei = rev.get("emissao_inicial") or "—"
-                    dt = rev.get("data_emissao") or "—"
-                    sit = rev.get("situacao") or "—"
-                    st.markdown(
-                        f"- **{ei}** | Rev {rev['label_revisao']} Ver {rev['versao']} "
-                        f"| Emissão: {dt} | Situação: {sit}"
-                    )
-    else:
-        trecho = parsed.extras.get("trecho", "—") if parsed.valido else "—"
-        nome_trecho = parsed.extras.get("nome_trecho", trecho) if parsed.valido else "—"
-        sequencial = parsed.extras.get("sequencial", "—") if parsed.valido else "—"
-        st.info(
-            f"Documento novo — Tipo: **{parsed.tipo}** | "
-            f"Trecho: **{nome_trecho}** ({trecho}) | "
-            f"Sequencial: **{sequencial}**"
-        )
+if existing_doc:
+    revisoes = _listar_revisoes(existing_doc["id"])
+    st.success(f"Documento encontrado — {len(revisoes)} revisão(ões) registrada(s).")
+    if revisoes:
+        with st.expander("Ver histórico de revisões"):
+            for rev in revisoes:
+                ei  = rev.get("emissao_inicial") or "—"
+                dt  = rev.get("data_emissao") or "—"
+                sit = rev.get("situacao") or "—"
+                st.markdown(
+                    f"- **{ei}** | Rev {rev['label_revisao']} Ver {rev['versao']} "
+                    f"| Emissão: {dt} | Situação: {sit}"
+                )
+else:
+    nome_trecho = parsed.extras.get("nome_trecho", "—")
+    trecho      = parsed.extras.get("trecho", "—")
+    sequencial  = parsed.extras.get("sequencial", "—")
+    st.info(
+        f"Documento novo — Tipo: **{parsed.tipo}** | "
+        f"Trecho: **{nome_trecho}** ({trecho}) | "
+        f"Sequencial: **{sequencial}**"
+    )
+
+st.divider()
+
+with st.form("form_cadastro"):
+    doc_fields = _secao_documento(existing_doc)
 
     st.divider()
+    rev_fields = _secao_revisao()
 
-    with st.form("form_cadastro"):
-        doc_fields = _secao_documento(existing_doc)
+    st.divider()
+    with st.expander("GRD — opcional"):
+        grds = _secao_grds()
 
-        st.divider()
-        rev_fields = _secao_revisao()
+    st.markdown("")
+    submitted = st.form_submit_button("Salvar Revisão", type="primary", use_container_width=True)
 
-        st.divider()
-        with st.expander("GRD — opcional"):
-            grds = _secao_grds()
+if submitted:
+    erros = []
+    if not doc_fields["titulo"].strip():
+        erros.append("Descrição / Objeto é obrigatório.")
+    if not rev_fields["label_revisao"]:
+        erros.append("Revisão é obrigatória.")
 
-        st.markdown("")
-        submitted = st.form_submit_button(
-            "Salvar Revisão",
-            type="primary",
-            use_container_width=True,
-        )
-
-    if submitted:
-        # Validações frontend
-        erros = []
-        if not doc_fields["titulo"].strip():
-            erros.append("Descrição / Objeto é obrigatório.")
-        if not rev_fields["label_revisao"]:
-            erros.append("Revisão é obrigatória.")
-
-        if erros:
-            for e in erros:
-                st.error(e)
+    if erros:
+        for e in erros:
+            st.error(e)
+    else:
+        msg = _salvar(contrato["id"], codigo_input, doc_fields, rev_fields, grds)
+        if "sucesso" in msg.lower():
+            st.success(msg)
+            st.rerun()
         else:
-            msg = _salvar(contrato_id, codigo_input, doc_fields, rev_fields, grds)
-            if "sucesso" in msg.lower():
-                st.success(msg)
-                # Força releitura da página para atualizar o histórico
-                st.rerun()
-            else:
-                st.warning(msg)
+            st.warning(msg)

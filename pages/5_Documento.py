@@ -16,17 +16,8 @@ from db.connection import get_connection
 from core.engine.status import STATUS_ORDEM, NOME_TRECHO, classificar_status
 from core.engine.disciplinas import ESTRUTURA
 from core.exporters.excel_exporter import exportar_historico_revisoes
-
-# ---------------------------------------------------------------------------
-# Acesso a dados
-# ---------------------------------------------------------------------------
-
-def _contrato_ativo() -> dict | None:
-    with get_connection() as conn:
-        row = conn.execute(
-            "SELECT id, nome, cliente FROM contratos WHERE ativo = 1 ORDER BY id LIMIT 1"
-        ).fetchone()
-    return dict(row) if row else None
+from app.session import require_contrato, sidebar_contexto
+from core.auth.permissions import widget_seletor_perfil, require_permission
 
 
 def _listar_documentos(contrato_id: int) -> list[dict]:
@@ -262,12 +253,10 @@ def _arquivos(doc_id: int):
 
 st.set_page_config(page_title="Documento — SCLME", page_icon="📄", layout="wide")
 
-contrato = _contrato_ativo()
-
-if contrato is None:
-    st.title("📄 Documento")
-    st.warning("Nenhum contrato encontrado. Importe os dados na página Importação.")
-    st.stop()
+widget_seletor_perfil()
+contrato = require_contrato()
+sidebar_contexto()
+require_permission("view_document")
 
 st.title("📄 Detalhe do Documento")
 st.caption(contrato["nome"])

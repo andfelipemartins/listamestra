@@ -21,8 +21,10 @@ from core.engine.status import (
     carregar_alertas,
 )
 from core.exporters.excel_exporter import exportar_lista_mestra, exportar_alertas
+from app.session import require_contrato, sidebar_contexto
+from core.auth.permissions import widget_seletor_perfil
 
-STATUS_COR = {
+STATUS_COR: dict[str, str] = {
     "Em Elaboração": "#95a5a6",
     "Em Análise":    "#3498db",
     "Em Revisão":    "#e67e22",
@@ -32,14 +34,6 @@ STATUS_COR = {
 # ---------------------------------------------------------------------------
 # Acesso a dados
 # ---------------------------------------------------------------------------
-
-def _contrato_ativo():
-    with get_connection() as conn:
-        row = conn.execute(
-            "SELECT id, nome, cliente FROM contratos WHERE ativo = 1 ORDER BY id LIMIT 1"
-        ).fetchone()
-    return dict(row) if row else None
-
 
 def _ultima_importacao(contrato_id: int) -> dict | None:
     with get_connection() as conn:
@@ -256,15 +250,9 @@ def _tabela_documentos(df: pd.DataFrame):
 
 st.set_page_config(page_title="Dashboard — SCLME", page_icon="📊", layout="wide")
 
-contrato = _contrato_ativo()
-
-if contrato is None:
-    st.title("📊 Dashboard")
-    st.warning(
-        "Nenhum contrato encontrado. "
-        "Acesse **Importação** no menu lateral para criar o contrato e carregar os dados."
-    )
-    st.stop()
+widget_seletor_perfil()
+contrato = require_contrato()
+sidebar_contexto()
 
 st.title(f"📊 {contrato['nome']}")
 if contrato.get("cliente"):
