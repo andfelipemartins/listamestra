@@ -20,6 +20,7 @@ from core.engine.status import (
     carregar_progresso,
     carregar_alertas,
 )
+from core.exporters.excel_exporter import exportar_lista_mestra, exportar_alertas
 
 STATUS_COR = {
     "Em Elaboração": "#95a5a6",
@@ -286,7 +287,7 @@ if df.empty:
     )
     st.stop()
 
-# Alertas (threshold configurável na sidebar)
+# Alertas (threshold configurável na sidebar) + Exportações
 with st.sidebar:
     st.markdown("### Alertas")
     dias_alerta = st.number_input(
@@ -298,7 +299,29 @@ with st.sidebar:
         key="dias_alerta",
     )
 
+    st.divider()
+    st.markdown("### Exportar")
+
 alertas = carregar_alertas(contrato["id"], dias_analise=dias_alerta)
+
+with st.sidebar:
+    nome_arquivo_lm = contrato["nome"].replace(" ", "_")
+    st.download_button(
+        "⬇️ Lista Mestra (.xlsx)",
+        data=exportar_lista_mestra(df, contrato["nome"]),
+        file_name=f"Lista_Mestra_{nome_arquivo_lm}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True,
+    )
+    if alertas:
+        st.download_button(
+            "⬇️ Alertas (.xlsx)",
+            data=exportar_alertas(alertas, contrato["nome"]),
+            file_name=f"Alertas_{nome_arquivo_lm}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
+
 if alertas:
     _alertas(alertas, dias_alerta)
     st.divider()

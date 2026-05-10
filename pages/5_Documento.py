@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from db.connection import get_connection
 from core.engine.status import STATUS_ORDEM, NOME_TRECHO, classificar_status
 from core.engine.disciplinas import ESTRUTURA
+from core.exporters.excel_exporter import exportar_historico_revisoes
 
 # ---------------------------------------------------------------------------
 # Acesso a dados
@@ -281,6 +282,8 @@ if not documentos:
 with st.sidebar:
     st.markdown("### Buscar documento")
     busca = st.text_input("Código ou título", placeholder="DE-15.25...")
+    st.divider()
+    st.markdown("### Exportar")
 
 opcoes = documentos
 if busca.strip():
@@ -307,8 +310,18 @@ doc = _carregar_documento(doc_selecionado["id"])
 st.divider()
 
 revisoes = _ficha(doc, contrato["id"])
-st.divider()
 
+with st.sidebar:
+    nome_arquivo = doc["codigo"].replace("/", "-")
+    st.download_button(
+        "⬇️ Histórico de revisões (.xlsx)",
+        data=exportar_historico_revisoes(revisoes, doc, contrato["nome"]),
+        file_name=f"Historico_{nome_arquivo}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True,
+    )
+
+st.divider()
 _linha_do_tempo(revisoes)
 st.divider()
 

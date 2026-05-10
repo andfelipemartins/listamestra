@@ -185,7 +185,7 @@ with get_connection() as conn:
 | 7 | Leitor de pasta SharePoint/local | ✅ Concluído |
 | 8 | Cadastro manual | ✅ Concluído |
 | 9 | Motor de status | ✅ Concluído |
-| 10 | Exportação de relatórios | 🔲 Pendente |
+| 10 | Exportação de relatórios | ✅ Concluído |
 
 ---
 

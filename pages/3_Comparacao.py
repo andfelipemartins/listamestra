@@ -13,6 +13,7 @@ import streamlit as st
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from db.connection import get_connection
 from core.engine.comparacao import comparar_id_lista
+from core.exporters.excel_exporter import exportar_comparacao
 
 st.set_page_config(page_title="Comparação ID × Lista — SCLME", page_icon="🔍", layout="wide")
 
@@ -74,6 +75,17 @@ c4.metric("Divergências de Título", resultado.total_divergencias, delta_color=
 # ---------------------------------------------------------------------------
 # Estado saudável
 # ---------------------------------------------------------------------------
+
+with st.sidebar:
+    st.markdown("### Exportar")
+    nome_arquivo = contrato["nome"].replace(" ", "_")
+    st.download_button(
+        "⬇️ Comparação ID × Lista (.xlsx)",
+        data=exportar_comparacao(resultado, contrato["nome"]),
+        file_name=f"Comparacao_{nome_arquivo}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True,
+    )
 
 if resultado.total_ausentes == 0 and resultado.total_extras == 0 and resultado.total_divergencias == 0:
     st.success("ID e Lista estão sincronizados — nenhuma inconsistência encontrada.")

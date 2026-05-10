@@ -114,4 +114,4 @@ Exemplo: `DE-15.25.00.00-6A1-1001`
 | 7     | Leitor de pasta SharePoint/local  | ✅ Concluído  |
 | 8     | Cadastro manual                   | ✅ Concluído  |
 | 9     | Motor de status                   | ✅ Concluído  |
-| 10    | Exportação de relatórios          | 🔲 Pendente   |
+| 10    | Exportação de relatórios          | ✅ Concluído  |
