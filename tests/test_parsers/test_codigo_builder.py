@@ -14,6 +14,7 @@ from core.parsers.codigo_builder import (
     montar_codigo_linha15,
     desmontar_codigo_linha15,
     parsear_lista_codigos,
+    mesclar_codigos,
     LINHA15_TIPOS,
     LINHA15_TRECHOS,
     LINHA15_CLASSES,
@@ -213,3 +214,60 @@ class TestParsearListaCodigos:
         resultado = desmontar_codigo_linha15("IC-15.25.00.00-6B2-2001", _registry)
         assert resultado is not None
         assert resultado["tipo"] == "IC"
+
+
+# ---------------------------------------------------------------------------
+# mesclar_codigos
+# ---------------------------------------------------------------------------
+
+class TestMesclarCodigos:
+
+    def _parse(self, texto: str) -> list:
+        validos, _ = parsear_lista_codigos(texto, _registry)
+        return validos
+
+    def test_adiciona_a_lista_vazia(self):
+        merged, dup = mesclar_codigos(self._parse("DE-15.25.00.00-6A1-1001"), [])
+        assert len(merged) == 1
+        assert dup == 0
+
+    def test_adiciona_a_lista_existente(self):
+        existentes = self._parse("DE-15.25.00.00-6A1-1001")
+        novos      = self._parse("DE-15.25.00.00-6A1-1002")
+        merged, dup = mesclar_codigos(novos, existentes)
+        assert len(merged) == 2
+        assert dup == 0
+
+    def test_duplicata_nao_adicionada(self):
+        existentes = self._parse("DE-15.25.00.00-6A1-1001")
+        novos      = self._parse("DE-15.25.00.00-6A1-1001")
+        merged, dup = mesclar_codigos(novos, existentes)
+        assert len(merged) == 1
+        assert dup == 1
+
+    def test_mistura_novos_e_duplicatas(self):
+        existentes = self._parse("DE-15.25.00.00-6A1-1001\nDE-15.25.00.00-6A1-1002")
+        novos      = self._parse("DE-15.25.00.00-6A1-1002\nDE-15.25.00.00-6A1-1003")
+        merged, dup = mesclar_codigos(novos, existentes)
+        assert len(merged) == 3
+        assert dup == 1
+
+    def test_preserva_ordem_existentes_primeiro(self):
+        existentes = self._parse("DE-15.25.00.00-6A1-1001\nDE-15.25.00.00-6A1-1002")
+        novos      = self._parse("DE-15.25.00.00-6A1-1003")
+        merged, _  = mesclar_codigos(novos, existentes)
+        assert merged[0][0] == "DE-15.25.00.00-6A1-1001"
+        assert merged[1][0] == "DE-15.25.00.00-6A1-1002"
+        assert merged[2][0] == "DE-15.25.00.00-6A1-1003"
+
+    def test_listas_vazias(self):
+        merged, dup = mesclar_codigos([], [])
+        assert merged == []
+        assert dup == 0
+
+    def test_multiplas_duplicatas_contadas(self):
+        existentes = self._parse("DE-15.25.00.00-6A1-1001\nDE-15.25.00.00-6A1-1002\nDE-15.25.00.00-6A1-1003")
+        novos      = self._parse("DE-15.25.00.00-6A1-1001\nDE-15.25.00.00-6A1-1002")
+        merged, dup = mesclar_codigos(novos, existentes)
+        assert len(merged) == 3
+        assert dup == 2

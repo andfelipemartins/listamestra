@@ -86,6 +86,24 @@ def parsear_lista_codigos(texto: str, registry) -> tuple[list, list]:
     return validos, invalidos
 
 
+def mesclar_codigos(novos: list, existentes: list) -> tuple[list, int]:
+    """
+    Adiciona apenas os códigos de *novos* que ainda não estão em *existentes*.
+    Retorna (lista_final, num_duplicatas_ignoradas).
+    A ordem dos existentes é preservada; novos são adicionados ao final.
+    """
+    existentes_set = {c for c, _ in existentes}
+    resultado = list(existentes)
+    duplicatas = 0
+    for codigo, parsed in novos:
+        if codigo in existentes_set:
+            duplicatas += 1
+        else:
+            resultado.append((codigo, parsed))
+            existentes_set.add(codigo)
+    return resultado, duplicatas
+
+
 def desmontar_codigo_linha15(codigo: str, registry) -> Optional[dict]:
     """
     Desmonta um código Linha 15 em suas partes usando o registry de parsers.

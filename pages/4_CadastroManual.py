@@ -3,6 +3,7 @@ pages/4_CadastroManual.py
 
 Cadastro manual de documentos e revisões.
 Aceita um ou vários códigos colados de uma vez (um por linha).
+A lista é acumulativa: novos códigos são adicionados sem apagar os anteriores.
 """
 
 import os
@@ -15,7 +16,7 @@ import streamlit as st
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from core.parsers.registry import ParserRegistry
-from core.parsers.codigo_builder import parsear_lista_codigos
+from core.parsers.codigo_builder import parsear_lista_codigos, mesclar_codigos
 from core.importers.cadastro_importer import salvar_documento_revisao
 from core.engine.disciplinas import MODALIDADES, SITUACOES
 from app.session import require_contrato, sidebar_contexto
@@ -199,14 +200,30 @@ def _campos_obrigatorios_preenchidos(validos: list) -> bool:
     return True
 
 
-def _limpar_estado():
+def _limpar_codigo(codigo: str) -> None:
+    """Remove todos os campos de session_state do documento indicado."""
+    suffix = f"_{_ks(codigo)}"
+    for k in list(st.session_state.keys()):
+        if k.startswith("cm_") and k.endswith(suffix):
+            del st.session_state[k]
+
+
+def _limpar_lista() -> None:
+    """Limpa a lista de documentos em edição; mantém apenas a caixa de texto."""
     for k in list(st.session_state.keys()):
         if k.startswith("cm_") and k != "cm_texto_codigos":
             del st.session_state[k]
 
 
+def _limpar_tudo() -> None:
+    """Limpa todo o estado do formulário (usado em Cadastrar novos)."""
+    for k in list(st.session_state.keys()):
+        if k.startswith("cm_"):
+            del st.session_state[k]
+
+
 # ---------------------------------------------------------------------------
-# Fase 1 — entrada de códigos
+# Entrada de códigos — caixa + botão (acumulativo)
 # ---------------------------------------------------------------------------
 
 st.text_area(
@@ -228,11 +245,15 @@ if analisar:
     if not texto:
         st.warning("Cole pelo menos um código para continuar.")
         st.stop()
-    validos, invalidos = parsear_lista_codigos(texto, _registry)
-    _limpar_estado()
-    st.session_state["cm_validos"]   = validos
-    st.session_state["cm_invalidos"] = invalidos
-    st.session_state["cm_analisado"] = True
+
+    novos_validos, invalidos_batch = parsear_lista_codigos(texto, _registry)
+    existentes = st.session_state.get("cm_validos", [])
+    merged, duplicatas = mesclar_codigos(novos_validos, existentes)
+
+    st.session_state["cm_validos"]         = merged
+    st.session_state["cm_invalidos_batch"] = invalidos_batch
+    st.session_state["cm_duplicatas"]      = duplicatas
+    st.session_state["cm_texto_codigos"]   = ""   # limpa a caixa após análise
     st.rerun()
 
 # ---------------------------------------------------------------------------
@@ -247,39 +268,50 @@ if st.session_state.get("cm_salvo"):
             st.warning(f"**{codigo}**: {msg}")
 
     if st.button("Cadastrar novos documentos", type="primary"):
-        for k in list(st.session_state.keys()):
-            if k.startswith("cm_"):
-                del st.session_state[k]
+        _limpar_tudo()
         st.rerun()
 
     st.stop()
 
 # ---------------------------------------------------------------------------
-# Fase 2 — formulário de cadastro
+# Feedback do último lote de análise
 # ---------------------------------------------------------------------------
 
-if not st.session_state.get("cm_analisado"):
-    st.stop()
+invalidos_batch = st.session_state.get("cm_invalidos_batch", [])
+for codigo, erro in invalidos_batch:
+    st.error(f"❌ `{codigo}` — {erro.mensagem}")
 
-validos   = st.session_state.get("cm_validos", [])
-invalidos = st.session_state.get("cm_invalidos", [])
+duplicatas = st.session_state.get("cm_duplicatas", 0)
+if duplicatas:
+    st.warning(
+        f"{duplicatas} código(s) já estavam na lista e foram ignorados."
+    )
 
-if invalidos:
-    for codigo, erro in invalidos:
-        st.error(f"❌ `{codigo}` — {erro.mensagem}")
-    st.warning("Corrija os códigos inválidos no campo acima e clique em Analisar novamente.")
-    st.stop()
+# ---------------------------------------------------------------------------
+# Lista acumulada de documentos
+# ---------------------------------------------------------------------------
+
+validos = st.session_state.get("cm_validos", [])
 
 if not validos:
-    st.info("Nenhum código válido encontrado.")
     st.stop()
 
 n = len(validos)
-st.info(f"{n} código(s) válido(s) reconhecido(s).")
+
+col_info, col_limpar = st.columns([5, 1])
+with col_info:
+    st.info(f"{n} código(s) na lista.")
+with col_limpar:
+    if st.button("Limpar lista", use_container_width=True):
+        _limpar_lista()
+        st.rerun()
+
+st.divider()
 
 # Renderiza campos por código (sem st.form — session_state atualiza a cada interação,
 # permitindo checar campos obrigatórios em tempo real para habilitar/desabilitar o botão)
-for codigo, parsed in validos:
+for codigo, parsed in list(validos):
+    ks       = _ks(codigo)
     existing = _buscar_documento(contrato["id"], codigo)
     trecho   = parsed.extras.get("nome_trecho", "—")
     header   = f"📄 {codigo} — {parsed.tipo} | {trecho}"
@@ -288,6 +320,16 @@ for codigo, parsed in validos:
         header += f" *(já existe — {len(revisoes_ex)} revisão(ões))*"
 
     with st.expander(header, expanded=True):
+        # Botão de remoção individual no topo direito do expander
+        _, col_rem = st.columns([8, 1])
+        with col_rem:
+            if st.button("✕", key=f"cm_btn_remover_{ks}", help="Remover este documento da lista"):
+                _limpar_codigo(codigo)
+                st.session_state["cm_validos"] = [
+                    (c, p) for c, p in validos if c != codigo
+                ]
+                st.rerun()
+
         e = parsed.extras
         st.caption(
             f"**{parsed.tipo}** — {parsed.descricao_tipo} · "
@@ -307,7 +349,10 @@ for codigo, parsed in validos:
         st.markdown("**GRD — opcional**")
         _secao_grds(codigo)
 
-# Botão desabilitado enquanto campos obrigatórios não estiverem preenchidos
+# ---------------------------------------------------------------------------
+# Botão de salvamento
+# ---------------------------------------------------------------------------
+
 pode_salvar = _campos_obrigatorios_preenchidos(validos)
 label_btn   = f"Salvar {n} documento(s)" if n > 1 else "Salvar documento"
 
