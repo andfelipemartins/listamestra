@@ -17,13 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from core.parsers.registry import ParserRegistry
 from core.parsers.codigo_builder import parsear_lista_codigos
 from core.importers.cadastro_importer import salvar_documento_revisao
-from core.engine.disciplinas import (
-    ESTRUTURA_OPCOES,
-    MODALIDADES,
-    SITUACOES,
-    codigo_para_opcao,
-    opcao_para_codigo,
-)
+from core.engine.disciplinas import MODALIDADES, SITUACOES
 from app.session import require_contrato, sidebar_contexto
 from core.auth.permissions import require_permission, widget_seletor_perfil
 from db.connection import get_connection
@@ -112,30 +106,9 @@ def _secao_documento(codigo: str, existing: Optional[dict]) -> None:
             key=f"cm_responsavel_{ks}",
         )
 
-    c3, c4, c5 = st.columns(3)
-    with c3:
-        modalidade_val = existing.get("modalidade") or "" if existing else ""
-        modalidade_idx = MODALIDADES.index(modalidade_val) if modalidade_val in MODALIDADES else None
-        st.selectbox("Modalidade", options=MODALIDADES, index=modalidade_idx, key=f"cm_modalidade_{ks}")
-    with c4:
-        disciplina_val = existing.get("disciplina") or "" if existing else ""
-        opcao_atual = codigo_para_opcao(disciplina_val)
-        estrutura_idx = (
-            ESTRUTURA_OPCOES.index(opcao_atual)
-            if opcao_atual and opcao_atual in ESTRUTURA_OPCOES
-            else None
-        )
-        st.selectbox(
-            "Estrutura (disciplina)", options=ESTRUTURA_OPCOES,
-            index=estrutura_idx, key=f"cm_estrutura_{ks}",
-        )
-    with c5:
-        st.text_input(
-            "Fase",
-            value=existing.get("fase") or "" if existing else "",
-            key=f"cm_fase_{ks}",
-            placeholder="Ex: EXECUTIVO",
-        )
+    modalidade_val = existing.get("modalidade") or "" if existing else ""
+    modalidade_idx = MODALIDADES.index(modalidade_val) if modalidade_val in MODALIDADES else None
+    st.selectbox("Modalidade", options=MODALIDADES, index=modalidade_idx, key=f"cm_modalidade_{ks}")
 
 
 def _secao_revisao(codigo: str) -> None:
@@ -187,8 +160,6 @@ def _ler_doc_fields(codigo: str) -> dict:
         "titulo":      st.session_state.get(f"cm_titulo_{ks}", ""),
         "responsavel": st.session_state.get(f"cm_responsavel_{ks}", ""),
         "modalidade":  st.session_state.get(f"cm_modalidade_{ks}", ""),
-        "disciplina":  opcao_para_codigo(st.session_state.get(f"cm_estrutura_{ks}", "") or ""),
-        "fase":        st.session_state.get(f"cm_fase_{ks}", ""),
     }
 
 
@@ -317,6 +288,14 @@ for codigo, parsed in validos:
         header += f" *(já existe — {len(revisoes_ex)} revisão(ões))*"
 
     with st.expander(header, expanded=True):
+        e = parsed.extras
+        st.caption(
+            f"**{parsed.tipo}** — {parsed.descricao_tipo} · "
+            f"Trecho: **{e.get('nome_trecho', '—')}** · "
+            f"Etapa: **{e.get('etapa', '—')}** · "
+            f"Disciplina: **{e.get('classe', '')}{e.get('subclasse', '')}**"
+        )
+
         st.markdown("**Dados do Documento**")
         _secao_documento(codigo, existing)
 

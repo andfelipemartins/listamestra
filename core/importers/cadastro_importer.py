@@ -23,7 +23,17 @@ def salvar_documento_revisao(
     Salva (upsert) o documento e insere a revisão com os GRDs.
     Não duplica revisão já existente (label + versão).
     Retorna mensagem de resultado.
+
+    disciplina e fase são sempre derivadas do código (fonte da verdade),
+    nunca dos campos vindos da UI.
     """
+    parsed = _registry.parse(codigo)
+    disciplina_auto = (
+        (parsed.extras.get("classe", "") + parsed.extras.get("subclasse", "")) or None
+        if parsed.valido else None
+    )
+    fase_auto = parsed.extras.get("etapa") if parsed.valido else None
+
     with get_connection(db_path) as conn:
         row = conn.execute(
             "SELECT id FROM documentos WHERE contrato_id = ? AND codigo = ?",
@@ -36,25 +46,24 @@ def salvar_documento_revisao(
                 """
                 UPDATE documentos SET
                     titulo      = COALESCE(?, titulo),
-                    disciplina  = COALESCE(?, disciplina),
+                    disciplina  = ?,
                     modalidade  = COALESCE(?, modalidade),
                     responsavel = COALESCE(?, responsavel),
-                    fase        = COALESCE(?, fase),
+                    fase        = ?,
                     atualizado_em = datetime('now')
                 WHERE id = ?
                 """,
                 (
                     doc_fields.get("titulo") or None,
-                    doc_fields.get("disciplina") or None,
+                    disciplina_auto,
                     doc_fields.get("modalidade") or None,
                     doc_fields.get("responsavel") or None,
-                    doc_fields.get("fase") or None,
+                    fase_auto,
                     doc_id,
                 ),
             )
             doc_novo = False
         else:
-            parsed = _registry.parse(codigo)
             cur = conn.execute(
                 """
                 INSERT INTO documentos
@@ -67,10 +76,10 @@ def salvar_documento_revisao(
                     codigo,
                     parsed.tipo if parsed.valido else None,
                     doc_fields.get("titulo") or None,
-                    doc_fields.get("disciplina") or None,
+                    disciplina_auto,
                     doc_fields.get("modalidade") or None,
                     doc_fields.get("responsavel") or None,
-                    doc_fields.get("fase") or None,
+                    fase_auto,
                     parsed.extras.get("trecho") if parsed.valido else None,
                     parsed.extras.get("nome_trecho") if parsed.valido else None,
                 ),

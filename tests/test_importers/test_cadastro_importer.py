@@ -43,8 +43,6 @@ def _doc_fields(titulo="Meu Documento"):
         "titulo":      titulo,
         "responsavel": "Fulano",
         "modalidade":  "CIVIL",
-        "disciplina":  "E1",
-        "fase":        "EXECUTIVO",
     }
 
 
@@ -107,6 +105,28 @@ class TestCadastroUnitario:
         assert rev["label_revisao"] == "0"
         assert rev["versao"] == 1
         assert rev["origem"] == "cadastro_manual"
+
+    def test_disciplina_derivada_do_codigo(self, db_path, contrato_id):
+        # DE-15.25.00.00-6A1-1001 → classe=A, subclasse=1 → disciplina=A1
+        salvar_documento_revisao(
+            contrato_id, _CODIGO, _doc_fields(), _rev_fields(), [], db_path=db_path
+        )
+        with get_connection(db_path) as conn:
+            row = conn.execute(
+                "SELECT disciplina FROM documentos WHERE codigo = ?", (_CODIGO,)
+            ).fetchone()
+        assert row["disciplina"] == "A1"
+
+    def test_fase_derivada_do_codigo(self, db_path, contrato_id):
+        # DE-15.25.00.00-6A1-1001 → etapa=6 → fase="6"
+        salvar_documento_revisao(
+            contrato_id, _CODIGO, _doc_fields(), _rev_fields(), [], db_path=db_path
+        )
+        with get_connection(db_path) as conn:
+            row = conn.execute(
+                "SELECT fase FROM documentos WHERE codigo = ?", (_CODIGO,)
+            ).fetchone()
+        assert row["fase"] == "6"
 
     def test_msg_indica_documento_criado(self, db_path, contrato_id):
         msg = salvar_documento_revisao(
