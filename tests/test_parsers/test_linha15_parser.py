@@ -76,18 +76,11 @@ class TestCasosValidos:
         assert r1.identificador_base == r2.identificador_base
 
     def test_descricao_tipo_conhecidos(self, parser):
-        for sigla in ["DE", "MC", "MD", "RT", "ID", "PE", "LM", "NS", "TC"]:
+        for sigla in ["DE", "IC", "MC", "MD", "RT", "ID", "PE", "LM", "NS", "TC"]:
             codigo = f"{sigla}-15.25.00.00-6A1-1001"
             resultado = parser.parse(codigo)
             assert isinstance(resultado, CodigoParseado)
             assert resultado.descricao_tipo != ""
-            assert "não catalogado" not in resultado.descricao_tipo
-
-    def test_tipo_desconhecido_retorna_aviso_mas_valido(self, parser):
-        resultado = parser.parse("ZZ-15.25.00.00-6A1-1001")
-        assert isinstance(resultado, CodigoParseado)
-        assert resultado.valido is True
-        assert len(resultado.extras["avisos"]) > 0
 
     def test_campos_extras_presentes(self, parser):
         resultado = parser.parse("DE-15.25.00.00-6A1-1001")
@@ -128,6 +121,11 @@ class TestCasosInvalidos:
         ("DE-15.25.00.00-6A-1001", "padrão"),
         ("DE-15.25.00.00-6A1-100", "padrão"),
         ("1DE-15.25.00.00-6A1-1001", "tipo documental"),
+        # tipos não catalogados devem ser rejeitados
+        ("ICS-15.25.00.00-6A1-1001", "catalogado"),
+        ("DEF-15.25.00.00-6A1-1001", "catalogado"),
+        ("SZ-15.25.00.00-6A1-1001",  "catalogado"),
+        ("ZZ-15.25.00.00-6A1-1001",  "catalogado"),
     ])
     def test_codigo_invalido_retorna_erro(self, parser, codigo, fragmento_mensagem):
         resultado = parser.parse(codigo)

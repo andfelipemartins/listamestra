@@ -119,15 +119,19 @@ class Linha15Parser(BaseParser):
         classe = partes["classe"].upper()
         trecho = partes["trecho"]
 
-        avisos = []
-
         descricao_tipo = _TIPOS_DOCUMENTAIS.get(tipo)
         if descricao_tipo is None:
-            descricao_tipo = f"Tipo não catalogado ({tipo})"
-            avisos.append(
-                f"Tipo '{tipo}' não está na tabela de tipos conhecidos. "
-                "Cadastre-o se for um tipo legítimo deste contrato."
+            tipos_permitidos = ", ".join(sorted(_TIPOS_DOCUMENTAIS))
+            return ErroDeparse(
+                codigo_original=codigo,
+                mensagem=(
+                    f"Tipo documental '{tipo}' não está catalogado para este contrato. "
+                    f"Tipos permitidos: {tipos_permitidos}."
+                ),
+                parser_usado=self.nome,
             )
+
+        avisos = []
 
         descricao_classe = _CLASSES.get(classe, f"Classe não catalogada ({classe})")
         nome_trecho = _NOMES_TRECHO.get(trecho, f"Trecho {trecho}")
