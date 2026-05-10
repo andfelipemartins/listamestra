@@ -12,9 +12,12 @@ import tempfile
 import streamlit as st
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+import pandas as pd
+
 from core.importers.lista_importer import ListaImporter
 from core.importers.id_importer import IdImporter
 from core.importers.arquivos_importer import ArquivosImporter
+from core.engine.preview_arquivos import gerar_preview
 from db.connection import get_connection
 
 # ---------------------------------------------------------------------------
@@ -170,9 +173,120 @@ def _tab_id(contrato_id: int):
 
 
 def _tab_arquivos(contrato_id: int):
+    # ── Estado ──────────────────────────────────────────────────────────────
+    # Dois estados possíveis:
+    #   A) Sem preview → mostra upload
+    #   B) Com preview → mostra tabela de confirmação
+    PREVIEW_KEY = f"preview_arquivos_{contrato_id}"
+    NOME_KEY    = f"preview_nome_{contrato_id}"
+
+    # ── Estado B: preview aguardando confirmação ─────────────────────────────
+    if PREVIEW_KEY in st.session_state:
+        preview  = st.session_state[PREVIEW_KEY]
+        nome_txt = st.session_state[NOME_KEY]
+
+        st.markdown(f"**Arquivo analisado:** `{nome_txt}`")
+
+        # KPIs de contexto
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Arquivos novos", preview.total_arquivos_novos)
+        c2.metric("Já registrados", preview.ja_existentes)
+        c3.metric("Sem doc no banco", len(preview.sem_documento))
+        c4.metric("OBSOLETO ignorados", preview.obsoletos)
+
+        if preview.vazio:
+            st.success("Nenhum arquivo novo encontrado — Lista já está atualizada.")
+            if st.button("Nova análise", key="btn_nova_analise"):
+                del st.session_state[PREVIEW_KEY]
+                del st.session_state[NOME_KEY]
+                st.rerun()
+            return
+
+        st.divider()
+        st.markdown(
+            f"**{preview.total_documentos_novos} documento(s) com arquivo(s) novo(s).** "
+            "Confirme ou preencha o **Objeto** de cada um antes de salvar."
+        )
+
+        # Monta DataFrame com uma linha por documento
+        rows = []
+        for codigo, items in preview.novos_por_codigo.items():
+            exts = sorted({i.extensao.upper() for i in items})
+            revs = sorted({
+                f"{i.label_revisao}-{i.versao}" if i.versao else i.label_revisao
+                for i in items
+            })
+            rows.append({
+                "Código":   codigo,
+                "Arquivos": f"{', '.join(exts)} | Rev {', '.join(revs)}",
+                "Objeto":   items[0].titulo_atual or "",
+            })
+        df = pd.DataFrame(rows)
+
+        edited = st.data_editor(
+            df,
+            column_config={
+                "Código":   st.column_config.TextColumn("Código",   disabled=True),
+                "Arquivos": st.column_config.TextColumn("Arquivos", disabled=True),
+                "Objeto":   st.column_config.TextColumn(
+                    "Objeto",
+                    help="Confirme ou preencha o nome do projeto para este documento.",
+                    width="large",
+                ),
+            },
+            use_container_width=True,
+            hide_index=True,
+            key="editor_preview",
+        )
+
+        # Validação: todos os Objetos preenchidos?
+        em_branco = edited[edited["Objeto"].str.strip() == ""]["Código"].tolist()
+        if em_branco:
+            st.warning(
+                f"Preencha o **Objeto** dos seguintes documentos antes de confirmar: "
+                + ", ".join(f"`{c}`" for c in em_branco[:10])
+            )
+
+        col_conf, col_cancel = st.columns([1, 5])
+        confirmar = col_conf.button(
+            "Confirmar e salvar",
+            type="primary",
+            key="btn_confirmar",
+            disabled=bool(em_branco),
+        )
+        col_cancel.button(
+            "Cancelar",
+            key="btn_cancelar",
+            on_click=lambda: (
+                st.session_state.pop(PREVIEW_KEY, None),
+                st.session_state.pop(NOME_KEY, None),
+            ),
+        )
+
+        if confirmar:
+            titulos = dict(zip(edited["Código"], edited["Objeto"]))
+            with st.spinner("Salvando…"):
+                resultado = ArquivosImporter().confirmar_preview(
+                    preview, titulos, contrato_id, nome_txt
+                )
+            st.success(
+                f"**{resultado.novos}** arquivo(s) registrado(s) com sucesso."
+            )
+            del st.session_state[PREVIEW_KEY]
+            del st.session_state[NOME_KEY]
+            st.rerun()
+
+        # Detalhes extras
+        if preview.sem_documento:
+            with st.expander(f"Códigos não encontrados no banco ({len(preview.sem_documento)})"):
+                for c in preview.sem_documento:
+                    st.markdown(f"- `{c}`")
+
+        return
+
+    # ── Estado A: upload ─────────────────────────────────────────────────────
     st.markdown(
-        "Importa um arquivo de texto com nomes de arquivos gerado pelo Windows "
-        "(`dir /b /o:n >nomes.txt` ou `dir /b /s /o:n >nomes.txt` para subpastas). "
+        "Importa um arquivo de texto com nomes de arquivos gerado pelo Windows. "
         "Arquivos em pastas **OBSOLETO** são ignorados automaticamente."
     )
     with st.expander("Como gerar o nomes.txt"):
@@ -189,40 +303,17 @@ def _tab_arquivos(contrato_id: int):
         "Arquivo de nomes (.txt)", type=["txt"], key="upload_nomes"
     )
     if arquivo:
-        st.caption(f"Arquivo selecionado: **{arquivo.name}** ({arquivo.size} bytes)")
-        if st.button("Importar lista de arquivos", type="primary", key="btn_nomes"):
-            with st.spinner("Processando…"):
+        st.caption(f"**{arquivo.name}** · {arquivo.size} bytes")
+        if st.button("Analisar", type="primary", key="btn_analisar"):
+            with st.spinner("Analisando…"):
                 try:
                     conteudo = arquivo.read().decode("utf-8", errors="replace")
-                    resultado = ArquivosImporter().importar_texto(
-                        conteudo, contrato_id, arquivo.name
-                    )
-                    st.success(
-                        f"Concluído — **{resultado.novos}** arquivo(s) novo(s) registrado(s), "
-                        f"**{resultado.ja_existentes}** já existiam."
-                    )
-                    col1, col2, col3 = st.columns(3)
-                    col1.metric("Sem documento no banco", resultado.sem_documento)
-                    col2.metric("Não reconhecidos", resultado.nao_reconhecidos)
-                    col3.metric("OBSOLETO ignorados", resultado.obsoletos_ignorados)
-
-                    if resultado.sem_doc_codigos:
-                        with st.expander(
-                            f"Códigos sem documento no banco ({len(resultado.sem_doc_codigos)})"
-                        ):
-                            for c in resultado.sem_doc_codigos[:50]:
-                                st.markdown(f"- `{c}`")
-                            if len(resultado.sem_doc_codigos) > 50:
-                                st.caption(f"… e mais {len(resultado.sem_doc_codigos) - 50}.")
-
-                    if resultado.erros_parse:
-                        with st.expander(
-                            f"Nomes não reconhecidos ({len(resultado.erros_parse)})"
-                        ):
-                            for e in resultado.erros_parse[:30]:
-                                st.markdown(f"- {e}")
+                    preview  = gerar_preview(conteudo, contrato_id)
+                    st.session_state[PREVIEW_KEY] = preview
+                    st.session_state[NOME_KEY]    = arquivo.name
+                    st.rerun()
                 except Exception as e:
-                    st.error(f"Erro ao processar o arquivo: {e}")
+                    st.error(f"Erro ao analisar o arquivo: {e}")
 
 
 def _historico(contrato_id: int):

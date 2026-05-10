@@ -17,6 +17,7 @@ from typing import List, Optional
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from db.connection import get_connection
 from core.parsers.arquivo_parser import parsear_arquivo, ArquivoParseado, ErroParsearArquivo
+from core.engine.preview_arquivos import ResultadoPreview
 
 
 @dataclass
@@ -144,6 +145,73 @@ class ArquivosImporter:
             """,
             (importacao_id, documento_codigo, tipo, descricao),
         )
+
+    def confirmar_preview(
+        self,
+        preview: ResultadoPreview,
+        titulos: dict,
+        contrato_id: int,
+        nome_arquivo_txt: str = "nomes.txt",
+        db_path: Optional[str] = None,
+    ) -> "ResultadoArquivos":
+        """
+        Grava no banco os arquivos confirmados pelo usuário após o preview.
+
+        preview         — resultado de gerar_preview()
+        titulos         — dict codigo → Objeto editado pelo usuário na UI
+        contrato_id     — contrato alvo
+        nome_arquivo_txt — nome do arquivo original (para rastreabilidade)
+        """
+        total_arquivos = preview.total_arquivos_novos
+        resultado = ResultadoArquivos()
+
+        kwargs = {"db_path": db_path} if db_path else {}
+        with get_connection(**kwargs) as conn:
+            importacao_id = self._registrar_importacao(
+                conn, contrato_id, nome_arquivo_txt, total_arquivos
+            )
+
+            for codigo, items in preview.novos_por_codigo.items():
+                titulo_novo = (titulos.get(codigo) or "").strip()
+                titulo_anterior = items[0].titulo_atual
+
+                if titulo_novo and titulo_novo != titulo_anterior:
+                    conn.execute(
+                        "UPDATE documentos SET titulo = ? WHERE id = ?",
+                        (titulo_novo, items[0].documento_id),
+                    )
+
+                for item in items:
+                    revisao_detectada = (
+                        f"{item.label_revisao}-{item.versao}"
+                        if item.versao is not None
+                        else item.label_revisao
+                    )
+                    cur = conn.execute(
+                        """
+                        INSERT OR IGNORE INTO arquivos
+                            (documento_id, nome_arquivo, extensao, caminho,
+                             origem, revisao_detectada, tipo_detectado, importacao_id)
+                        VALUES (?, ?, ?, ?, 'importacao_nomes', ?, ?, ?)
+                        """,
+                        (
+                            item.documento_id,
+                            item.nome_arquivo,
+                            item.extensao,
+                            item.caminho,
+                            revisao_detectada,
+                            codigo.split("-")[0],
+                            importacao_id,
+                        ),
+                    )
+                    if cur.rowcount > 0:
+                        resultado.novos += 1
+                    else:
+                        resultado.ja_existentes += 1
+
+            self._finalizar_importacao(conn, importacao_id, resultado)
+
+        return resultado
 
     def _registrar_importacao(self, conn, contrato_id, arquivo, total_linhas) -> int:
         conn.execute(

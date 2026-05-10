@@ -57,7 +57,8 @@ sclme/
 │   │   └── arquivos_importer.py# nomes.txt → arquivos (vincula arquivo ao documento)
 │   ├── engine/                 # Regras de negócio
 │   │   ├── status.py           # Classificação de status documental
-│   │   └── comparacao.py       # Comparação ID × Lista (ResultadoComparacao)
+│   │   ├── comparacao.py       # Comparação ID × Lista (ResultadoComparacao)
+│   │   └── preview_arquivos.py # Preview dry-run de importação de arquivos
 │   └── exporters/              # Geração de relatórios (Marco 10+)
 ├── app/
 │   └── components/             # Widgets reutilizáveis (futuro)
@@ -169,7 +170,7 @@ with get_connection() as conn:
 | 5 | Dashboard inicial | ✅ Concluído |
 | 6 | Comparação ID × Lista | ✅ Concluído |
 | 7 | Leitor de pasta SharePoint/local | ✅ Concluído |
-| 8 | Cadastro manual | 🔲 Pendente |
+| 8 | Cadastro manual | ✅ Concluído |
 | 9 | Motor de status | 🔲 Pendente |
 | 10 | Exportação de relatórios | 🔲 Pendente |
 
