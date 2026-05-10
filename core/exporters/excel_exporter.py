@@ -46,7 +46,8 @@ def exportar_lista_mestra(df_progresso: pd.DataFrame, nome_contrato: str) -> byt
             "tipo":         "Tipo",
             "nome_trecho":  "Trecho",
             "titulo":       "Título",
-            "status":       "Status",
+            "status_atual": "Status Atual",
+            "ja_aprovado":  "Já Aprovado",
             "situacao":     "Situação",
             "data_emissao": "Data Emissão",
         }

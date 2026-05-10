@@ -56,41 +56,45 @@ def _ultima_importacao(contrato_id: int) -> dict | None:
 
 def _kpis(df: pd.DataFrame):
     total = len(df)
-    counts = df["status"].value_counts()
+    counts = df["status_atual"].value_counts()
+    ja_aprovados = int(df["ja_aprovado"].sum())
 
-    c0, c1, c2, c3, c4 = st.columns(5)
+    c0, c1, c2, c3, c4, c5 = st.columns(6)
     c0.metric("Total Previstos", total)
     for col, status in zip([c1, c2, c3, c4], STATUS_ORDEM):
         n = int(counts.get(status, 0))
         pct = n / total * 100 if total else 0
         col.metric(status, n, f"{pct:.1f}%")
+    pct_ap = ja_aprovados / total * 100 if total else 0
+    c5.metric("Já Aprovados ✓", ja_aprovados, f"{pct_ap:.1f}%",
+              help="Documentos com ao menos uma revisão aprovada (inclusive com revisões posteriores em curso)")
 
 
 def _progresso_e_pizza_geral(df: pd.DataFrame):
     total = len(df)
-    aprovados = int((df["status"] == "Aprovado").sum())
-    pct = aprovados / total * 100 if total else 0
+    ja_aprovados = int(df["ja_aprovado"].sum())
+    pct = ja_aprovados / total * 100 if total else 0
 
     col_bar, col_pizza = st.columns([2, 1])
 
     with col_bar:
         st.markdown(
-            f"#### Progresso geral: **{pct:.1f}%** aprovado &nbsp;({aprovados} / {total})"
+            f"#### Progresso geral: **{pct:.1f}%** já aprovado &nbsp;({ja_aprovados} / {total})"
         )
         st.progress(pct / 100)
 
-        # Barra empilhada por trecho
+        # Barra empilhada por trecho — status atual da última revisão
         contagem = (
-            df.groupby(["nome_trecho", "status"])
+            df.groupby(["nome_trecho", "status_atual"])
             .size()
             .reset_index(name="qtd")
         )
         trechos = contagem["nome_trecho"].unique().tolist()
         completo = pd.MultiIndex.from_product(
-            [trechos, STATUS_ORDEM], names=["nome_trecho", "status"]
+            [trechos, STATUS_ORDEM], names=["nome_trecho", "status_atual"]
         )
         contagem = (
-            contagem.set_index(["nome_trecho", "status"])
+            contagem.set_index(["nome_trecho", "status_atual"])
             .reindex(completo, fill_value=0)
             .reset_index()
         )
@@ -98,14 +102,14 @@ def _progresso_e_pizza_geral(df: pd.DataFrame):
             contagem,
             x="nome_trecho",
             y="qtd",
-            color="status",
+            color="status_atual",
             color_discrete_map=STATUS_COR,
-            category_orders={"status": STATUS_ORDEM},
+            category_orders={"status_atual": STATUS_ORDEM},
             barmode="stack",
-            labels={"nome_trecho": "Trecho", "qtd": "Documentos", "status": "Status"},
+            labels={"nome_trecho": "Trecho", "qtd": "Documentos", "status_atual": "Status Atual"},
         )
         fig_bar.update_layout(
-            legend_title_text="Status",
+            legend_title_text="Status Atual",
             xaxis_title="",
             margin=dict(t=20, b=0),
         )
@@ -113,19 +117,19 @@ def _progresso_e_pizza_geral(df: pd.DataFrame):
 
     with col_pizza:
         contagem_geral = (
-            df["status"]
+            df["status_atual"]
             .value_counts()
             .reindex(STATUS_ORDEM, fill_value=0)
             .reset_index()
         )
-        contagem_geral.columns = ["status", "qtd"]
+        contagem_geral.columns = ["status_atual", "qtd"]
         contagem_geral = contagem_geral[contagem_geral["qtd"] > 0]
         fig_geral = px.pie(
             contagem_geral,
-            names="status",
+            names="status_atual",
             values="qtd",
             title="Contrato Geral",
-            color="status",
+            color="status_atual",
             color_discrete_map=STATUS_COR,
         )
         fig_geral.update_traces(textinfo="percent+label", textposition="inside")
@@ -149,20 +153,20 @@ def _pizzas_por_trecho(df: pd.DataFrame):
         nome = NOME_TRECHO.get(trecho, trecho)
 
         contagem = (
-            df_t["status"]
+            df_t["status_atual"]
             .value_counts()
             .reindex(STATUS_ORDEM, fill_value=0)
             .reset_index()
         )
-        contagem.columns = ["status", "qtd"]
+        contagem.columns = ["status_atual", "qtd"]
         contagem = contagem[contagem["qtd"] > 0]
 
         fig = px.pie(
             contagem,
-            names="status",
+            names="status_atual",
             values="qtd",
             title=nome.upper(),
-            color="status",
+            color="status_atual",
             color_discrete_map=STATUS_COR,
         )
         fig.update_traces(textinfo="percent", textposition="inside")
@@ -172,11 +176,11 @@ def _pizzas_por_trecho(df: pd.DataFrame):
         )
         col.plotly_chart(fig, use_container_width=True)
 
-        # Métricas resumidas embaixo de cada pizza
+        # Métricas resumidas embaixo de cada pizza — usa ja_aprovado (histórico)
         total_t = len(df_t)
-        aprovados_t = int((df_t["status"] == "Aprovado").sum())
+        aprovados_t = int(df_t["ja_aprovado"].sum())
         pct_t = aprovados_t / total_t * 100 if total_t else 0
-        col.progress(pct_t / 100, text=f"{pct_t:.0f}% aprovado ({aprovados_t}/{total_t})")
+        col.progress(pct_t / 100, text=f"{pct_t:.0f}% já aprovado ({aprovados_t}/{total_t})")
 
 
 def _alertas(alertas: list[dict], dias: int):
@@ -226,18 +230,19 @@ def _tabela_documentos(df: pd.DataFrame):
 
         df_filtrado = df.copy()
         if status_filtro:
-            df_filtrado = df_filtrado[df_filtrado["status"].isin(status_filtro)]
+            df_filtrado = df_filtrado[df_filtrado["status_atual"].isin(status_filtro)]
         if tipo_filtro:
             df_filtrado = df_filtrado[df_filtrado["tipo"].isin(tipo_filtro)]
 
         st.dataframe(
-            df_filtrado[["codigo", "tipo", "nome_trecho", "status", "titulo"]]
+            df_filtrado[["codigo", "tipo", "nome_trecho", "status_atual", "ja_aprovado", "titulo"]]
             .rename(columns={
-                "codigo":     "Código",
-                "tipo":       "Tipo",
-                "nome_trecho":"Trecho",
-                "status":     "Status",
-                "titulo":     "Título",
+                "codigo":      "Código",
+                "tipo":        "Tipo",
+                "nome_trecho": "Trecho",
+                "status_atual":"Status Atual",
+                "ja_aprovado": "Já Aprovado",
+                "titulo":      "Título",
             }),
             use_container_width=True,
             hide_index=True,

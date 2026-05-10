@@ -165,17 +165,17 @@ class ListaImporter:
         else:
             resultado.documentos_atualizados += 1
 
-        revisao_num = self._int(row, "revisao", 0)
+        revisao_int, versao, label_rev = self._label_revisao(row)
         rev_data = {
             "documento_id": doc_id,
-            "revisao": revisao_num,
-            "versao": self._int(row, "versao", 1),
-            "label_revisao": f"Rev{revisao_num}",
+            "revisao": revisao_int,
+            "versao": versao,
+            "label_revisao": label_rev,
             "data_elaboracao": self._data(row, "data_elaboracao"),
-            "data_emissao": self._data(row, "data_emissao"),
-            "data_analise": self._data(row, "data_analise"),
+            "data_emissao":    self._data(row, "data_emissao"),
+            "data_analise":    self._data(row, "data_analise"),
             "dias_elaboracao": self._int(row, "dias_elaboracao"),
-            "dias_analise": self._int(row, "dias_analise"),
+            "dias_analise":    self._int(row, "dias_analise"),
             "situacao_real": self._str(row, "situacao_real"),
             "situacao": self._str(row, "situacao"),
             "retorno": self._str(row, "retorno"),
@@ -238,8 +238,8 @@ class ListaImporter:
 
     def _upsert_revisao(self, conn, data) -> bool:
         row = conn.execute(
-            "SELECT id FROM revisoes WHERE documento_id = ? AND revisao = ? AND versao = ?",
-            (data["documento_id"], data["revisao"], data["versao"]),
+            "SELECT id FROM revisoes WHERE documento_id = ? AND label_revisao = ? AND versao = ?",
+            (data["documento_id"], data["label_revisao"], data["versao"]),
         ).fetchone()
         if row:
             conn.execute(
@@ -311,17 +311,19 @@ class ListaImporter:
             """
             UPDATE revisoes SET ultima_revisao = 1
             WHERE id IN (
-                SELECT r.id FROM revisoes r
+                SELECT r.id
+                FROM revisoes r
                 JOIN documentos d ON r.documento_id = d.id
                 WHERE d.contrato_id = ?
-                  AND r.revisao = (
-                      SELECT MAX(r2.revisao) FROM revisoes r2
+                  AND r.id = (
+                      SELECT r2.id
+                      FROM revisoes r2
                       WHERE r2.documento_id = r.documento_id
-                  )
-                  AND r.versao = (
-                      SELECT MAX(r3.versao) FROM revisoes r3
-                      WHERE r3.documento_id = r.documento_id
-                        AND r3.revisao = r.revisao
+                      ORDER BY
+                          CASE WHEN r2.data_emissao IS NULL THEN 1 ELSE 0 END ASC,
+                          r2.data_emissao DESC,
+                          r2.id DESC
+                      LIMIT 1
                   )
             )
             """,
@@ -369,6 +371,29 @@ class ListaImporter:
         )
 
     # --- extração de valores do DataFrame ---
+
+    def _label_revisao(self, row) -> tuple:
+        """Returns (revisao_int_or_None, versao, label_string).
+
+        Numeric revisions (0, 1, 2…) → revisao=int, label='0'/'1'/'2'…
+        Text revisions (A, A1, B1…)   → revisao=None, label=text_uppercased.
+        """
+        val = row.iloc[_COL["revisao"]]
+        versao = self._int(row, "versao", 1) or 1
+        try:
+            if pd.isna(val):
+                return 0, versao, "0"
+        except (TypeError, ValueError):
+            pass
+        try:
+            n = int(float(val))
+            return n, versao, str(n)
+        except (TypeError, ValueError):
+            pass
+        s = str(val).strip()
+        if s and s.lower() != "nan":
+            return None, versao, s.upper()
+        return 0, versao, "0"
 
     def _str(self, row, key) -> Optional[str]:
         val = row.iloc[_COL[key]]

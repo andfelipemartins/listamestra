@@ -42,7 +42,7 @@ class TestExportarListaMestra:
 
     def test_retorna_bytes(self):
         df = self._df([{"codigo": "DE-15.25.00.00-6A1-1001", "titulo": "T", "tipo": "DE",
-                         "nome_trecho": "Ragueb", "status": "Aprovado",
+                         "nome_trecho": "Ragueb", "status_atual":"Aprovado",
                          "situacao": "APROVADO", "data_emissao": "2024-01-10"}])
         result = exportar_lista_mestra(df, "Contrato Teste")
         assert isinstance(result, bytes)
@@ -50,25 +50,25 @@ class TestExportarListaMestra:
 
     def test_aba_lista_mestra_existe(self):
         df = self._df([{"codigo": "DE-15.25.00.00-6A1-1001", "titulo": "T", "tipo": "DE",
-                         "nome_trecho": "Ragueb", "status": "Aprovado",
+                         "nome_trecho": "Ragueb", "status_atual":"Aprovado",
                          "situacao": "APROVADO", "data_emissao": "2024-01-10"}])
         abas = _ler_excel(exportar_lista_mestra(df, "C"))
         assert "Lista Mestra" in abas
 
     def test_colunas_presentes(self):
         df = self._df([{"codigo": "DE-15.25.00.00-6A1-1001", "titulo": "T", "tipo": "DE",
-                         "nome_trecho": "Ragueb", "status": "Aprovado",
+                         "nome_trecho": "Ragueb", "status_atual":"Aprovado",
                          "situacao": "APROVADO", "data_emissao": "2024-01-10"}])
         sheet = _ler_excel(exportar_lista_mestra(df, "C"))["Lista Mestra"]
-        for col in ["Código", "Título", "Status", "Tipo", "Trecho"]:
+        for col in ["Código", "Título", "Status Atual", "Tipo", "Trecho"]:
             assert col in sheet.columns
 
     def test_linhas_exportadas(self):
         df = self._df([
             {"codigo": "DE-15.25.00.00-6A1-1001", "titulo": "A", "tipo": "DE",
-             "nome_trecho": "Ragueb", "status": "Aprovado", "situacao": "APROVADO", "data_emissao": "2024-01-10"},
+             "nome_trecho": "Ragueb", "status_atual":"Aprovado", "situacao": "APROVADO", "data_emissao": "2024-01-10"},
             {"codigo": "DE-15.25.00.00-6A1-1002", "titulo": "B", "tipo": "DE",
-             "nome_trecho": "Ragueb", "status": "Em Elaboração", "situacao": None, "data_emissao": None},
+             "nome_trecho": "Ragueb", "status_atual":"Em Elaboração", "situacao": None, "data_emissao": None},
         ])
         sheet = _ler_excel(exportar_lista_mestra(df, "C"))["Lista Mestra"]
         assert len(sheet) == 2

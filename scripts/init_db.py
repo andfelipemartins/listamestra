@@ -173,6 +173,7 @@ CREATE INDEX IF NOT EXISTS idx_revisoes_documento   ON revisoes(documento_id);
 CREATE INDEX IF NOT EXISTS idx_revisoes_situacao    ON revisoes(situacao);
 CREATE INDEX IF NOT EXISTS idx_previstos_codigo     ON documentos_previstos(codigo);
 CREATE INDEX IF NOT EXISTS idx_grds_revisao         ON grds(revisao_id);
+
 """
 
 
@@ -193,6 +194,34 @@ def _migrar_esquema(conn: sqlite3.Connection) -> None:
             conn.execute(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {defn}")
 
 
+def _normalizar_labels(conn: sqlite3.Connection) -> None:
+    """Converte labels antigos RevN para literais numéricos (idempotente).
+
+    O formato antigo era f'Rev{n}' (Rev0, Rev1, Rev2…). O formato atual é
+    str(n) ('0', '1', '2'…). Só toca labels que seguem exatamente Rev + dígitos.
+    Deve rodar ANTES de criar o índice único em label_revisao.
+    """
+    conn.execute(
+        """
+        UPDATE revisoes
+        SET label_revisao = SUBSTR(label_revisao, 4)
+        WHERE label_revisao GLOB 'Rev[0-9]*'
+          AND SUBSTR(label_revisao, 4) NOT GLOB '*[^0-9]*'
+        """
+    )
+
+
+def _criar_indices_label(conn: sqlite3.Connection) -> None:
+    """Cria índice único em (documento_id, label_revisao, versao) após normalização."""
+    conn.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_revisoes_label_versao
+        ON revisoes(documento_id, label_revisao, versao)
+        WHERE label_revisao IS NOT NULL
+        """
+    )
+
+
 def init_db(db_path: str = DB_PATH, verbose: bool = True):
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
 
@@ -200,6 +229,8 @@ def init_db(db_path: str = DB_PATH, verbose: bool = True):
         conn.execute("PRAGMA foreign_keys = ON")
         conn.executescript(DDL)
         _migrar_esquema(conn)
+        _normalizar_labels(conn)   # normaliza Rev0/Rev1/… antes de criar o índice
+        _criar_indices_label(conn)
         conn.commit()
 
     if verbose:

@@ -160,7 +160,13 @@ def carregar_progresso(
                 COALESCE(dp.trecho, '00') AS trecho,
                 dp.tipo,
                 r.situacao,
-                r.data_emissao
+                r.data_emissao,
+                CASE WHEN EXISTS (
+                    SELECT 1 FROM revisoes rh
+                    WHERE rh.documento_id = d.id
+                      AND UPPER(COALESCE(rh.situacao, '')) LIKE '%APROVADO%'
+                      AND UPPER(COALESCE(rh.situacao, '')) NOT LIKE '%NÃO%'
+                ) THEN 1 ELSE 0 END AS ja_aprovado
             FROM documentos_previstos dp
             LEFT JOIN documentos d
                    ON d.contrato_id = dp.contrato_id AND d.codigo = dp.codigo
@@ -176,9 +182,11 @@ def carregar_progresso(
     if df.empty:
         return df
 
-    df["status"] = df.apply(
+    df["status_atual"] = df.apply(
         lambda row: classificar_status(row["situacao"], row["data_emissao"]),
         axis=1,
     )
+    # ja_aprovado: 1 se qualquer revisão histórica foi aprovada; 0 caso contrário.
+    # Usar para KPIs de progresso; status_atual reflete o estado da última revisão.
     df["nome_trecho"] = df["trecho"].map(NOME_TRECHO).fillna(df["trecho"])
     return df

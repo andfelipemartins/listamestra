@@ -30,7 +30,7 @@ from init_db import init_db
 
 def _linha(
     codigo: str,
-    revisao: int = 1,
+    revisao = 1,
     versao: int = 1,
     sigla: str = "DE",
     trecho: int = 25,
@@ -152,7 +152,7 @@ class TestImportacaoBasica:
             ).fetchone()
         assert rev["revisao"] == 1
         assert rev["versao"] == 1
-        assert rev["label_revisao"] == "Rev1"
+        assert rev["label_revisao"] == "1"
         assert rev["dias_elaboracao"] == 10
         assert rev["dias_analise"] == 16
         assert rev["situacao"] == "NÃO APROVADO"
@@ -486,6 +486,95 @@ class TestTotalErros:
             ).fetchone()
 
         assert imp["total_erros"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Testes de label de revisão (numérico vs. textual)
+# ---------------------------------------------------------------------------
+
+class TestLabelRevisao:
+
+    def test_label_numerico_preservado(self, db, importer):
+        db_path, contrato_id = db
+        importer._importar_df(_df(_linha("DE-15.25.00.00-6N3-1001", revisao=1)), "test.xlsx", contrato_id)
+        with get_connection(db_path) as conn:
+            rev = conn.execute(
+                "SELECT revisao, label_revisao FROM revisoes r "
+                "JOIN documentos d ON r.documento_id=d.id WHERE d.codigo=?",
+                ("DE-15.25.00.00-6N3-1001",),
+            ).fetchone()
+        assert rev["revisao"] == 1
+        assert rev["label_revisao"] == "1"
+
+    def test_label_texto_preservado(self, db, importer):
+        """Revisão 'A' deve ser salva como label_revisao='A', revisao=None."""
+        db_path, contrato_id = db
+        importer._importar_df(_df(_linha("DE-15.25.00.00-6N3-1001", revisao="A")), "test.xlsx", contrato_id)
+        with get_connection(db_path) as conn:
+            rev = conn.execute(
+                "SELECT revisao, label_revisao FROM revisoes r "
+                "JOIN documentos d ON r.documento_id=d.id WHERE d.codigo=?",
+                ("DE-15.25.00.00-6N3-1001",),
+            ).fetchone()
+        assert rev["label_revisao"] == "A"
+        assert rev["revisao"] is None
+
+    def test_label_texto_alfanumerico(self, db, importer):
+        db_path, contrato_id = db
+        importer._importar_df(_df(_linha("DE-15.25.00.00-6N3-1001", revisao="B1")), "test.xlsx", contrato_id)
+        with get_connection(db_path) as conn:
+            rev = conn.execute(
+                "SELECT label_revisao FROM revisoes r "
+                "JOIN documentos d ON r.documento_id=d.id WHERE d.codigo=?",
+                ("DE-15.25.00.00-6N3-1001",),
+            ).fetchone()
+        assert rev["label_revisao"] == "B1"
+
+    def test_label_texto_nao_e_zero(self, db, importer):
+        """Revisão textual nunca deve virar '0' (o literal para revisão numérica zero)."""
+        db_path, contrato_id = db
+        importer._importar_df(_df(_linha("DE-15.25.00.00-6N3-1001", revisao="A1")), "test.xlsx", contrato_id)
+        with get_connection(db_path) as conn:
+            rev = conn.execute(
+                "SELECT label_revisao FROM revisoes r "
+                "JOIN documentos d ON r.documento_id=d.id WHERE d.codigo=?",
+                ("DE-15.25.00.00-6N3-1001",),
+            ).fetchone()
+        assert rev["label_revisao"] != "0"
+        assert rev["label_revisao"] == "A1"
+
+    def test_duas_revisoes_texto_distintas_inseridas(self, db, importer):
+        """Duas revisões textuais diferentes (A e B) devem gerar dois registros."""
+        db_path, contrato_id = db
+        resultado = importer._importar_df(
+            _df(
+                _linha("DE-15.25.00.00-6N3-1001", revisao="A"),
+                _linha("DE-15.25.00.00-6N3-1001", revisao="B"),
+            ),
+            "test.xlsx", contrato_id,
+        )
+        assert resultado.novas_revisoes == 2
+        with get_connection(db_path) as conn:
+            labels = [r["label_revisao"] for r in conn.execute(
+                "SELECT label_revisao FROM revisoes r "
+                "JOIN documentos d ON r.documento_id=d.id WHERE d.codigo=? ORDER BY r.id",
+                ("DE-15.25.00.00-6N3-1001",),
+            ).fetchall()]
+        assert labels == ["A", "B"]
+
+    def test_reimportacao_revisao_texto_nao_duplica(self, db, importer):
+        """Reimportar a mesma revisão textual não cria duplicata."""
+        db_path, contrato_id = db
+        df = _df(_linha("DE-15.25.00.00-6N3-1001", revisao="A"))
+        importer._importar_df(df, "test.xlsx", contrato_id)
+        importer._importar_df(df, "test.xlsx", contrato_id)
+        with get_connection(db_path) as conn:
+            n = conn.execute(
+                "SELECT COUNT(*) AS n FROM revisoes r "
+                "JOIN documentos d ON r.documento_id=d.id WHERE d.codigo=?",
+                ("DE-15.25.00.00-6N3-1001",),
+            ).fetchone()["n"]
+        assert n == 1
 
 
 # ---------------------------------------------------------------------------

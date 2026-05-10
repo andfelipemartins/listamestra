@@ -119,7 +119,7 @@ class TestCarregarProgresso:
 
         df = carregar_progresso(cid, db_path)
         assert len(df) == 1
-        assert df.iloc[0]["status"] == "Em Elaboração"
+        assert df.iloc[0]["status_atual"] == "Em Elaboração"
 
     def test_previsto_com_revisao_aprovada(self, db):
         db_path, cid = db
@@ -129,7 +129,7 @@ class TestCarregarProgresso:
                                             situacao="APROVADO", data_emissao="2024-10-07")
 
         df = carregar_progresso(cid, db_path)
-        assert df.iloc[0]["status"] == "Aprovado"
+        assert df.iloc[0]["status_atual"] == "Aprovado"
 
     def test_previsto_nao_aprovado_e_em_revisao(self, db):
         db_path, cid = db
@@ -139,7 +139,7 @@ class TestCarregarProgresso:
                                             situacao="NÃO APROVADO", data_emissao="2024-10-07")
 
         df = carregar_progresso(cid, db_path)
-        assert df.iloc[0]["status"] == "Em Revisão"
+        assert df.iloc[0]["status_atual"] == "Em Revisão"
 
     def test_previsto_emitido_sem_situacao_e_em_analise(self, db):
         db_path, cid = db
@@ -149,7 +149,7 @@ class TestCarregarProgresso:
                                             data_emissao="2024-10-07")
 
         df = carregar_progresso(cid, db_path)
-        assert df.iloc[0]["status"] == "Em Análise"
+        assert df.iloc[0]["status_atual"] == "Em Análise"
 
     def test_trecho_mapeado_para_nome(self, db):
         db_path, cid = db
@@ -184,9 +184,81 @@ class TestCarregarProgresso:
             # 1004 sem entrada na Lista → Em Elaboração
 
         df = carregar_progresso(cid, db_path)
-        status_por_codigo = dict(zip(df["codigo"], df["status"]))
+        status_por_codigo = dict(zip(df["codigo"], df["status_atual"]))
 
         assert status_por_codigo["DE-15.25.00.00-6A1-1001"] == "Aprovado"
         assert status_por_codigo["DE-15.25.00.00-6A1-1002"] == "Em Revisão"
         assert status_por_codigo["DE-15.25.00.00-6A1-1003"] == "Em Análise"
         assert status_por_codigo["DE-15.25.00.00-6A1-1004"] == "Em Elaboração"
+
+    def _inserir_duas_revisoes(self, conn, contrato_id, codigo, situacao_r1, situacao_r2):
+        conn.execute(
+            "INSERT OR IGNORE INTO documentos (contrato_id, codigo, tipo) VALUES (?, ?, ?)",
+            (contrato_id, codigo, codigo.split("-")[0]),
+        )
+        doc_id = conn.execute(
+            "SELECT id FROM documentos WHERE contrato_id=? AND codigo=?",
+            (contrato_id, codigo),
+        ).fetchone()[0]
+        conn.execute(
+            """INSERT INTO revisoes
+               (documento_id, revisao, versao, label_revisao, situacao, data_emissao, ultima_revisao)
+               VALUES (?, 1, 1, '1', ?, '2024-10-07', 0)""",
+            (doc_id, situacao_r1),
+        )
+        conn.execute(
+            """INSERT INTO revisoes
+               (documento_id, revisao, versao, label_revisao, situacao, data_emissao, ultima_revisao)
+               VALUES (?, 2, 1, '2', ?, '2024-11-01', 1)""",
+            (doc_id, situacao_r2),
+        )
+
+    def test_aprovado_historico_conta_mesmo_com_revisao_posterior_em_revisao(self, db):
+        """Rev1=APROVADO, Rev2=NÃO APROVADO (última) → ja_aprovado=1, status_atual=Em Revisão."""
+        db_path, cid = db
+        with get_connection(db_path) as conn:
+            self._inserir_previsto(conn, cid, "DE-15.25.00.00-6A1-1001")
+            self._inserir_duas_revisoes(conn, cid, "DE-15.25.00.00-6A1-1001",
+                                        situacao_r1="APROVADO", situacao_r2="NÃO APROVADO")
+
+        df = carregar_progresso(cid, db_path)
+        assert df.iloc[0]["ja_aprovado"] == 1
+        assert df.iloc[0]["status_atual"] == "Em Revisão"
+
+    def test_aprovado_historico_conta_mesmo_com_revisao_posterior_em_analise(self, db):
+        """Rev1=APROVADO, Rev2=sem situação mas emitida (última) → ja_aprovado=1, status_atual=Em Análise."""
+        db_path, cid = db
+        with get_connection(db_path) as conn:
+            self._inserir_previsto(conn, cid, "DE-15.25.00.00-6A1-1001")
+            self._inserir_duas_revisoes(conn, cid, "DE-15.25.00.00-6A1-1001",
+                                        situacao_r1="APROVADO", situacao_r2=None)
+
+        df = carregar_progresso(cid, db_path)
+        assert df.iloc[0]["ja_aprovado"] == 1
+        assert df.iloc[0]["status_atual"] == "Em Análise"
+
+    def test_documento_nunca_aprovado_tem_ja_aprovado_zero(self, db):
+        """Rev1=NÃO APROVADO, Rev2=NÃO APROVADO → ja_aprovado=0, status_atual=Em Revisão."""
+        db_path, cid = db
+        with get_connection(db_path) as conn:
+            self._inserir_previsto(conn, cid, "DE-15.25.00.00-6A1-1001")
+            self._inserir_duas_revisoes(conn, cid, "DE-15.25.00.00-6A1-1001",
+                                        situacao_r1="NÃO APROVADO", situacao_r2="NÃO APROVADO")
+
+        df = carregar_progresso(cid, db_path)
+        assert df.iloc[0]["ja_aprovado"] == 0
+        assert df.iloc[0]["status_atual"] == "Em Revisão"
+
+    def test_aprovado_contado_uma_vez_por_documento(self, db):
+        """Dois documentos com histórico aprovado → ja_aprovado.sum() == 2."""
+        db_path, cid = db
+        with get_connection(db_path) as conn:
+            self._inserir_previsto(conn, cid, "DE-15.25.00.00-6A1-1001")
+            self._inserir_previsto(conn, cid, "DE-15.25.00.00-6A1-1002")
+            self._inserir_duas_revisoes(conn, cid, "DE-15.25.00.00-6A1-1001",
+                                        situacao_r1="APROVADO", situacao_r2="APROVADO")
+            self._inserir_duas_revisoes(conn, cid, "DE-15.25.00.00-6A1-1002",
+                                        situacao_r1="APROVADO", situacao_r2="NÃO APROVADO")
+
+        df = carregar_progresso(cid, db_path)
+        assert int(df["ja_aprovado"].sum()) == 2
