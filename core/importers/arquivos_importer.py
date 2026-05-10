@@ -162,6 +162,18 @@ class ArquivosImporter:
         contrato_id     — contrato alvo
         nome_arquivo_txt — nome do arquivo original (para rastreabilidade)
         """
+        # Valida Objeto obrigatório antes de abrir qualquer conexão
+        vazios = [
+            codigo for codigo in preview.novos_por_codigo
+            if not (titulos.get(codigo) or "").strip()
+        ]
+        if vazios:
+            raise ValueError(
+                f"Objeto obrigatório para {len(vazios)} documento(s): "
+                + ", ".join(vazios[:5])
+                + ("…" if len(vazios) > 5 else "")
+            )
+
         total_arquivos = preview.total_arquivos_novos
         resultado = ResultadoArquivos()
 
@@ -170,6 +182,22 @@ class ArquivosImporter:
             importacao_id = self._registrar_importacao(
                 conn, contrato_id, nome_arquivo_txt, total_arquivos
             )
+
+            # Persiste erros do preview em inconsistencias para auditoria posterior
+            for codigo in preview.sem_documento:
+                self._registrar_inconsistencia(
+                    conn, importacao_id,
+                    documento_codigo=codigo,
+                    tipo="arquivo_sem_documento",
+                    descricao="Arquivo reconhecido mas código não encontrado no banco",
+                )
+            for nome in preview.nao_reconhecidos:
+                self._registrar_inconsistencia(
+                    conn, importacao_id,
+                    documento_codigo=nome,
+                    tipo="arquivo_nao_reconhecido",
+                    descricao="Nome de arquivo não segue o padrão esperado",
+                )
 
             for codigo, items in preview.novos_por_codigo.items():
                 titulo_novo = (titulos.get(codigo) or "").strip()

@@ -167,7 +167,8 @@ class TestCategorias:
     def test_nao_reconhecido_contado(self, db):
         db_path, cid = db
         r = gerar_preview("planilha.xlsx\n", cid, db_path)
-        assert r.nao_reconhecidos == 1
+        assert len(r.nao_reconhecidos) == 1
+        assert "planilha.xlsx" in r.nao_reconhecidos
 
 
 # ---------------------------------------------------------------------------
@@ -223,3 +224,85 @@ class TestFluxoCompleto:
         with get_connection(db_path) as conn:
             n = conn.execute("SELECT COUNT(*) FROM arquivos").fetchone()[0]
         assert n == 2
+
+
+# ---------------------------------------------------------------------------
+# Validação de Objeto obrigatório no backend
+# ---------------------------------------------------------------------------
+
+class TestValidacaoBackend:
+
+    def test_objeto_em_branco_levanta_erro(self, db):
+        db_path, cid = db
+        preview = gerar_preview("DE-15.25.00.00-6A1-1001-1-1.pdf\n", cid, db_path)
+        titulos = {"DE-15.25.00.00-6A1-1001": ""}  # em branco
+        with pytest.raises(ValueError, match="Objeto obrigatório"):
+            ArquivosImporter().confirmar_preview(preview, titulos, cid, db_path=db_path)
+
+    def test_objeto_ausente_levanta_erro(self, db):
+        db_path, cid = db
+        preview = gerar_preview("DE-15.25.00.00-6A1-1001-1-1.pdf\n", cid, db_path)
+        titulos = {}  # código não presente no dict
+        with pytest.raises(ValueError, match="Objeto obrigatório"):
+            ArquivosImporter().confirmar_preview(preview, titulos, cid, db_path=db_path)
+
+    def test_objeto_so_espacos_levanta_erro(self, db):
+        db_path, cid = db
+        preview = gerar_preview("DE-15.25.00.00-6A1-1001-1-1.pdf\n", cid, db_path)
+        titulos = {"DE-15.25.00.00-6A1-1001": "   "}
+        with pytest.raises(ValueError):
+            ArquivosImporter().confirmar_preview(preview, titulos, cid, db_path=db_path)
+
+    def test_objeto_valido_nao_levanta_erro(self, db):
+        db_path, cid = db
+        preview = gerar_preview("DE-15.25.00.00-6A1-1001-1-1.pdf\n", cid, db_path)
+        titulos = {"DE-15.25.00.00-6A1-1001": "Fundações Bloco A"}
+        r = ArquivosImporter().confirmar_preview(preview, titulos, cid, db_path=db_path)
+        assert r.novos == 1
+
+
+# ---------------------------------------------------------------------------
+# Audit trail: inconsistencias persistidas ao confirmar
+# ---------------------------------------------------------------------------
+
+class TestAuditTrailConfirmar:
+
+    def test_sem_documento_salvo_em_inconsistencias(self, db):
+        db_path, cid = db
+        conteudo = (
+            "DE-15.25.00.00-6A1-1001-1-1.pdf\n"   # válido
+            "DE-15.25.00.00-6A1-9999-1-1.pdf\n"   # sem documento
+        )
+        preview = gerar_preview(conteudo, cid, db_path)
+        titulos = {"DE-15.25.00.00-6A1-1001": "Fundações Bloco A"}
+        ArquivosImporter().confirmar_preview(preview, titulos, cid, db_path=db_path)
+        with get_connection(db_path) as conn:
+            row = conn.execute(
+                "SELECT tipo_inconsistencia, documento_codigo FROM inconsistencias"
+            ).fetchone()
+        assert row["tipo_inconsistencia"] == "arquivo_sem_documento"
+        assert row["documento_codigo"] == "DE-15.25.00.00-6A1-9999"
+
+    def test_nao_reconhecido_salvo_em_inconsistencias(self, db):
+        db_path, cid = db
+        conteudo = (
+            "DE-15.25.00.00-6A1-1001-1-1.pdf\n"
+            "planilha_ruim.xlsx\n"
+        )
+        preview = gerar_preview(conteudo, cid, db_path)
+        titulos = {"DE-15.25.00.00-6A1-1001": "Fundações Bloco A"}
+        ArquivosImporter().confirmar_preview(preview, titulos, cid, db_path=db_path)
+        with get_connection(db_path) as conn:
+            row = conn.execute(
+                "SELECT tipo_inconsistencia FROM inconsistencias"
+            ).fetchone()
+        assert row["tipo_inconsistencia"] == "arquivo_nao_reconhecido"
+
+    def test_sem_erros_sem_inconsistencias(self, db):
+        db_path, cid = db
+        preview = gerar_preview("DE-15.25.00.00-6A1-1001-1-1.pdf\n", cid, db_path)
+        titulos = {"DE-15.25.00.00-6A1-1001": "Fundações Bloco A"}
+        ArquivosImporter().confirmar_preview(preview, titulos, cid, db_path=db_path)
+        with get_connection(db_path) as conn:
+            n = conn.execute("SELECT COUNT(*) FROM inconsistencias").fetchone()[0]
+        assert n == 0

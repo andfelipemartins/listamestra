@@ -43,7 +43,7 @@ class ResultadoPreview:
     novos_por_codigo: Dict[str, List[ItemPreview]] = field(default_factory=dict)
     ja_existentes:    int = 0
     sem_documento:    List[str] = field(default_factory=list)
-    nao_reconhecidos: int = 0
+    nao_reconhecidos: List[str] = field(default_factory=list)  # nomes dos arquivos não reconhecidos
     obsoletos:        int = 0
 
     @property
@@ -93,7 +93,7 @@ def _processar_linha(conn, linha: str, contrato_id: int, resultado: ResultadoPre
 
     parseado = parsear_arquivo(linha)
     if isinstance(parseado, ErroParsearArquivo):
-        resultado.nao_reconhecidos += 1
+        resultado.nao_reconhecidos.append(os.path.basename(linha.strip()))
         return
 
     if _ja_existe(conn, contrato_id, parseado.nome_arquivo):

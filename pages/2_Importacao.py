@@ -18,6 +18,7 @@ from core.importers.lista_importer import ListaImporter
 from core.importers.id_importer import IdImporter
 from core.importers.arquivos_importer import ArquivosImporter
 from core.engine.preview_arquivos import gerar_preview
+from core.engine.status import NOME_TRECHO
 from db.connection import get_connection
 
 # ---------------------------------------------------------------------------
@@ -193,6 +194,8 @@ def _tab_arquivos(contrato_id: int):
         c2.metric("Já registrados", preview.ja_existentes)
         c3.metric("Sem doc no banco", len(preview.sem_documento))
         c4.metric("OBSOLETO ignorados", preview.obsoletos)
+        if preview.nao_reconhecidos:
+            st.caption(f"⚠️ {len(preview.nao_reconhecidos)} nome(s) não reconhecido(s) — serão ignorados.")
 
         if preview.vazio:
             st.success("Nenhum arquivo novo encontrado — Lista já está atualizada.")
@@ -216,8 +219,12 @@ def _tab_arquivos(contrato_id: int):
                 f"{i.label_revisao}-{i.versao}" if i.versao else i.label_revisao
                 for i in items
             })
+            tipo = codigo.split("-")[0]
+            trecho_code = codigo.split(".")[1] if "." in codigo else "00"
             rows.append({
                 "Código":   codigo,
+                "Tipo":     tipo,
+                "Trecho":   NOME_TRECHO.get(trecho_code, trecho_code),
                 "Arquivos": f"{', '.join(exts)} | Rev {', '.join(revs)}",
                 "Objeto":   items[0].titulo_atual or "",
             })
@@ -227,6 +234,8 @@ def _tab_arquivos(contrato_id: int):
             df,
             column_config={
                 "Código":   st.column_config.TextColumn("Código",   disabled=True),
+                "Tipo":     st.column_config.TextColumn("Tipo",     disabled=True, width="small"),
+                "Trecho":   st.column_config.TextColumn("Trecho",   disabled=True),
                 "Arquivos": st.column_config.TextColumn("Arquivos", disabled=True),
                 "Objeto":   st.column_config.TextColumn(
                     "Objeto",
