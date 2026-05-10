@@ -146,7 +146,7 @@ class TestAnaliseProlongada:
         alertas = carregar_alertas(cid, dias_analise=30, db_path=db_path)
         assert len(alertas) == 1
         assert alertas[0]["tipo"] == "analise_prolongada"
-        assert alertas[0]["mensagem"].startswith("Em em revisão")
+        assert alertas[0]["mensagem"].startswith("Em Revisão")
 
     def test_alerta_contem_campos_obrigatorios(self, db):
         db_path, cid = db

@@ -109,7 +109,7 @@ def carregar_alertas(
                     "titulo": row["titulo"] or "—",
                     "dias": row["dias"],
                     "data_referencia": row["data_emissao"],
-                    "mensagem": f"Em {status.lower()} há {row['dias']} dias",
+                    "mensagem": f"{status} há {row['dias']} dias",
                 })
 
         # Previstos sem nenhuma revisão
