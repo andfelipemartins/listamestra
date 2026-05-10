@@ -192,6 +192,82 @@ with get_connection() as conn:
 | 8 | Cadastro manual | ✅ Concluído |
 | 9 | Motor de status | ✅ Concluído |
 | 10 | Exportação de relatórios | ✅ Concluído |
+| 11 | Central de Pendências e Edição Operacional | 🔲 Pendente |
+| 12 | Página de Edição e Correção de Documento | 🔲 Pendente |
+| 13 | Conciliação Assistida | 🔲 Pendente |
+| 14 | Página de GRDs | 🔲 Pendente |
+| 15 | Importador de Status GED/PW | 🔲 Pendente |
+| 16 | Relatório Executivo em PDF | 🔲 Pendente |
+| 17 | Snapshots Mensais | 🔲 Pendente |
+| 18 | Gestão de Contratos | 🔲 Pendente |
+| 19 | Auditabilidade Completa | 🔲 Pendente |
+| 20 | Preparação para Apresentação / Produto | 🔲 Pendente |
+
+---
+
+## Descrição dos Marcos Futuros
+
+### Marco 11 — Central de Pendências e Edição Operacional
+Página central onde o usuário vê tudo que exige ação e consegue tratar sem sair do app.
+
+**Categorias de pendência:**
+- Documentos previstos sem movimentação
+- Documentos na Lista que não existem no ID
+- Arquivos sem documento vinculado
+- Documentos sem arquivo
+- Códigos inválidos
+- Revisões sem data
+- Documentos sem objeto/título
+- Divergências entre título do ID e título da Lista
+- Documentos emitidos sem análise
+- Documentos com análise atrasada
+
+**Entregas:** página "Central de Pendências", agrupamento por categoria, filtros (tipo/disciplina/trecho/status/criticidade), botão abrir documento, botão marcar como resolvido, botão ignorar/aceitar divergência, link para edição, testes do motor de pendências.
+
+### Marco 12 — Página de Edição e Correção de Documento
+Permitir editar dados controlados sem precisar voltar ao Excel ou mexer direto no banco.
+
+**Entregas:** tela de edição do documento; edição de título, disciplina, modalidade, estrutura, fase, responsável e observações; ativar/inativar documento; correção de dados importados; validação antes de salvar; log simples da alteração.
+
+### Marco 13 — Conciliação Assistida
+Transformar divergências ID × Lista em fluxo de decisão com ações concretas.
+
+**Ações disponíveis por divergência:** manter dado do ID; manter dado da Lista; atualizar cadastro; marcar divergência como aceita; ignorar temporariamente; enviar para revisão posterior.
+
+### Marco 14 — Página de GRDs
+Área própria para Guia de Remessa/GRD com controle de vínculo.
+
+**Entregas:** listar GRDs; buscar por número; filtrar por data/setor/status; ver documentos vinculados; identificar revisão sem GRD; identificar GRD sem documento; corrigir vínculo; exportar relatório de GRDs.
+
+### Marco 15 — Importador de Status GED/PW
+Importar manualmente relatórios do GED/ProjectWise sem API.
+
+**Entregas:** importador CSV/XLSX de relatório GED; mapeamento de colunas; prévia antes de aplicar; atualização de situação, data de análise e retorno/comentário; relatório de divergências; rollback por lote (se viável).
+
+### Marco 16 — Relatório Executivo em PDF
+Gerar PDF de uma página para reunião de coordenação.
+
+**Entregas:** resumo geral (avanço %, previstos, aprovados, em análise, pendentes); pendências críticas; avanço por disciplina e por trecho; data da última importação; exportação PDF.
+
+### Marco 17 — Snapshots Mensais
+Guardar histórico da evolução do contrato para análise de tendência.
+
+**Entregas:** salvar snapshot mensal; comparar mês atual × mês anterior; evolução de aprovados, pendências e documentos emitidos; gráfico histórico.
+
+### Marco 18 — Gestão de Contratos
+Preparar o sistema para múltiplas obras e contratos.
+
+**Entregas:** tela de contratos; criar/editar/ativar/desativar contrato; selecionar contrato ativo; duplicar configuração; filtrar dashboards por contrato; preparar parser/configuração por contrato.
+
+### Marco 19 — Auditabilidade Completa
+Registrar todas as mudanças relevantes para rastreabilidade.
+
+**Entregas:** tabela de audit log; registrar edição manual, importação, resolução de pendência e alteração de status; mostrar histórico no detalhe do documento.
+
+### Marco 20 — Preparação para Apresentação / Produto
+Preparar o projeto para ser mostrado profissionalmente.
+
+**Entregas:** README atualizado; changelog; modo demo com dados fictícios; prints das telas; instrução de instalação e uso; roteiro de apresentação; versão v0.1.0.
 
 ---
 

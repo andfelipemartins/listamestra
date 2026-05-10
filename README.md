@@ -122,16 +122,26 @@ Exemplo: `DE-15.25.00.00-6A1-1001`
 
 ## Roadmap
 
-| Marco | Descrição                              | Status      |
-|-------|----------------------------------------|-------------|
-| 0     | Estrutura e base do projeto            | ✅ Concluído |
-| 1     | Parser de código documental            | ✅ Concluído |
-| 2     | Importador da Lista de Documentos      | ✅ Concluído |
-| 3     | Importador do ID/Índice                | ✅ Concluído |
-| 4     | Banco SQLite (estrutura base)          | ✅ Concluído |
-| 5     | Dashboard inicial                      | ✅ Concluído |
-| 6     | Comparação ID × Lista                  | ✅ Concluído |
-| 7     | Leitor de pasta SharePoint/local       | ✅ Concluído |
-| 8     | Cadastro manual                        | ✅ Concluído |
-| 9     | Motor de status                        | ✅ Concluído |
-| 10    | Exportação de relatórios               | ✅ Concluído |
+| Marco | Descrição                              | Status       |
+|-------|----------------------------------------|--------------|
+| 0     | Estrutura e base do projeto            | ✅ Concluído  |
+| 1     | Parser de código documental            | ✅ Concluído  |
+| 2     | Importador da Lista de Documentos      | ✅ Concluído  |
+| 3     | Importador do ID/Índice                | ✅ Concluído  |
+| 4     | Banco SQLite (estrutura base)          | ✅ Concluído  |
+| 5     | Dashboard inicial                      | ✅ Concluído  |
+| 6     | Comparação ID × Lista                  | ✅ Concluído  |
+| 7     | Leitor de pasta SharePoint/local       | ✅ Concluído  |
+| 8     | Cadastro manual                        | ✅ Concluído  |
+| 9     | Motor de status                        | ✅ Concluído  |
+| 10    | Exportação de relatórios               | ✅ Concluído  |
+| 11    | Central de Pendências e Edição Operacional | 🔲 Pendente |
+| 12    | Página de Edição e Correção de Documento   | 🔲 Pendente |
+| 13    | Conciliação Assistida                  | 🔲 Pendente  |
+| 14    | Página de GRDs                         | 🔲 Pendente  |
+| 15    | Importador de Status GED/PW            | 🔲 Pendente  |
+| 16    | Relatório Executivo em PDF             | 🔲 Pendente  |
+| 17    | Snapshots Mensais                      | 🔲 Pendente  |
+| 18    | Gestão de Contratos                    | 🔲 Pendente  |
+| 19    | Auditabilidade Completa                | 🔲 Pendente  |
+| 20    | Preparação para Apresentação / Produto | 🔲 Pendente  |
