@@ -23,7 +23,7 @@ LINHA15_TIPOS: dict[str, str] = {
     "EQ":  "Especificação de Qualidade",
     "AT":  "Anotação Técnica",
     "CR":  "Croqui",
-    "EX":  "Documento Externo",
+    # EX (Documento Externo) não integra a Lista Mestra Principal.
 }
 
 LINHA15_TRECHOS: dict[str, str] = {

@@ -126,6 +126,8 @@ class TestCasosInvalidos:
         ("DEF-15.25.00.00-6A1-1001", "catalogado"),
         ("SZ-15.25.00.00-6A1-1001",  "catalogado"),
         ("ZZ-15.25.00.00-6A1-1001",  "catalogado"),
+        # EX não pertence à Lista Mestra Principal
+        ("EX-15.25.00.00-6A1-1001",  "catalogado"),
     ])
     def test_codigo_invalido_retorna_erro(self, parser, codigo, fragmento_mensagem):
         resultado = parser.parse(codigo)

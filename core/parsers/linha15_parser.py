@@ -48,7 +48,8 @@ _TIPOS_DOCUMENTAIS = {
     "EQ":  "Especificação de Qualidade",
     "AT":  "Anotação Técnica",
     "CR":  "Croqui",
-    "EX":  "Documento Externo",
+    # EX (Documento Externo) não integra a Lista Mestra Principal —
+    # documentos externos serão gerenciados em área separada futuramente.
 }
 
 _NOMES_TRECHO = {
