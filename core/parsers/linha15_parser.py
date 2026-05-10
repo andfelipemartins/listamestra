@@ -38,7 +38,7 @@ _TIPOS_DOCUMENTAIS = {
     "MD":  "Memorial Descritivo",
     "RT":  "Relatório Técnico",
     "ID":  "Índice de Documentos",
-    "ICS": "Instrução de Serviço",
+    "IC":  "Instrução de Serviço / Construção",
     "PE":  "Procedimento Específico",
     "MQ":  "Manual da Qualidade / Plano de Gestão",
     "LM":  "Lista de Materiais",
@@ -182,7 +182,7 @@ class Linha15Parser(BaseParser):
                 codigo_original=codigo,
                 mensagem=(
                     f"Tipo documental inválido: '{tipo}'. "
-                    "Deve conter 2 a 4 letras maiúsculas (ex: DE, MC, ICS)."
+                    "Deve conter 2 a 4 letras maiúsculas (ex: DE, MC, IC)."
                 ),
                 parser_usado=self.nome,
             )

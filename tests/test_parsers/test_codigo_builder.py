@@ -77,9 +77,9 @@ class TestMontarCodigo:
         codigo = montar_codigo_linha15("ID", "00", "00", "00", "6", "A", "1", "0001")
         assert codigo == "ID-15.00.00.00-6A1-0001"
 
-    def test_tipo_tres_letras(self):
-        codigo = montar_codigo_linha15("ICS", "25", "00", "00", "6", "B", "2", "2001")
-        assert codigo == "ICS-15.25.00.00-6B2-2001"
+    def test_tipo_ic_dois_chars(self):
+        codigo = montar_codigo_linha15("IC", "25", "00", "00", "6", "B", "2", "2001")
+        assert codigo == "IC-15.25.00.00-6B2-2001"
 
     def test_resultado_valido_pelo_parser(self):
         codigo = montar_codigo_linha15("DE", "25", "00", "00", "6", "A", "1", "1001")
@@ -209,7 +209,7 @@ class TestParsearListaCodigos:
         reconstruido = montar_codigo_linha15(**partes)
         assert reconstruido == original
 
-    def test_desmonta_tipo_tres_letras(self):
-        resultado = desmontar_codigo_linha15("ICS-15.25.00.00-6B2-2001", _registry)
+    def test_desmonta_tipo_ic(self):
+        resultado = desmontar_codigo_linha15("IC-15.25.00.00-6B2-2001", _registry)
         assert resultado is not None
-        assert resultado["tipo"] == "ICS"
+        assert resultado["tipo"] == "IC"

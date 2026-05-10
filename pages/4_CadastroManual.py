@@ -85,11 +85,18 @@ def _listar_revisoes(documento_id: int) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 def _ks(codigo: str) -> str:
-    """Converte código em string segura para usar em keys do Streamlit."""
     return codigo.replace("-", "_").replace(".", "_")
 
 
-def _secao_documento_form(codigo: str, existing: Optional[dict]) -> None:
+def _iso(val) -> Optional[str]:
+    if val is None:
+        return None
+    if hasattr(val, "isoformat") and val != date(1900, 1, 1):
+        return val.isoformat()
+    return None
+
+
+def _secao_documento(codigo: str, existing: Optional[dict]) -> None:
     ks = _ks(codigo)
     c1, c2 = st.columns(2)
     with c1:
@@ -131,7 +138,7 @@ def _secao_documento_form(codigo: str, existing: Optional[dict]) -> None:
         )
 
 
-def _secao_revisao_form(codigo: str) -> None:
+def _secao_revisao(codigo: str) -> None:
     ks = _ks(codigo)
 
     c1, c2 = st.columns(2)
@@ -163,7 +170,7 @@ def _secao_revisao_form(codigo: str) -> None:
         st.text_input("Nº Circular", key=f"cm_num_circular_{ks}", placeholder="Ex: 558/2024")
 
 
-def _secao_grds_form(codigo: str) -> None:
+def _secao_grds(codigo: str) -> None:
     ks = _ks(codigo)
     setores = [("producao", "Produção"), ("topografia", "Topografia"), ("qualidade", "Qualidade")]
     cols = st.columns(len(setores))
@@ -172,14 +179,6 @@ def _secao_grds_form(codigo: str) -> None:
             st.markdown(f"*{nome}*")
             st.text_input(f"Nº GRD", key=f"cm_grd_num_{setor}_{ks}", placeholder="Ex: GRD-001")
             st.date_input("Data Envio", value=None, key=f"cm_grd_data_{setor}_{ks}", format="DD/MM/YYYY")
-
-
-def _iso(val) -> Optional[str]:
-    if val is None:
-        return None
-    if hasattr(val, "isoformat") and val != date(1900, 1, 1):
-        return val.isoformat()
-    return None
 
 
 def _ler_doc_fields(codigo: str) -> dict:
@@ -219,7 +218,17 @@ def _ler_grds(codigo: str) -> list[dict]:
     return grds
 
 
-def _limpar_estado_form():
+def _campos_obrigatorios_preenchidos(validos: list) -> bool:
+    for codigo, _ in validos:
+        ks = _ks(codigo)
+        titulo  = (st.session_state.get(f"cm_titulo_{ks}") or "").strip()
+        revisao = (st.session_state.get(f"cm_revisao_{ks}") or "").strip()
+        if not titulo or not revisao:
+            return False
+    return True
+
+
+def _limpar_estado():
     for k in list(st.session_state.keys()):
         if k.startswith("cm_") and k != "cm_texto_codigos":
             del st.session_state[k]
@@ -249,11 +258,30 @@ if analisar:
         st.warning("Cole pelo menos um código para continuar.")
         st.stop()
     validos, invalidos = parsear_lista_codigos(texto, _registry)
-    _limpar_estado_form()
+    _limpar_estado()
     st.session_state["cm_validos"]   = validos
     st.session_state["cm_invalidos"] = invalidos
     st.session_state["cm_analisado"] = True
     st.rerun()
+
+# ---------------------------------------------------------------------------
+# Pós-salvamento — mostra resultados e botão de reset
+# ---------------------------------------------------------------------------
+
+if st.session_state.get("cm_salvo"):
+    for codigo, msg in st.session_state.get("cm_resultados", []):
+        if "sucesso" in msg.lower():
+            st.success(f"**{codigo}**: {msg}")
+        else:
+            st.warning(f"**{codigo}**: {msg}")
+
+    if st.button("Cadastrar novos documentos", type="primary"):
+        for k in list(st.session_state.keys()):
+            if k.startswith("cm_"):
+                del st.session_state[k]
+        st.rerun()
+
+    st.stop()
 
 # ---------------------------------------------------------------------------
 # Fase 2 — formulário de cadastro
@@ -276,67 +304,51 @@ if not validos:
     st.stop()
 
 n = len(validos)
-label_btn = f"Salvar {n} documento(s)" if n > 1 else "Salvar documento"
 st.info(f"{n} código(s) válido(s) reconhecido(s).")
 
-with st.form("form_lote"):
-    for codigo, parsed in validos:
-        existing = _buscar_documento(contrato["id"], codigo)
-        trecho   = parsed.extras.get("nome_trecho", "—")
-        header   = f"📄 {codigo} — {parsed.tipo} | {trecho}"
-        if existing:
-            revisoes_ex = _listar_revisoes(existing["id"])
-            header += f" *(já existe — {len(revisoes_ex)} revisão(ões))*"
+# Renderiza campos por código (sem st.form — session_state atualiza a cada interação,
+# permitindo checar campos obrigatórios em tempo real para habilitar/desabilitar o botão)
+for codigo, parsed in validos:
+    existing = _buscar_documento(contrato["id"], codigo)
+    trecho   = parsed.extras.get("nome_trecho", "—")
+    header   = f"📄 {codigo} — {parsed.tipo} | {trecho}"
+    if existing:
+        revisoes_ex = _listar_revisoes(existing["id"])
+        header += f" *(já existe — {len(revisoes_ex)} revisão(ões))*"
 
-        with st.expander(header, expanded=True):
-            st.markdown("**Dados do Documento**")
-            _secao_documento_form(codigo, existing)
+    with st.expander(header, expanded=True):
+        st.markdown("**Dados do Documento**")
+        _secao_documento(codigo, existing)
 
-            st.divider()
-            st.markdown("**Dados da Revisão**")
-            _secao_revisao_form(codigo)
+        st.divider()
+        st.markdown("**Dados da Revisão**")
+        _secao_revisao(codigo)
 
-            st.divider()
-            st.markdown("**GRD — opcional**")
-            _secao_grds_form(codigo)
+        st.divider()
+        st.markdown("**GRD — opcional**")
+        _secao_grds(codigo)
 
-    st.markdown("")
-    submitted = st.form_submit_button(label_btn, type="primary", use_container_width=True)
+# Botão desabilitado enquanto campos obrigatórios não estiverem preenchidos
+pode_salvar = _campos_obrigatorios_preenchidos(validos)
+label_btn   = f"Salvar {n} documento(s)" if n > 1 else "Salvar documento"
 
-if submitted:
-    erros = []
+if not pode_salvar:
+    st.caption("⚠️ Preencha Descrição/Objeto e Revisão em todos os documentos para habilitar o salvamento.")
+
+salvar = st.button(label_btn, type="primary", disabled=not pode_salvar, use_container_width=True)
+
+if salvar:
+    resultados = []
     for codigo, _ in validos:
-        doc = _ler_doc_fields(codigo)
-        rev = _ler_rev_fields(codigo)
-        if not doc["titulo"].strip():
-            erros.append(f"`{codigo}`: Descrição / Objeto é obrigatório.")
-        if not rev["label_revisao"]:
-            erros.append(f"`{codigo}`: Revisão é obrigatória.")
+        msg = salvar_documento_revisao(
+            contrato["id"],
+            codigo,
+            _ler_doc_fields(codigo),
+            _ler_rev_fields(codigo),
+            _ler_grds(codigo),
+        )
+        resultados.append((codigo, msg))
 
-    if erros:
-        for e in erros:
-            st.error(e)
-    else:
-        resultados = []
-        for codigo, _ in validos:
-            msg = salvar_documento_revisao(
-                contrato["id"],
-                codigo,
-                _ler_doc_fields(codigo),
-                _ler_rev_fields(codigo),
-                _ler_grds(codigo),
-            )
-            resultados.append((codigo, msg))
-
-        for codigo, msg in resultados:
-            if "sucesso" in msg.lower():
-                st.success(f"**{codigo}**: {msg}")
-            else:
-                st.warning(f"**{codigo}**: {msg}")
-
-        if st.button("Cadastrar novos documentos", key="btn_novo_lote"):
-            _limpar_estado_form()
-            st.session_state.pop("cm_validos", None)
-            st.session_state.pop("cm_invalidos", None)
-            st.session_state.pop("cm_analisado", None)
-            st.rerun()
+    st.session_state["cm_resultados"] = resultados
+    st.session_state["cm_salvo"]      = True
+    st.rerun()

@@ -13,7 +13,7 @@ LINHA15_TIPOS: dict[str, str] = {
     "MD":  "Memorial Descritivo",
     "RT":  "Relatório Técnico",
     "ID":  "Índice de Documentos",
-    "ICS": "Instrução de Serviço",
+    "IC":  "Instrução de Serviço / Construção",
     "PE":  "Procedimento Específico",
     "MQ":  "Manual da Qualidade / Plano de Gestão",
     "LM":  "Lista de Materiais",

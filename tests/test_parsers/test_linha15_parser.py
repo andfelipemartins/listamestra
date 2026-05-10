@@ -43,7 +43,7 @@ class TestCasosValidos:
         ("PE-15.00.00.00-6A9-1002", "PE",  "00", "1002"),
         ("MQ-15.00.00.00-6A9-1001", "MQ",  "00", "1001"),
         ("DE-15.19.02.00-6C1-1001", "DE",  "19", "1001"),
-        ("ICS-15.25.00.00-6A1-1001","ICS", "25", "1001"),
+        ("IC-15.25.00.00-6A1-1001", "IC",  "25", "1001"),
     ])
     def test_codigo_valido_retorna_parsed(
         self, parser, codigo, tipo_esperado, trecho_esperado, seq_esperado
