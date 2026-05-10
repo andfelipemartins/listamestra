@@ -67,6 +67,25 @@ def montar_codigo_linha15(
     return f"{tipo.upper()}-15.{t}.{s}.{u}-{etapa}{classe.upper()}{subclasse}-{seq}"
 
 
+def parsear_lista_codigos(texto: str, registry) -> tuple[list, list]:
+    """
+    Recebe texto com um ou mais códigos (um por linha).
+    Retorna (validos, invalidos):
+    - validos:  list of (codigo_str, CodigoParseado)
+    - invalidos: list of (codigo_str, ErroDeparse)
+    Ignora linhas vazias e normaliza espaços extras.
+    """
+    linhas = [l.strip().upper() for l in texto.splitlines() if l.strip()]
+    validos, invalidos = [], []
+    for codigo in linhas:
+        r = registry.parse(codigo)
+        if r.valido:
+            validos.append((codigo, r))
+        else:
+            invalidos.append((codigo, r))
+    return validos, invalidos
+
+
 def desmontar_codigo_linha15(codigo: str, registry) -> Optional[dict]:
     """
     Desmonta um código Linha 15 em suas partes usando o registry de parsers.

@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from core.parsers.codigo_builder import (
     montar_codigo_linha15,
     desmontar_codigo_linha15,
+    parsear_lista_codigos,
     LINHA15_TIPOS,
     LINHA15_TRECHOS,
     LINHA15_CLASSES,
@@ -115,6 +116,76 @@ class TestDesmontarCodigo:
         assert resultado["classe"] == "A"
         assert resultado["subclasse"] == "1"
         assert resultado["sequencial"] == "1001"
+
+
+# ---------------------------------------------------------------------------
+# parsear_lista_codigos
+# ---------------------------------------------------------------------------
+
+class TestParsearListaCodigos:
+
+    def test_codigo_unico_valido(self):
+        validos, invalidos = parsear_lista_codigos("DE-15.25.00.00-6A1-1001", _registry)
+        assert len(validos) == 1
+        assert len(invalidos) == 0
+        assert validos[0][0] == "DE-15.25.00.00-6A1-1001"
+
+    def test_multiplos_validos(self):
+        texto = "DE-15.25.00.00-6F2-1001\nDE-15.25.00.00-6F2-1002\nDE-15.25.00.00-6F2-1003"
+        validos, invalidos = parsear_lista_codigos(texto, _registry)
+        assert len(validos) == 3
+        assert len(invalidos) == 0
+
+    def test_codigo_invalido_detectado(self):
+        validos, invalidos = parsear_lista_codigos("INVALIDO", _registry)
+        assert len(validos) == 0
+        assert len(invalidos) == 1
+        assert invalidos[0][0] == "INVALIDO"
+
+    def test_mistura_validos_e_invalidos(self):
+        texto = "DE-15.25.00.00-6A1-1001\nNAO_VALIDO\nMC-15.25.00.00-6A1-1002"
+        validos, invalidos = parsear_lista_codigos(texto, _registry)
+        assert len(validos) == 2
+        assert len(invalidos) == 1
+        assert invalidos[0][0] == "NAO_VALIDO"
+
+    def test_linhas_vazias_ignoradas(self):
+        texto = "\nDE-15.25.00.00-6A1-1001\n\n\nDE-15.25.00.00-6A1-1002\n"
+        validos, invalidos = parsear_lista_codigos(texto, _registry)
+        assert len(validos) == 2
+        assert len(invalidos) == 0
+
+    def test_espacos_extras_normalizados(self):
+        texto = "  DE-15.25.00.00-6A1-1001  \n  DE-15.25.00.00-6A1-1002  "
+        validos, invalidos = parsear_lista_codigos(texto, _registry)
+        assert len(validos) == 2
+        assert validos[0][0] == "DE-15.25.00.00-6A1-1001"
+
+    def test_minusculas_normalizadas_para_maiusculas(self):
+        validos, invalidos = parsear_lista_codigos("de-15.25.00.00-6a1-1001", _registry)
+        assert len(validos) == 1
+        assert validos[0][0] == "DE-15.25.00.00-6A1-1001"
+
+    def test_texto_vazio_retorna_listas_vazias(self):
+        validos, invalidos = parsear_lista_codigos("", _registry)
+        assert validos == []
+        assert invalidos == []
+
+    def test_apenas_espacos_retorna_listas_vazias(self):
+        validos, invalidos = parsear_lista_codigos("   \n   \n   ", _registry)
+        assert validos == []
+        assert invalidos == []
+
+    def test_resultado_valido_tem_parsed_valido(self):
+        validos, _ = parsear_lista_codigos("DE-15.25.00.00-6A1-1001", _registry)
+        codigo, parsed = validos[0]
+        assert parsed.valido is True
+        assert parsed.tipo == "DE"
+
+    def test_resultado_invalido_tem_mensagem(self):
+        _, invalidos = parsear_lista_codigos("RUIM", _registry)
+        codigo, erro = invalidos[0]
+        assert erro.mensagem != ""
 
     def test_desmonta_codigo_invalido_retorna_none(self):
         resultado = desmontar_codigo_linha15("INVALIDO", _registry)

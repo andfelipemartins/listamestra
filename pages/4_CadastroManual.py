@@ -1,8 +1,8 @@
 """
 pages/4_CadastroManual.py
 
-Cadastro manual de documentos e revisões — entrada linha a linha como em uma planilha.
-Permite registrar novos documentos e adicionar revisões a documentos já existentes.
+Cadastro manual de documentos e revisões.
+Aceita um ou vários códigos colados de uma vez (um por linha).
 """
 
 import os
@@ -15,13 +15,8 @@ import streamlit as st
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from core.parsers.registry import ParserRegistry
-from core.parsers.codigo_builder import (
-    LINHA15_TIPOS,
-    LINHA15_TRECHOS,
-    LINHA15_CLASSES,
-    montar_codigo_linha15,
-    desmontar_codigo_linha15,
-)
+from core.parsers.codigo_builder import parsear_lista_codigos
+from core.importers.cadastro_importer import salvar_documento_revisao
 from core.engine.disciplinas import (
     ESTRUTURA_OPCOES,
     MODALIDADES,
@@ -29,7 +24,6 @@ from core.engine.disciplinas import (
     codigo_para_opcao,
     opcao_para_codigo,
 )
-from core.engine.emissao_inicial import recalcular_emissao_inicial
 from app.session import require_contrato, sidebar_contexto
 from core.auth.permissions import require_permission, widget_seletor_perfil
 from db.connection import get_connection
@@ -58,7 +52,7 @@ st.caption(f"Contrato: **{contrato['nome']}**")
 st.divider()
 
 # ---------------------------------------------------------------------------
-# Dados
+# Acesso a dados
 # ---------------------------------------------------------------------------
 
 def _buscar_documento(contrato_id: int, codigo: str) -> Optional[dict]:
@@ -79,269 +73,43 @@ def _listar_revisoes(documento_id: int) -> list[dict]:
             WHERE documento_id = ?
             ORDER BY
                 CASE WHEN data_emissao IS NULL THEN 1 ELSE 0 END,
-                data_emissao ASC,
-                revisao ASC,
-                versao ASC
+                data_emissao ASC, revisao ASC, versao ASC
             """,
             (documento_id,),
         ).fetchall()
     return [dict(r) for r in rows]
 
 
-def _salvar(
-    contrato_id: int,
-    codigo: str,
-    doc_fields: dict,
-    rev_fields: dict,
-    grds: list[dict],
-) -> str:
-    with get_connection() as conn:
-        row = conn.execute(
-            "SELECT id FROM documentos WHERE contrato_id = ? AND codigo = ?",
-            (contrato_id, codigo),
-        ).fetchone()
-
-        if row:
-            doc_id = row["id"]
-            conn.execute(
-                """
-                UPDATE documentos SET
-                    titulo      = COALESCE(?, titulo),
-                    disciplina  = COALESCE(?, disciplina),
-                    modalidade  = COALESCE(?, modalidade),
-                    responsavel = COALESCE(?, responsavel),
-                    fase        = COALESCE(?, fase),
-                    atualizado_em = datetime('now')
-                WHERE id = ?
-                """,
-                (
-                    doc_fields["titulo"] or None,
-                    doc_fields["disciplina"] or None,
-                    doc_fields["modalidade"] or None,
-                    doc_fields["responsavel"] or None,
-                    doc_fields["fase"] or None,
-                    doc_id,
-                ),
-            )
-            doc_novo = False
-        else:
-            parsed = _registry.parse(codigo)
-            cur = conn.execute(
-                """
-                INSERT INTO documentos
-                    (contrato_id, codigo, tipo, titulo, disciplina, modalidade,
-                     responsavel, fase, trecho, nome_trecho, origem)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'cadastro_manual')
-                """,
-                (
-                    contrato_id,
-                    codigo,
-                    parsed.tipo if parsed.valido else None,
-                    doc_fields["titulo"] or None,
-                    doc_fields["disciplina"] or None,
-                    doc_fields["modalidade"] or None,
-                    doc_fields["responsavel"] or None,
-                    doc_fields["fase"] or None,
-                    parsed.extras.get("trecho") if parsed.valido else None,
-                    parsed.extras.get("nome_trecho") if parsed.valido else None,
-                ),
-            )
-            doc_id = cur.lastrowid
-            doc_novo = True
-
-        rev_existe = conn.execute(
-            "SELECT id FROM revisoes WHERE documento_id = ? AND label_revisao = ? AND versao = ?",
-            (doc_id, rev_fields["label_revisao"], rev_fields["versao"]),
-        ).fetchone()
-        if rev_existe:
-            return f"Revisão {rev_fields['label_revisao']} Versão {rev_fields['versao']} já existe para este documento."
-
-        try:
-            revisao_int = int(rev_fields["label_revisao"])
-        except (ValueError, TypeError):
-            revisao_int = None
-
-        cur = conn.execute(
-            """
-            INSERT INTO revisoes
-                (documento_id, revisao, versao, label_revisao,
-                 data_elaboracao, data_emissao, data_analise,
-                 situacao_real, situacao,
-                 emissao_circular, analise_circular, data_circular,
-                 ultima_revisao, origem)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'cadastro_manual')
-            """,
-            (
-                doc_id,
-                revisao_int,
-                rev_fields["versao"],
-                rev_fields["label_revisao"],
-                rev_fields["data_elaboracao"],
-                rev_fields["data_emissao"],
-                rev_fields["data_analise"],
-                rev_fields["situacao_real"] or None,
-                rev_fields["situacao"] or None,
-                rev_fields["num_circular"] or None,
-                rev_fields["analise_interna"] or None,
-                rev_fields["data_circular"],
-            ),
-        )
-        rev_id = cur.lastrowid
-
-        conn.execute(
-            "UPDATE revisoes SET ultima_revisao = 0 WHERE documento_id = ?",
-            (doc_id,),
-        )
-        ultima = conn.execute(
-            """
-            SELECT id FROM revisoes
-            WHERE documento_id = ?
-            ORDER BY
-                CASE WHEN data_emissao IS NULL THEN 1 ELSE 0 END,
-                data_emissao DESC, revisao DESC, versao DESC
-            LIMIT 1
-            """,
-            (doc_id,),
-        ).fetchone()
-        if ultima:
-            conn.execute(
-                "UPDATE revisoes SET ultima_revisao = 1 WHERE id = ?",
-                (ultima["id"],),
-            )
-
-        recalcular_emissao_inicial(conn, doc_id)
-
-        for grd in grds:
-            if grd.get("numero_grd") or grd.get("data_envio"):
-                conn.execute(
-                    """
-                    INSERT OR REPLACE INTO grds (revisao_id, setor, numero_grd, data_envio)
-                    VALUES (?, ?, ?, ?)
-                    """,
-                    (rev_id, grd["setor"], grd.get("numero_grd") or None, grd.get("data_envio")),
-                )
-
-    prefixo = "Documento criado e r" if doc_novo else "R"
-    return f"{prefixo}evisão {rev_fields['label_revisao']} (Versão {rev_fields['versao']}) registrada com sucesso."
-
-
 # ---------------------------------------------------------------------------
-# UI helpers
+# Helpers de formulário
 # ---------------------------------------------------------------------------
 
-def _campo_data(label: str, key: str, valor: Optional[str] = None) -> Optional[str]:
-    default = None
-    if valor:
-        try:
-            from datetime import datetime
-            default = datetime.strptime(valor[:10], "%Y-%m-%d").date()
-        except ValueError:
-            default = None
-    result = st.date_input(label, value=default, key=key, format="DD/MM/YYYY")
-    if result and result != date(1900, 1, 1):
-        return result.isoformat()
-    return None
+def _ks(codigo: str) -> str:
+    """Converte código em string segura para usar em keys do Streamlit."""
+    return codigo.replace("-", "_").replace(".", "_")
 
 
-# ---------------------------------------------------------------------------
-# Builder de código segmentado
-# ---------------------------------------------------------------------------
-
-def _secao_codigo() -> str:
-    """
-    Exibe o builder segmentado ou o campo livre (toggle), retorna o código montado.
-    """
-    colar = st.toggle("Colar código completo", key="toggle_colar", value=False)
-
-    if colar:
-        codigo = st.text_input(
-            "Código do Documento",
-            placeholder="Ex: DE-15.25.00.00-6A1-1001",
-            key="inp_codigo_livre",
-        ).strip().upper()
-        return codigo
-
-    # ── Builder segmentado ──────────────────────────────────────────────
-    tipos_opts    = list(LINHA15_TIPOS.keys())
-    trechos_opts  = list(LINHA15_TRECHOS.keys())
-    classes_opts  = list(LINHA15_CLASSES.keys())
-
-    st.markdown("**Código do Documento**")
-    c1, c2, c3, c4, c5, c6, c7, c8 = st.columns([2, 2, 2, 2, 1, 1, 1, 2])
-
-    with c1:
-        tipo = st.selectbox(
-            "Tipo",
-            tipos_opts,
-            format_func=lambda k: f"{k} — {LINHA15_TIPOS[k]}",
-            key="bld_tipo",
-        )
-    with c2:
-        trecho = st.selectbox(
-            "Trecho",
-            trechos_opts,
-            format_func=lambda k: f"{k} — {LINHA15_TRECHOS[k]}",
-            key="bld_trecho",
-        )
-    with c3:
-        subtrecho = st.text_input("Subtrecho", value="00", max_chars=2, key="bld_subtrecho")
-    with c4:
-        unidade = st.text_input("Unidade", value="00", max_chars=2, key="bld_unidade")
-    with c5:
-        etapa = st.text_input("Etapa", value="6", max_chars=1, key="bld_etapa")
-    with c6:
-        classe = st.selectbox(
-            "Classe",
-            classes_opts,
-            format_func=lambda k: f"{k} — {LINHA15_CLASSES[k]}",
-            key="bld_classe",
-        )
-    with c7:
-        subclasse = st.text_input("Subcls", value="1", max_chars=2, key="bld_subclasse")
-    with c8:
-        sequencial = st.text_input("Sequencial", value="0001", max_chars=4, key="bld_sequencial")
-
-    codigo = montar_codigo_linha15(
-        tipo,
-        trecho.zfill(2) if trecho.isdigit() else "00",
-        subtrecho.zfill(2) if subtrecho.isdigit() else "00",
-        unidade.zfill(2) if unidade.isdigit() else "00",
-        etapa if etapa.isdigit() else "6",
-        classe,
-        subclasse if subclasse.isdigit() else "1",
-        sequencial.zfill(4) if sequencial.isdigit() else "0001",
-    )
-
-    st.code(codigo, language=None)
-    return codigo
-
-
-# ---------------------------------------------------------------------------
-# Seções do formulário
-# ---------------------------------------------------------------------------
-
-def _secao_documento(existing: Optional[dict]) -> dict:
-    st.markdown("**Dados do Documento**")
-
+def _secao_documento_form(codigo: str, existing: Optional[dict]) -> None:
+    ks = _ks(codigo)
     c1, c2 = st.columns(2)
     with c1:
-        titulo = st.text_input(
+        st.text_input(
             "Descrição / Objeto *",
             value=existing.get("titulo") or "" if existing else "",
-            key="inp_titulo",
+            key=f"cm_titulo_{ks}",
         )
     with c2:
-        responsavel = st.text_input(
+        st.text_input(
             "Elaboração (responsável)",
             value=existing.get("responsavel") or "" if existing else "",
-            key="inp_responsavel",
+            key=f"cm_responsavel_{ks}",
         )
 
     c3, c4, c5 = st.columns(3)
     with c3:
         modalidade_val = existing.get("modalidade") or "" if existing else ""
         modalidade_idx = MODALIDADES.index(modalidade_val) if modalidade_val in MODALIDADES else None
-        modalidade = st.selectbox("Modalidade", options=MODALIDADES, index=modalidade_idx, key="sel_modalidade")
+        st.selectbox("Modalidade", options=MODALIDADES, index=modalidade_idx, key=f"cm_modalidade_{ks}")
     with c4:
         disciplina_val = existing.get("disciplina") or "" if existing else ""
         opcao_atual = codigo_para_opcao(disciplina_val)
@@ -350,154 +118,225 @@ def _secao_documento(existing: Optional[dict]) -> dict:
             if opcao_atual and opcao_atual in ESTRUTURA_OPCOES
             else None
         )
-        estrutura_opcao = st.selectbox(
-            "Estrutura (disciplina)", options=ESTRUTURA_OPCOES, index=estrutura_idx, key="sel_estrutura"
+        st.selectbox(
+            "Estrutura (disciplina)", options=ESTRUTURA_OPCOES,
+            index=estrutura_idx, key=f"cm_estrutura_{ks}",
         )
     with c5:
-        fase = st.text_input(
-            "Fase", value=existing.get("fase") or "" if existing else "",
-            key="inp_fase", placeholder="Ex: EXECUTIVO",
+        st.text_input(
+            "Fase",
+            value=existing.get("fase") or "" if existing else "",
+            key=f"cm_fase_{ks}",
+            placeholder="Ex: EXECUTIVO",
         )
 
-    return {
-        "titulo":      titulo,
-        "responsavel": responsavel,
-        "modalidade":  modalidade,
-        "disciplina":  opcao_para_codigo(estrutura_opcao),
-        "fase":        fase,
-    }
 
-
-def _secao_revisao() -> dict:
-    st.markdown("**Dados da Revisão**")
+def _secao_revisao_form(codigo: str) -> None:
+    ks = _ks(codigo)
 
     c1, c2 = st.columns(2)
     with c1:
-        label_revisao = st.text_input(
-            "Revisão *", key="inp_revisao", placeholder="Ex: 0, 1, A, A1",
-        )
+        st.text_input("Revisão *", key=f"cm_revisao_{ks}", placeholder="Ex: 0, 1, A, A1")
     with c2:
-        versao = st.number_input("Versão *", min_value=1, value=1, step=1, key="inp_versao")
+        st.number_input("Versão *", min_value=1, value=1, step=1, key=f"cm_versao_{ks}")
 
     c3, c4, c5 = st.columns(3)
     with c3:
-        data_elaboracao = _campo_data("Data Elaboração", "date_elaboracao")
+        st.date_input("Data Elaboração", value=None, key=f"cm_data_elab_{ks}", format="DD/MM/YYYY")
     with c4:
-        data_emissao = _campo_data("Data Emissão", "date_emissao")
+        st.date_input("Data Emissão", value=None, key=f"cm_data_emis_{ks}", format="DD/MM/YYYY")
     with c5:
-        data_analise = _campo_data("Data Análise", "date_analise")
+        st.date_input("Data Análise", value=None, key=f"cm_data_anal_{ks}", format="DD/MM/YYYY")
 
     c6, c7 = st.columns(2)
     with c6:
-        situacao = st.selectbox("Situação", options=[""] + SITUACOES, index=0, key="sel_situacao")
+        st.selectbox("Situação", options=[""] + SITUACOES, index=0, key=f"cm_situacao_{ks}")
     with c7:
-        situacao_real = st.text_input("Situação Real", key="inp_situacao_real", placeholder="Ex: NÃO APROVADO")
+        st.text_input("Situação Real", key=f"cm_situacao_real_{ks}", placeholder="Ex: NÃO APROVADO")
 
     c8, c9, c10 = st.columns(3)
     with c8:
-        analise_interna = st.text_input("Análise Interna", key="inp_analise_interna", placeholder="Ex: AI-001")
+        st.text_input("Análise Interna", key=f"cm_analise_interna_{ks}", placeholder="Ex: AI-001")
     with c9:
-        data_circular = _campo_data("Data Circular", "date_circular")
+        st.date_input("Data Circular", value=None, key=f"cm_data_circular_{ks}", format="DD/MM/YYYY")
     with c10:
-        num_circular = st.text_input("Nº Circular", key="inp_num_circular", placeholder="Ex: 558/2024")
-
-    return {
-        "label_revisao":  label_revisao.strip(),
-        "versao":         int(versao),
-        "data_elaboracao": data_elaboracao,
-        "data_emissao":   data_emissao,
-        "data_analise":   data_analise,
-        "situacao":       situacao or None,
-        "situacao_real":  situacao_real.strip() or None,
-        "analise_interna": analise_interna.strip() or None,
-        "data_circular":  data_circular,
-        "num_circular":   num_circular.strip() or None,
-    }
+        st.text_input("Nº Circular", key=f"cm_num_circular_{ks}", placeholder="Ex: 558/2024")
 
 
-def _secao_grds() -> list[dict]:
-    st.markdown("**GRD — Distribuição**")
+def _secao_grds_form(codigo: str) -> None:
+    ks = _ks(codigo)
     setores = [("producao", "Produção"), ("topografia", "Topografia"), ("qualidade", "Qualidade")]
-    grds = []
     cols = st.columns(len(setores))
     for col, (setor, nome) in zip(cols, setores):
         with col:
             st.markdown(f"*{nome}*")
-            num  = st.text_input(f"Nº GRD", key=f"grd_num_{setor}", placeholder="Ex: GRD-001")
-            data = _campo_data("Data Envio", f"grd_data_{setor}")
-            grds.append({"setor": setor, "numero_grd": num.strip() or None, "data_envio": data})
+            st.text_input(f"Nº GRD", key=f"cm_grd_num_{setor}_{ks}", placeholder="Ex: GRD-001")
+            st.date_input("Data Envio", value=None, key=f"cm_grd_data_{setor}_{ks}", format="DD/MM/YYYY")
+
+
+def _iso(val) -> Optional[str]:
+    if val is None:
+        return None
+    if hasattr(val, "isoformat") and val != date(1900, 1, 1):
+        return val.isoformat()
+    return None
+
+
+def _ler_doc_fields(codigo: str) -> dict:
+    ks = _ks(codigo)
+    return {
+        "titulo":      st.session_state.get(f"cm_titulo_{ks}", ""),
+        "responsavel": st.session_state.get(f"cm_responsavel_{ks}", ""),
+        "modalidade":  st.session_state.get(f"cm_modalidade_{ks}", ""),
+        "disciplina":  opcao_para_codigo(st.session_state.get(f"cm_estrutura_{ks}", "") or ""),
+        "fase":        st.session_state.get(f"cm_fase_{ks}", ""),
+    }
+
+
+def _ler_rev_fields(codigo: str) -> dict:
+    ks = _ks(codigo)
+    return {
+        "label_revisao":   str(st.session_state.get(f"cm_revisao_{ks}", "") or "").strip(),
+        "versao":          int(st.session_state.get(f"cm_versao_{ks}", 1) or 1),
+        "data_elaboracao": _iso(st.session_state.get(f"cm_data_elab_{ks}")),
+        "data_emissao":    _iso(st.session_state.get(f"cm_data_emis_{ks}")),
+        "data_analise":    _iso(st.session_state.get(f"cm_data_anal_{ks}")),
+        "situacao":        st.session_state.get(f"cm_situacao_{ks}") or None,
+        "situacao_real":   (st.session_state.get(f"cm_situacao_real_{ks}") or "").strip() or None,
+        "analise_interna": (st.session_state.get(f"cm_analise_interna_{ks}") or "").strip() or None,
+        "data_circular":   _iso(st.session_state.get(f"cm_data_circular_{ks}")),
+        "num_circular":    (st.session_state.get(f"cm_num_circular_{ks}") or "").strip() or None,
+    }
+
+
+def _ler_grds(codigo: str) -> list[dict]:
+    ks = _ks(codigo)
+    grds = []
+    for setor in ("producao", "topografia", "qualidade"):
+        num  = (st.session_state.get(f"cm_grd_num_{setor}_{ks}") or "").strip() or None
+        data = _iso(st.session_state.get(f"cm_grd_data_{setor}_{ks}"))
+        grds.append({"setor": setor, "numero_grd": num, "data_envio": data})
     return grds
 
 
+def _limpar_estado_form():
+    for k in list(st.session_state.keys()):
+        if k.startswith("cm_") and k != "cm_texto_codigos":
+            del st.session_state[k]
+
+
 # ---------------------------------------------------------------------------
-# Página
+# Fase 1 — entrada de códigos
 # ---------------------------------------------------------------------------
 
-codigo_input = _secao_codigo()
+st.text_area(
+    "Códigos dos documentos",
+    placeholder=(
+        "Cole um ou mais códigos, um por linha:\n\n"
+        "DE-15.25.00.00-6F2-1001\n"
+        "DE-15.25.00.00-6F2-1002\n"
+        "DE-15.25.00.00-6F2-1003"
+    ),
+    height=130,
+    key="cm_texto_codigos",
+)
 
-if not codigo_input:
-    st.info("Preencha o código do documento para continuar.")
+analisar = st.button("Analisar Códigos", type="primary")
+
+if analisar:
+    texto = (st.session_state.get("cm_texto_codigos") or "").strip()
+    if not texto:
+        st.warning("Cole pelo menos um código para continuar.")
+        st.stop()
+    validos, invalidos = parsear_lista_codigos(texto, _registry)
+    _limpar_estado_form()
+    st.session_state["cm_validos"]   = validos
+    st.session_state["cm_invalidos"] = invalidos
+    st.session_state["cm_analisado"] = True
+    st.rerun()
+
+# ---------------------------------------------------------------------------
+# Fase 2 — formulário de cadastro
+# ---------------------------------------------------------------------------
+
+if not st.session_state.get("cm_analisado"):
     st.stop()
 
-parsed = _registry.parse(codigo_input)
-existing_doc = _buscar_documento(contrato["id"], codigo_input)
+validos   = st.session_state.get("cm_validos", [])
+invalidos = st.session_state.get("cm_invalidos", [])
 
-if not parsed.valido:
-    st.error(f"Código inválido: {parsed.mensagem}")
+if invalidos:
+    for codigo, erro in invalidos:
+        st.error(f"❌ `{codigo}` — {erro.mensagem}")
+    st.warning("Corrija os códigos inválidos no campo acima e clique em Analisar novamente.")
     st.stop()
 
-if existing_doc:
-    revisoes = _listar_revisoes(existing_doc["id"])
-    st.success(f"Documento encontrado — {len(revisoes)} revisão(ões) registrada(s).")
-    if revisoes:
-        with st.expander("Ver histórico de revisões"):
-            for rev in revisoes:
-                ei  = rev.get("emissao_inicial") or "—"
-                dt  = rev.get("data_emissao") or "—"
-                sit = rev.get("situacao") or "—"
-                st.markdown(
-                    f"- **{ei}** | Rev {rev['label_revisao']} Ver {rev['versao']} "
-                    f"| Emissão: {dt} | Situação: {sit}"
-                )
-else:
-    nome_trecho = parsed.extras.get("nome_trecho", "—")
-    trecho      = parsed.extras.get("trecho", "—")
-    sequencial  = parsed.extras.get("sequencial", "—")
-    st.info(
-        f"Documento novo — Tipo: **{parsed.tipo}** | "
-        f"Trecho: **{nome_trecho}** ({trecho}) | "
-        f"Sequencial: **{sequencial}**"
-    )
+if not validos:
+    st.info("Nenhum código válido encontrado.")
+    st.stop()
 
-st.divider()
+n = len(validos)
+label_btn = f"Salvar {n} documento(s)" if n > 1 else "Salvar documento"
+st.info(f"{n} código(s) válido(s) reconhecido(s).")
 
-with st.form("form_cadastro"):
-    doc_fields = _secao_documento(existing_doc)
+with st.form("form_lote"):
+    for codigo, parsed in validos:
+        existing = _buscar_documento(contrato["id"], codigo)
+        trecho   = parsed.extras.get("nome_trecho", "—")
+        header   = f"📄 {codigo} — {parsed.tipo} | {trecho}"
+        if existing:
+            revisoes_ex = _listar_revisoes(existing["id"])
+            header += f" *(já existe — {len(revisoes_ex)} revisão(ões))*"
 
-    st.divider()
-    rev_fields = _secao_revisao()
+        with st.expander(header, expanded=True):
+            st.markdown("**Dados do Documento**")
+            _secao_documento_form(codigo, existing)
 
-    st.divider()
-    with st.expander("GRD — opcional"):
-        grds = _secao_grds()
+            st.divider()
+            st.markdown("**Dados da Revisão**")
+            _secao_revisao_form(codigo)
+
+            st.divider()
+            st.markdown("**GRD — opcional**")
+            _secao_grds_form(codigo)
 
     st.markdown("")
-    submitted = st.form_submit_button("Salvar Revisão", type="primary", use_container_width=True)
+    submitted = st.form_submit_button(label_btn, type="primary", use_container_width=True)
 
 if submitted:
     erros = []
-    if not doc_fields["titulo"].strip():
-        erros.append("Descrição / Objeto é obrigatório.")
-    if not rev_fields["label_revisao"]:
-        erros.append("Revisão é obrigatória.")
+    for codigo, _ in validos:
+        doc = _ler_doc_fields(codigo)
+        rev = _ler_rev_fields(codigo)
+        if not doc["titulo"].strip():
+            erros.append(f"`{codigo}`: Descrição / Objeto é obrigatório.")
+        if not rev["label_revisao"]:
+            erros.append(f"`{codigo}`: Revisão é obrigatória.")
 
     if erros:
         for e in erros:
             st.error(e)
     else:
-        msg = _salvar(contrato["id"], codigo_input, doc_fields, rev_fields, grds)
-        if "sucesso" in msg.lower():
-            st.success(msg)
+        resultados = []
+        for codigo, _ in validos:
+            msg = salvar_documento_revisao(
+                contrato["id"],
+                codigo,
+                _ler_doc_fields(codigo),
+                _ler_rev_fields(codigo),
+                _ler_grds(codigo),
+            )
+            resultados.append((codigo, msg))
+
+        for codigo, msg in resultados:
+            if "sucesso" in msg.lower():
+                st.success(f"**{codigo}**: {msg}")
+            else:
+                st.warning(f"**{codigo}**: {msg}")
+
+        if st.button("Cadastrar novos documentos", key="btn_novo_lote"):
+            _limpar_estado_form()
+            st.session_state.pop("cm_validos", None)
+            st.session_state.pop("cm_invalidos", None)
+            st.session_state.pop("cm_analisado", None)
             st.rerun()
-        else:
-            st.warning(msg)
