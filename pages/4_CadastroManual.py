@@ -226,6 +226,12 @@ def _limpar_tudo() -> None:
 # Entrada de códigos — caixa + botão (acumulativo)
 # ---------------------------------------------------------------------------
 
+# Key versionada: incrementar a versão no rerun cria um novo widget vazio,
+# contornando a restrição do Streamlit de não permitir modificar session_state
+# de um widget já instanciado no mesmo ciclo.
+_ver     = st.session_state.get("cm_input_version", 0)
+_txt_key = f"cm_texto_codigos_{_ver}"
+
 st.text_area(
     "Códigos dos documentos",
     placeholder=(
@@ -235,13 +241,13 @@ st.text_area(
         "DE-15.25.00.00-6F2-1003"
     ),
     height=130,
-    key="cm_texto_codigos",
+    key=_txt_key,
 )
 
 analisar = st.button("Analisar Códigos", type="primary")
 
 if analisar:
-    texto = (st.session_state.get("cm_texto_codigos") or "").strip()
+    texto = (st.session_state.get(_txt_key) or "").strip()
     if not texto:
         st.warning("Cole pelo menos um código para continuar.")
         st.stop()
@@ -253,7 +259,7 @@ if analisar:
     st.session_state["cm_validos"]         = merged
     st.session_state["cm_invalidos_batch"] = invalidos_batch
     st.session_state["cm_duplicatas"]      = duplicatas
-    st.session_state["cm_texto_codigos"]   = ""   # limpa a caixa após análise
+    st.session_state["cm_input_version"]   = _ver + 1   # nova key → caixa vazia no próximo render
     st.rerun()
 
 # ---------------------------------------------------------------------------
