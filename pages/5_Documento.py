@@ -16,8 +16,23 @@ from db.connection import get_connection
 from core.engine.status import STATUS_ORDEM, NOME_TRECHO, classificar_status
 from core.engine.disciplinas import ESTRUTURA
 from core.exporters.excel_exporter import exportar_historico_revisoes
+from core.formatacao import fmt_inteiro, fmt_data, disciplina_do_codigo
+from core.parsers.registry import ParserRegistry
 from app.session import require_contrato, sidebar_contexto
 from core.auth.permissions import widget_seletor_perfil, require_permission
+
+_registry = ParserRegistry()
+
+
+def _trecho_do_codigo(codigo: str) -> str:
+    """Deriva o trecho a partir do código documental via parser."""
+    try:
+        resultado = _registry.parse(codigo)
+        if hasattr(resultado, "extras"):
+            return resultado.extras.get("trecho", "")
+    except Exception:
+        pass
+    return ""
 
 
 def _listar_documentos(contrato_id: int) -> list[dict]:
@@ -154,15 +169,34 @@ def _ficha(doc: dict, contrato_id: int):
     col1, col2, col3 = st.columns(3)
     with col1:
         st.markdown(f"**Tipo:** {doc.get('tipo') or '—'}")
-        trecho = doc.get("trecho") or "—"
-        nome_t = NOME_TRECHO.get(trecho, trecho)
-        st.markdown(f"**Trecho:** {nome_t} ({trecho})")
+        trecho = (
+            doc.get("trecho")
+            or (previsto.get("trecho") if previsto else None)
+            or _trecho_do_codigo(doc["codigo"])
+            or ""
+        )
+        if trecho:
+            nome_t = NOME_TRECHO.get(trecho, trecho)
+            st.markdown(f"**Trecho:** {nome_t} ({trecho})")
+        else:
+            st.markdown("**Trecho:** —")
         st.markdown(f"**Modalidade:** {doc.get('modalidade') or '—'}")
     with col2:
-        disc = doc.get("disciplina") or "—"
-        desc_disc = ESTRUTURA.get(disc, disc)
-        st.markdown(f"**Estrutura:** {disc} — {desc_disc}" if disc != "—" else f"**Estrutura:** —")
-        st.markdown(f"**Fase:** {doc.get('fase') or '—'}")
+        disc = (
+            doc.get("disciplina")
+            or (previsto.get("disciplina") if previsto else None)
+            or disciplina_do_codigo(doc["codigo"])
+            or ""
+        )
+        if disc:
+            desc_disc = ESTRUTURA.get(disc, "")
+            if desc_disc:
+                st.markdown(f"**Estrutura:** {disc} — {desc_disc}")
+            else:
+                st.markdown(f"**Estrutura:** {disc}")
+        else:
+            st.markdown("**Estrutura:** —")
+        st.markdown(f"**Fase:** {fmt_inteiro(doc.get('fase'))}")
         st.markdown(f"**Responsável:** {doc.get('responsavel') or '—'}")
     with col3:
         st.markdown(f"**Previsto no ID:** {'Sim' if previsto else 'Não'}")
@@ -192,26 +226,25 @@ def _linha_do_tempo(revisoes: list[dict]):
             f"&nbsp;&nbsp;{_badge(status_rev)}"
             f"&nbsp;&nbsp;<small style='color:#888'>{rev.get('data_emissao') or 'sem data'}</small>"
         )
-        with st.expander(f"{emissao} — {rev.get('data_emissao') or 'sem data'} — {status_rev}", expanded=rev.get("ultima_revisao") == 1):
+        data_emissao_fmt = fmt_data(rev.get("data_emissao")) if rev.get("data_emissao") else "sem data"
+        with st.expander(f"{emissao} — {data_emissao_fmt} — {status_rev}", expanded=rev.get("ultima_revisao") == 1):
             c1, c2, c3 = st.columns(3)
             with c1:
-                st.markdown(f"**Label:** {rev.get('label_revisao') or '—'}")
-                st.markdown(f"**Revisão / Versão:** {rev.get('revisao', '—')} / {rev.get('versao', '—')}")
+                label_rev = rev.get("label_revisao") or str(rev.get("revisao") or "—")
+                st.markdown(f"**Revisão:** {label_rev}")
+                st.markdown(f"**Versão:** {rev.get('versao', '—')}")
                 st.markdown(f"**Situação:** {rev.get('situacao') or '—'}")
                 st.markdown(f"**Situação Real:** {rev.get('situacao_real') or '—'}")
             with c2:
-                st.markdown(f"**Data Elaboração:** {rev.get('data_elaboracao') or '—'}")
-                st.markdown(f"**Data Emissão:** {rev.get('data_emissao') or '—'}")
-                st.markdown(f"**Data Análise:** {rev.get('data_analise') or '—'}")
-                st.markdown(f"**Data Circular:** {rev.get('data_circular') or '—'}")
+                st.markdown(f"**Data Elaboração:** {fmt_data(rev.get('data_elaboracao'))}")
+                st.markdown(f"**Data Emissão:** {fmt_data(rev.get('data_emissao'))}")
+                st.markdown(f"**Data Análise:** {fmt_data(rev.get('data_analise'))}")
+                st.markdown(f"**Data Circular:** {fmt_data(rev.get('data_circular'))}")
             with c3:
                 st.markdown(f"**Dias Elaboração:** {rev.get('dias_elaboracao') if rev.get('dias_elaboracao') is not None else '—'}")
                 st.markdown(f"**Dias Análise:** {rev.get('dias_analise') if rev.get('dias_analise') is not None else '—'}")
                 st.markdown(f"**Nº Circular:** {rev.get('emissao_circular') or '—'}")
-                st.markdown(f"**Análise Interna:** {rev.get('analise_circular') or '—'}")
-
-            if rev.get("retorno"):
-                st.markdown(f"**Retorno:** {rev['retorno']}")
+                st.markdown(f"**Análise Interna:** {fmt_data(rev.get('analise_circular'))}")
 
             grds = grds_por_rev.get(rev["id"], [])
             if grds:
