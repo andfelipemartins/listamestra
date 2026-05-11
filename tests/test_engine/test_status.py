@@ -191,7 +191,19 @@ class TestCarregarProgresso:
         assert status_por_codigo["DE-15.25.00.00-6A1-1003"] == "Em Análise"
         assert status_por_codigo["DE-15.25.00.00-6A1-1004"] == "Em Elaboração"
 
-    def _inserir_duas_revisoes(self, conn, contrato_id, codigo, situacao_r1, situacao_r2):
+    def _inserir_duas_revisoes(self, conn, contrato_id, codigo, situacao_r1, situacao_r2,
+                               label_r1="1", label_r2="2"):
+        """Insere duas revisões para testes de histórico.
+
+        label_r1/r2: label literal ("0", "1", "A", "A1"…).
+        revisao inteira é deduzida: dígitos puros → int, caso contrário → None.
+        """
+        def _rev_int(label):
+            try:
+                return int(label)
+            except (ValueError, TypeError):
+                return None
+
         conn.execute(
             "INSERT OR IGNORE INTO documentos (contrato_id, codigo, tipo) VALUES (?, ?, ?)",
             (contrato_id, codigo, codigo.split("-")[0]),
@@ -203,62 +215,94 @@ class TestCarregarProgresso:
         conn.execute(
             """INSERT INTO revisoes
                (documento_id, revisao, versao, label_revisao, situacao, data_emissao, ultima_revisao)
-               VALUES (?, 1, 1, '1', ?, '2024-10-07', 0)""",
-            (doc_id, situacao_r1),
+               VALUES (?, ?, 1, ?, ?, '2024-10-07', 0)""",
+            (doc_id, _rev_int(label_r1), label_r1, situacao_r1),
         )
         conn.execute(
             """INSERT INTO revisoes
                (documento_id, revisao, versao, label_revisao, situacao, data_emissao, ultima_revisao)
-               VALUES (?, 2, 1, '2', ?, '2024-11-01', 1)""",
-            (doc_id, situacao_r2),
+               VALUES (?, ?, 1, ?, ?, '2024-11-01', 1)""",
+            (doc_id, _rev_int(label_r2), label_r2, situacao_r2),
         )
 
-    def test_aprovado_historico_conta_mesmo_com_revisao_posterior_em_revisao(self, db):
-        """Rev1=APROVADO, Rev2=NÃO APROVADO (última) → ja_aprovado=1, status_atual=Em Revisão."""
+    def test_rev0_dispara_ja_aprovado(self, db):
+        """Revisão 0 (emissão inicial) = marco de aprovação histórica."""
         db_path, cid = db
         with get_connection(db_path) as conn:
             self._inserir_previsto(conn, cid, "DE-15.25.00.00-6A1-1001")
             self._inserir_duas_revisoes(conn, cid, "DE-15.25.00.00-6A1-1001",
-                                        situacao_r1="APROVADO", situacao_r2="NÃO APROVADO")
+                                        situacao_r1=None, situacao_r2="NÃO APROVADO",
+                                        label_r1="0", label_r2="A1")
 
         df = carregar_progresso(cid, db_path)
         assert df.iloc[0]["ja_aprovado"] == 1
         assert df.iloc[0]["status_atual"] == "Em Revisão"
 
-    def test_aprovado_historico_conta_mesmo_com_revisao_posterior_em_analise(self, db):
-        """Rev1=APROVADO, Rev2=sem situação mas emitida (última) → ja_aprovado=1, status_atual=Em Análise."""
+    def test_letra_pura_dispara_ja_aprovado(self, db):
+        """Label letra pura (A, B…) = marco de aprovação histórica."""
         db_path, cid = db
         with get_connection(db_path) as conn:
             self._inserir_previsto(conn, cid, "DE-15.25.00.00-6A1-1001")
             self._inserir_duas_revisoes(conn, cid, "DE-15.25.00.00-6A1-1001",
-                                        situacao_r1="APROVADO", situacao_r2=None)
+                                        situacao_r1=None, situacao_r2=None,
+                                        label_r1="A", label_r2="B1")
 
         df = carregar_progresso(cid, db_path)
         assert df.iloc[0]["ja_aprovado"] == 1
         assert df.iloc[0]["status_atual"] == "Em Análise"
 
-    def test_documento_nunca_aprovado_tem_ja_aprovado_zero(self, db):
-        """Rev1=NÃO APROVADO, Rev2=NÃO APROVADO → ja_aprovado=0, status_atual=Em Revisão."""
+    def test_letra_composta_nao_dispara_ja_aprovado(self, db):
+        """Label A1, B1… (revisão intermediária) não conta como aprovação histórica."""
         db_path, cid = db
         with get_connection(db_path) as conn:
             self._inserir_previsto(conn, cid, "DE-15.25.00.00-6A1-1001")
             self._inserir_duas_revisoes(conn, cid, "DE-15.25.00.00-6A1-1001",
-                                        situacao_r1="NÃO APROVADO", situacao_r2="NÃO APROVADO")
+                                        situacao_r1=None, situacao_r2=None,
+                                        label_r1="A1", label_r2="A2")
+
+        df = carregar_progresso(cid, db_path)
+        assert df.iloc[0]["ja_aprovado"] == 0
+
+    def test_revisao_numerica_positiva_nao_dispara_ja_aprovado(self, db):
+        """Labels 1, 2, 3… não contam como aprovação histórica."""
+        db_path, cid = db
+        with get_connection(db_path) as conn:
+            self._inserir_previsto(conn, cid, "DE-15.25.00.00-6A1-1001")
+            self._inserir_duas_revisoes(conn, cid, "DE-15.25.00.00-6A1-1001",
+                                        situacao_r1="NÃO APROVADO", situacao_r2="NÃO APROVADO",
+                                        label_r1="1", label_r2="2")
 
         df = carregar_progresso(cid, db_path)
         assert df.iloc[0]["ja_aprovado"] == 0
         assert df.iloc[0]["status_atual"] == "Em Revisão"
 
+    def test_rev0_e_letra_posterior_ainda_conta_como_um_aprovado(self, db):
+        """Documento com labels '0' e 'A' conta como um único documento aprovado."""
+        db_path, cid = db
+        with get_connection(db_path) as conn:
+            self._inserir_previsto(conn, cid, "DE-15.25.00.00-6A1-1001")
+            self._inserir_duas_revisoes(conn, cid, "DE-15.25.00.00-6A1-1001",
+                                        situacao_r1=None, situacao_r2=None,
+                                        label_r1="0", label_r2="A")
+
+        df = carregar_progresso(cid, db_path)
+        assert df.iloc[0]["ja_aprovado"] == 1
+        assert int(df["ja_aprovado"].sum()) == 1
+
     def test_aprovado_contado_uma_vez_por_documento(self, db):
-        """Dois documentos com histórico aprovado → ja_aprovado.sum() == 2."""
+        """Dois documentos com rev 0 → ja_aprovado.sum() == 2, mesmo com revisões posteriores."""
         db_path, cid = db
         with get_connection(db_path) as conn:
             self._inserir_previsto(conn, cid, "DE-15.25.00.00-6A1-1001")
             self._inserir_previsto(conn, cid, "DE-15.25.00.00-6A1-1002")
+            # doc 1: rev 0 aprovada + A1 em análise
             self._inserir_duas_revisoes(conn, cid, "DE-15.25.00.00-6A1-1001",
-                                        situacao_r1="APROVADO", situacao_r2="APROVADO")
+                                        situacao_r1=None, situacao_r2=None,
+                                        label_r1="0", label_r2="A1")
+            # doc 2: rev 0 aprovada + A em aprovação posterior
             self._inserir_duas_revisoes(conn, cid, "DE-15.25.00.00-6A1-1002",
-                                        situacao_r1="APROVADO", situacao_r2="NÃO APROVADO")
+                                        situacao_r1=None, situacao_r2=None,
+                                        label_r1="0", label_r2="A")
 
         df = carregar_progresso(cid, db_path)
         assert int(df["ja_aprovado"].sum()) == 2
