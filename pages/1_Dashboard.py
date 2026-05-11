@@ -259,9 +259,7 @@ widget_seletor_perfil()
 contrato = require_contrato()
 sidebar_contexto()
 
-st.title(f"📊 {contrato['nome']}")
-if contrato.get("cliente"):
-    st.caption(contrato["cliente"])
+st.title(contrato["nome"])
 
 ultima = _ultima_importacao(contrato["id"])
 if ultima:

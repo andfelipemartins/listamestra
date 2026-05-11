@@ -364,7 +364,7 @@ widget_seletor_perfil()
 sidebar_contexto()
 require_permission("import_data")
 
-st.title("📥 Importação de Dados")
+st.title("Importar")
 
 contrato_id = _secao_contrato()
 

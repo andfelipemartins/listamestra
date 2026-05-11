@@ -16,7 +16,7 @@ from db.connection import get_connection
 from core.engine.status import STATUS_ORDEM, NOME_TRECHO, classificar_status
 from core.engine.disciplinas import ESTRUTURA
 from core.exporters.excel_exporter import exportar_historico_revisoes
-from core.formatacao import fmt_inteiro, fmt_data, disciplina_do_codigo
+from core.formatacao import fmt_inteiro, fmt_data, disciplina_do_codigo, filtrar_documentos
 from core.parsers.registry import ParserRegistry
 from app.session import require_contrato, sidebar_contexto
 from core.auth.permissions import widget_seletor_perfil, require_permission
@@ -35,18 +35,31 @@ def _trecho_do_codigo(codigo: str) -> str:
     return ""
 
 
-def _listar_documentos(contrato_id: int) -> list[dict]:
+@st.cache_data(ttl=300)
+def _listar_documentos_enriquecidos(contrato_id: int) -> list[dict]:
     with get_connection() as conn:
         rows = conn.execute(
             """
-            SELECT id, codigo, titulo, tipo, trecho
-            FROM documentos
-            WHERE contrato_id = ?
-            ORDER BY trecho, codigo
+            SELECT d.id, d.codigo, d.titulo, d.tipo, d.trecho,
+                   d.modalidade, d.disciplina, d.contrato_id,
+                   r.situacao, r.data_emissao
+            FROM documentos d
+            LEFT JOIN revisoes r
+                   ON r.documento_id = d.id AND r.ultima_revisao = 1
+            WHERE d.contrato_id = ?
+            ORDER BY d.trecho, d.codigo
             """,
             (contrato_id,),
         ).fetchall()
-    return [dict(r) for r in rows]
+    docs = [dict(r) for r in rows]
+    for doc in docs:
+        trecho = doc.get("trecho") or ""
+        doc["nome_trecho"] = NOME_TRECHO.get(trecho, trecho)
+        disc = doc.get("disciplina") or disciplina_do_codigo(doc["codigo"]) or ""
+        doc["disciplina_display"] = disc
+        doc["disciplina_desc"] = ESTRUTURA.get(disc, "")
+        doc["status_atual"] = classificar_status(doc.get("situacao"), doc.get("data_emissao"))
+    return docs
 
 
 def _carregar_documento(doc_id: int) -> dict | None:
@@ -280,6 +293,67 @@ def _arquivos(doc_id: int):
         )
 
 
+LIMITE_RESULTADOS = 200
+
+
+def _exibir_tabela(filtrados: list[dict], busca: str) -> None:
+    total = len(filtrados)
+    exibir = filtrados[:LIMITE_RESULTADOS]
+
+    if not filtrados:
+        if busca.strip():
+            st.warning(f'Nenhum documento encontrado para "{busca}".')
+        else:
+            st.info("Nenhum documento cadastrado neste contrato.")
+        return
+
+    if busca.strip():
+        legenda = f"{total} resultado(s)."
+    else:
+        legenda = f"{total} documento(s) no contrato."
+    if total > LIMITE_RESULTADOS:
+        legenda += f" Mostrando os primeiros {LIMITE_RESULTADOS} — refine a busca para ver mais."
+    st.caption(legenda)
+
+    linhas = [
+        {
+            "Código":    doc["codigo"],
+            "Tipo":      doc.get("tipo") or "—",
+            "Trecho":    doc.get("nome_trecho") or doc.get("trecho") or "—",
+            "Estrutura": doc.get("disciplina_display") or "—",
+            "Status":    doc.get("status_atual") or "—",
+            "Título":    doc.get("titulo") or "(sem título)",
+        }
+        for doc in exibir
+    ]
+    df = pd.DataFrame(linhas)
+
+    event = st.dataframe(
+        df,
+        key=f"tabela_docs_{busca}",
+        use_container_width=True,
+        hide_index=True,
+        selection_mode="single-row",
+        on_select="rerun",
+        height=400,
+        column_config={
+            "Código":    st.column_config.TextColumn("Código",    width="medium"),
+            "Tipo":      st.column_config.TextColumn("Tipo",      width="small"),
+            "Trecho":    st.column_config.TextColumn("Trecho",    width="medium"),
+            "Estrutura": st.column_config.TextColumn("Estrutura", width="small"),
+            "Status":    st.column_config.TextColumn("Status",    width="medium"),
+            "Título":    st.column_config.TextColumn("Título",    width="large"),
+        },
+    )
+
+    if event.selection.rows:
+        idx = event.selection.rows[0]
+        if idx < len(exibir):
+            st.session_state["doc_pagina_id"] = exibir[idx]["id"]
+    else:
+        st.session_state["doc_pagina_id"] = None
+
+
 # ---------------------------------------------------------------------------
 # Página
 # ---------------------------------------------------------------------------
@@ -291,60 +365,46 @@ contrato = require_contrato()
 sidebar_contexto()
 require_permission("view_document")
 
-st.title("📄 Detalhe do Documento")
-st.caption(contrato["nome"])
+st.title("Pesquisar Documento")
 
-documentos = _listar_documentos(contrato["id"])
+if "doc_pagina_id" not in st.session_state:
+    st.session_state["doc_pagina_id"] = None
+
+documentos = _listar_documentos_enriquecidos(contrato["id"])
 
 if not documentos:
     st.info("Nenhum documento cadastrado neste contrato.")
     st.stop()
 
-# Busca por código na sidebar
-with st.sidebar:
-    st.markdown("### Buscar documento")
-    busca = st.text_input("Código ou título", placeholder="DE-15.25...")
-    st.divider()
-    st.markdown("### Exportar")
+busca = st.text_input(
+    "Buscar documento",
+    placeholder="código, título, trecho, estrutura…",
+)
 
-opcoes = documentos
-if busca.strip():
-    termo = busca.strip().lower()
-    opcoes = [
-        d for d in documentos
-        if termo in d["codigo"].lower() or termo in (d.get("titulo") or "").lower()
-    ]
+filtrados = filtrar_documentos(documentos, busca)
+_exibir_tabela(filtrados, busca)
 
-if not opcoes:
-    st.warning(f"Nenhum documento encontrado para: **{busca}**")
-    st.stop()
+doc_id = st.session_state.get("doc_pagina_id")
+if doc_id:
+    doc = _carregar_documento(doc_id)
+    if doc and doc.get("contrato_id") == contrato["id"]:
+        st.divider()
+        revisoes = _ficha(doc, contrato["id"])
 
-# Selectbox com código + título
-labels = [
-    f"{d['codigo']}  —  {d.get('titulo') or '(sem título)'}"
-    for d in opcoes
-]
-escolha = st.selectbox("Documento", labels, label_visibility="collapsed")
-idx = labels.index(escolha)
-doc_selecionado = opcoes[idx]
+        with st.sidebar:
+            st.markdown("### Exportar")
+            nome_arquivo = doc["codigo"].replace("/", "-")
+            st.download_button(
+                "⬇️ Histórico de revisões (.xlsx)",
+                data=exportar_historico_revisoes(revisoes, doc, contrato["nome"]),
+                file_name=f"Historico_{nome_arquivo}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+            )
 
-doc = _carregar_documento(doc_selecionado["id"])
-st.divider()
-
-revisoes = _ficha(doc, contrato["id"])
-
-with st.sidebar:
-    nome_arquivo = doc["codigo"].replace("/", "-")
-    st.download_button(
-        "⬇️ Histórico de revisões (.xlsx)",
-        data=exportar_historico_revisoes(revisoes, doc, contrato["nome"]),
-        file_name=f"Historico_{nome_arquivo}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True,
-    )
-
-st.divider()
-_linha_do_tempo(revisoes)
-st.divider()
-
-_arquivos(doc["id"])
+        st.divider()
+        _linha_do_tempo(revisoes)
+        st.divider()
+        _arquivos(doc["id"])
+    else:
+        st.session_state["doc_pagina_id"] = None

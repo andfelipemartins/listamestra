@@ -23,9 +23,7 @@ contrato = require_contrato()
 sidebar_contexto()
 require_permission("view_comparison")
 
-st.title(f"🔍 Comparação ID × Lista — {contrato['nome']}")
-if contrato.get("cliente"):
-    st.caption(contrato["cliente"])
+st.title("Detalhamento Índice de Documentos")
 
 # ---------------------------------------------------------------------------
 # Executa comparação

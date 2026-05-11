@@ -32,11 +32,7 @@ st.set_page_config(
 widget_seletor_perfil()
 sidebar_contexto()
 
-st.title("📝 Cadastro Manual")
-st.caption(
-    "Registre documentos e revisões individualmente — "
-    "complementa as importações em lote via Excel."
-)
+st.title("Cadastrar")
 
 contrato = require_contrato()
 require_permission("create_document")
