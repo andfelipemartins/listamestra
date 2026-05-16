@@ -1,157 +1,199 @@
 # Arquitetura do SCLME
 
-Checkpoint arquitetural em 2026-05-16.
+Marco 10.6 - Consolidacao Arquitetural Pre-Produto.
+
+Data: 2026-05-16
 
 ## Objetivo
 
-O SCLME e um sistema Python/Streamlit/SQLite para controle documental de engenharia. A aplicacao substitui controles manuais em Excel por uma base rastreavel com importadores, parsers, dashboard, comparacao ID x Lista, cadastro manual, consulta de documentos, exportadores e testes automatizados.
+Este documento registra a arquitetura atual do SCLME, seus pontos fortes, dividas tecnicas e riscos para crescimento futuro.
 
-Este documento registra a arquitetura atual sem propor migracao imediata de stack. A diretriz e consolidar o produto atual e preservar a possibilidade de evolucao futura.
+A decisao atual e nao migrar imediatamente para Django. Antes disso, o projeto deve reduzir acoplamento, separar responsabilidades e preparar uma arquitetura mais limpa para evolucao.
 
 ## Stack Atual
 
 | Camada | Tecnologia | Papel |
 | --- | --- | --- |
-| Interface | Streamlit | WebApp interno, formularios, dashboards, tabelas e navegacao |
-| Banco local | SQLite | Persistencia simples, arquivo unico, facil de portar e inicializar |
-| Processamento | Pandas | Leitura, normalizacao e transformacao tabular |
+| Interface | Streamlit | WebApp, formularios, dashboards, tabelas e navegacao |
+| Banco | SQLite | Persistencia local simples e portavel |
+| Processamento | Pandas | Leitura, transformacao e apresentacao tabular |
 | Excel I/O | OpenPyXL | Leitura e escrita de arquivos `.xlsx` |
 | Graficos | Plotly | Visualizacoes interativas no dashboard |
-| Testes | Pytest | Testes de parsers, importadores, engine, exportadores e helpers |
+| Testes | Pytest | Testes de parsers, importadores, engines, exportadores e helpers |
 
-## Estrutura de Camadas
+## Estrutura Atual de Pastas
 
 ```text
-main.py             Entrada do app e navegacao
-pages/              Paginas Streamlit
-app/                Estado de sessao, contexto e componentes de interface
-core/parsers/       Parsers de codigos documentais e nomes de arquivo
-core/importers/     Importacao de Excel, ID e arquivos
-core/engine/        Regras de negocio e calculos
-core/exporters/     Exportacao de relatorios
-core/auth/          Perfis e permissoes
-db/                 Conexao SQLite e banco local
-scripts/            Inicializacao e migracoes simples
-tests/              Testes automatizados
-docs/               Documentacao tecnica e de produto
+main.py                  Entrada do app e navegacao
+pages/                   Paginas Streamlit
+app/                     Sessao, contexto e componentes ligados a UI
+core/                    Regras e modulos reutilizaveis
+  auth/                  Permissoes basicas
+  engine/                Status, comparacao, preview, emissao inicial
+  exporters/             Exportacoes Excel
+  importers/             Importadores de Lista, ID, arquivos e cadastro
+  parsers/               Parsers de codigos e arquivos
+db/                      Conexao SQLite e banco local
+scripts/                 Inicializacao e migracoes simples
+tests/                   Testes automatizados
+docs/                    Documentacao tecnica, produto e ADRs
 ```
 
-## Responsabilidades
+## Papel de Cada Camada Atual
 
 ### `pages/`
 
-As paginas Streamlit devem capturar input, chamar funcoes de servico e renderizar output. Elas podem organizar layout, mensagens, filtros e componentes visuais, mas nao devem concentrar regra de negocio.
+Contem as telas Streamlit:
 
-### `core/`
+- dashboard;
+- importacao;
+- comparacao ID x Lista;
+- cadastro manual;
+- pesquisa documental.
 
-O `core/` deve ser independente da interface. Regras de parsing, importacao, status, comparacao, progresso, alertas, exportacao e validacao devem viver aqui sempre que forem reutilizaveis ou testaveis.
+Hoje as paginas fazem mais do que deveriam: capturam input, exibem output, acessam banco, montam payloads e aplicam parte da regra de aplicacao.
 
-### `db/`
-
-O banco deve ser acessado por camada propria. A referencia atual e `db/connection.py`, que centraliza conexoes SQLite, `row_factory` e configuracoes como foreign keys. Paginas e modulos devem evitar `sqlite3.connect()` direto fora dessa camada.
+Diretriz futura: paginas devem funcionar como camada de UI/controller leve.
 
 ### `app/`
 
-O `app/` concentra estado de sessao, contexto lateral, perfil atual e helpers de interface. Ele pode depender de Streamlit. O `core/` nao deve depender de `app/`.
+Concentra estado de sessao, contrato ativo e contexto lateral. Depende diretamente de Streamlit.
+
+Diretriz futura: manter aqui apenas elementos ligados a interface, sessao e adaptadores de UI.
+
+### `core/`
+
+Contem a maior parte da regra reutilizavel:
+
+- parsers;
+- importadores;
+- engines;
+- exportadores;
+- permissoes basicas;
+- formatacao e busca.
+
+E a camada mais importante para preservar em uma futura migracao.
+
+Diretriz futura: `core/` nao deve depender de Streamlit.
+
+### `db/`
+
+Contem `connection.py`, que centraliza conexao SQLite.
+
+Diretriz futura: acesso ao banco deve passar por repositories, evitando SQL direto em paginas.
+
+### `scripts/`
+
+Contem `init_db.py`, que cria tabelas e faz migracoes simples/idempotentes.
+
+Diretriz futura: caso o projeto avance para Django ou PostgreSQL, esse papel deve ser substituido por migrations reais.
 
 ### `tests/`
 
-Os testes devem priorizar `core/`, porque e ali que vivem as regras que nao podem variar com UI. Testes de pagina podem existir para helpers e transformacoes testaveis, mas o objetivo principal e proteger regras de negocio.
+Contem testes de parsers, importadores, engines, exportadores, auth e helpers de pagina.
 
-## Fluxos Principais
+Diretriz futura: services e repositories devem nascer testados.
 
-### Importacao da Lista de Documentos
+## Pontos Fortes Atuais
 
-1. Usuario faz upload da Lista de Documentos.
-2. `pages/2_Importacao.py` captura o arquivo.
-3. `core/importers/lista_importer.py` le a planilha.
-4. O importer normaliza linhas, documentos e revisoes.
-5. O banco registra `documentos`, `revisoes`, `importacoes` e `inconsistencias`.
-6. Regras complementares recalculam emissao inicial e ultima revisao.
+- MVP funcional de ponta a ponta.
+- Fluxo real de importacao, comparacao, dashboard e consulta documental.
+- Parsers isolados e testaveis.
+- Importadores robustos e idempotentes em pontos importantes.
+- Engines ja centralizam regras relevantes.
+- Exportadores independentes da UI.
+- Testes automatizados em areas criticas.
+- Separacao inicial de `core/`.
+- Modularizacao parcial suficiente para refatoracao incremental.
+- Documentacao inicial de produto, arquitetura e ADR.
 
-### Importacao do ID
+## Dividas Tecnicas Identificadas
 
-1. Usuario faz upload do Indice de Documentos.
-2. `core/importers/id_importer.py` identifica a aba ID e documentos previstos.
-3. Cada documento previsto e gravado em `documentos_previstos`.
-4. A comparacao ID x Lista passa a usar esse escopo previsto.
+### SQL Direto em `main.py` e `pages/`
 
-### Dashboard e Status
+Ha consultas e escritas diretas em:
 
-1. Dashboard chama `core/engine/status.py`.
-2. `carregar_progresso()` retorna status atual e aprovacao historica.
-3. Status atual reflete a ultima revisao.
-4. Aprovacao historica considera revisoes finais por `label_revisao`, como `0` e letras puras (`A`, `B`, `C`...), sem contar intermediarias (`A1`, `B1`...).
+- `main.py`;
+- `pages/1_Dashboard.py`;
+- `pages/2_Importacao.py`;
+- `pages/4_CadastroManual.py`;
+- `pages/5_Documento.py`;
+- `app/session.py`.
 
-### Comparacao ID x Lista
+Isso dificulta testes, manutencao e migracao futura.
 
-1. `core/engine/comparacao.py` cruza previstos e documentos importados.
-2. Resultado classifica ausentes, extras e divergencias.
-3. A pagina apenas exibe o resultado e oferece exportacao.
+### Paginas Fazendo Papel de Controller + Service + Repository
 
-### Pesquisa de Documento
+Algumas paginas capturam input, validam estado, consultam banco, aplicam regra e renderizam resultado. Esse acoplamento aumenta custo de evolucao.
 
-1. A pagina de pesquisa lista documentos do contrato ativo.
-2. Busca normaliza acentos e caixa.
-3. O detalhe mostra ficha, linha do tempo, arquivos e GRDs vinculados.
+### Dependencia Forte de `st.session_state`
+
+O cadastro manual e a selecao de contrato dependem bastante de `st.session_state`. Isso e natural em Streamlit, mas precisa ficar restrito a camada de UI.
+
+### Dependencia de `pandas.DataFrame` Como Contrato Interno
+
+DataFrames sao uteis para importacao, exportacao e visualizacao, mas nao devem virar contrato universal de dominio. Services futuros devem poder retornar estruturas mais explicitas quando apropriado.
+
+### `core` Ainda Conhecendo SQLite Diretamente
+
+Muitos modulos de `core` usam `get_connection()` e SQL diretamente. Isso e aceitavel no MVP, mas dificulta trocar banco ou reaproveitar regras em outra interface.
+
+### Regras de Fallback/Enriquecimento em Paginas
+
+Fallback de trecho, disciplina, status e enriquecimento de documento ainda aparecem em paginas, especialmente na pesquisa documental.
+
+### `sys.path.insert` em Varios Arquivos
+
+Esse padrao facilita execucao local, mas indica que o projeto ainda nao esta empacotado de forma limpa.
+
+### Banco Demo e Banco Operacional Pouco Separados
+
+O banco SQLite pode ser usado como demo, piloto ou operacao local. Essa distincao precisa ficar mais clara para evitar confusao.
+
+### Ausencia de Migrations Reais
+
+`scripts/init_db.py` resolve a fase atual, mas nao substitui sistema de migrations para ambiente corporativo.
+
+### Multiusuario e Concorrencia Nao Resolvidos
+
+SQLite + Streamlit atendem ao MVP e piloto controlado, mas nao resolvem gravacoes simultaneas robustas.
+
+## Riscos Para Futura Migracao
+
+- SQLite usa funcoes e padroes especificos, como `julianday`, `last_insert_rowid()`, `INSERT OR IGNORE` e `INSERT OR REPLACE`.
+- `scripts/init_db.py` nao equivale a migrations Django.
+- `auth/session` dependem de Streamlit.
+- Falta camada formal de DTOs/objetos de dominio.
+- Logica de negocio ainda aparece misturada com interface.
+- Parte do `core` depende diretamente do banco.
+- DataFrames aparecem como estrutura de retorno em pontos importantes.
+- Falta uma fronteira clara entre UI, service, repository e dominio.
 
 ## Diretrizes Arquiteturais
 
-- Regras de negocio devem ficar fora das paginas Streamlit.
-- Paginas devem capturar input, chamar servicos e exibir output.
-- `core/` deve ser independente da interface.
-- Banco deve ser acessado por camada propria.
-- Testes devem cobrir `core/` prioritariamente.
-- Importadores devem ser idempotentes quando possivel.
-- Erros por linha devem ser rastreaveis e nao devem abortar lotes inteiros sem necessidade.
-- Dados derivados devem ser recalculaveis a partir das fontes importadas sempre que possivel.
-- Exportacoes devem consumir os mesmos resultados usados pela UI, evitando divergencia entre tela e relatorio.
+- Nao adicionar features grandes sem reduzir acoplamento estrutural.
+- Tirar SQL direto das paginas gradualmente.
+- Criar repositories antes de trocar banco.
+- Criar services antes de aumentar fluxos de produto.
+- Manter regras de negocio fora de Streamlit.
+- Manter Pandas em importacao/exportacao/visualizacao, mas evitar dependencia universal.
+- Preservar testes existentes.
+- Toda extracao de service/repository deve manter comportamento atual.
 
-## Limitacoes Conhecidas
+## Estrategia Recomendada
 
-### Multiusuario
+1. Criar camada de repositories.
+2. Mover consultas SQL das paginas para repositories.
+3. Criar services para orquestrar regras de aplicacao.
+4. Reduzir dependencia direta de `st.session_state`.
+5. Separar auth puro de auth UI.
+6. Reduzir retorno obrigatorio em DataFrame onde nao for necessario.
+7. Remover `sys.path.insert` gradualmente.
+8. Depois reavaliar Django.
 
-Streamlit com SQLite local atende bem a uso individual, demo e piloto simples. Para varios usuarios simultaneos gravando dados, o modelo precisa ser revisto.
+## Conclusao
 
-### Autenticacao
+O SCLME esta em bom estado como MVP funcional. O proximo passo correto nao e migrar stack, mas consolidar a arquitetura pre-produto.
 
-O app possui perfis e permissoes internos, mas nao integra autenticacao corporativa. Nao ha login real com provedor externo, SSO, LDAP, Azure AD ou equivalente.
-
-### Permissoes
-
-As permissoes atuais ajudam a controlar visibilidade e acoes dentro do app, mas ainda nao devem ser tratadas como seguranca corporativa forte.
-
-### Concorrencia
-
-SQLite e adequado para baixo volume e operacao local. Gravacoes simultaneas, importacoes concorrentes e edicoes paralelas exigem cuidado adicional.
-
-### Deploy Corporativo
-
-Streamlit Community Cloud e util para demo, mas nao e arquitetura corporativa definitiva. Deploy interno pode exigir rede, autenticacao, banco gerenciado, backup, observabilidade e suporte de TI.
-
-### CRUD Complexo
-
-Streamlit permite formularios e edicoes simples, mas fluxos CRUD complexos, com auditoria detalhada, revisao, permissao fina e estados intermediarios, podem se tornar dificeis de manter apenas em paginas Streamlit.
-
-## Caminhos de Evolucao
-
-### Django + PostgreSQL
-
-Boa opcao se o produto virar sistema interno robusto com usuarios, permissoes, CRUD, modelos relacionais, admin, auditoria e banco centralizado.
-
-### Django + HTMX
-
-Alternativa para manter backend forte em Python e construir uma interface web dinamica sem um frontend pesado. Pode ser adequada para telas operacionais, formularios e consultas.
-
-### FastAPI + React/Next
-
-Boa opcao para separacao clara entre API e frontend. Traz flexibilidade e melhor experiencia de produto, mas aumenta custo de desenvolvimento, deploy e manutencao.
-
-### Power Platform
-
-Pode atuar como camada complementar para formularios, aprovacao, automacoes com Outlook/SharePoint/Power Automate e integracao com ambiente corporativo Microsoft. Nao substitui necessariamente o motor de regras do SCLME.
-
-## Decisao Atual
-
-Manter a stack atual para consolidar a versao piloto. O objetivo imediato e confiabilidade das regras e clareza operacional, nao migracao tecnologica.
+O Marco 10.6 formaliza essa decisao: reduzir acoplamento agora para permitir crescimento depois.
 
