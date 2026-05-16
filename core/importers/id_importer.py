@@ -32,6 +32,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 from db.connection import get_connection
 from core.parsers.registry import ParserRegistry
+from core.repositories.importacao_repository import ImportacaoRepository
 
 _COL_CODIGO = 0
 _COL_TITULO = 1
@@ -57,6 +58,7 @@ class IdImporter:
     def __init__(self, db_path: Optional[str] = None):
         self._db_path = db_path
         self._registry = ParserRegistry()
+        self._importacao_repository = ImportacaoRepository(db_path)
 
     def importar(self, arquivo: str, contrato_id: int) -> ResultadoImportacaoId:
         df = self._ler_planilha(arquivo)
@@ -158,29 +160,24 @@ class IdImporter:
     # --- controle de importação ---
 
     def _registrar_importacao(self, conn, contrato_id, arquivo, total) -> int:
-        cur = conn.execute(
-            """
-            INSERT INTO importacoes
-                (contrato_id, origem, arquivo_importado, total_registros, status)
-            VALUES (?, 'id_documentos', ?, ?, 'em_andamento')
-            """,
-            (contrato_id, arquivo, total),
+        return self._importacao_repository.registrar_importacao(
+            contrato_id=contrato_id,
+            origem="id_documentos",
+            arquivo_importado=arquivo,
+            total_registros=total,
+            status="em_andamento",
+            conn=conn,
         )
-        return cur.lastrowid
 
     def _finalizar_importacao(self, conn, imp_id, resultado):
         total_erros = resultado.erros + resultado.total_inconsistencias
-        conn.execute(
-            """
-            UPDATE importacoes SET
-                total_erros       = ?,
-                total_novos       = ?,
-                total_atualizados = ?,
-                status            = 'concluido',
-                confirmado_em     = datetime('now')
-            WHERE id = ?
-            """,
-            (total_erros, resultado.novos, resultado.atualizados, imp_id),
+        self._importacao_repository.finalizar_importacao(
+            importacao_id=imp_id,
+            total_erros=total_erros,
+            total_novos=resultado.novos,
+            total_atualizados=resultado.atualizados,
+            status="concluido",
+            conn=conn,
         )
 
     def _salvar_inconsistencia(self, conn, imp_id, codigo, tipo, descricao):

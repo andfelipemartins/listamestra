@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from db.connection import get_connection
 from core.parsers.arquivo_parser import parsear_arquivo, ArquivoParseado, ErroParsearArquivo
 from core.engine.preview_arquivos import ResultadoPreview
+from core.repositories.importacao_repository import ImportacaoRepository
 
 
 @dataclass
@@ -38,6 +39,10 @@ class ResultadoArquivos:
 
 
 class ArquivosImporter:
+
+    def __init__(self, db_path: Optional[str] = None):
+        self._db_path = db_path
+        self._importacao_repository = ImportacaoRepository(db_path)
 
     def importar_texto(
         self,
@@ -243,31 +248,21 @@ class ArquivosImporter:
         return resultado
 
     def _registrar_importacao(self, conn, contrato_id, arquivo, total_linhas) -> int:
-        conn.execute(
-            """
-            INSERT INTO importacoes
-                (contrato_id, origem, arquivo_importado, total_registros, status)
-            VALUES (?, 'arquivos_nomes', ?, ?, 'em_andamento')
-            """,
-            (contrato_id, arquivo, total_linhas),
+        return self._importacao_repository.registrar_importacao(
+            contrato_id=contrato_id,
+            origem="arquivos_nomes",
+            arquivo_importado=arquivo,
+            total_registros=total_linhas,
+            status="em_andamento",
+            conn=conn,
         )
-        return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
     def _finalizar_importacao(self, conn, importacao_id, resultado):
-        conn.execute(
-            """
-            UPDATE importacoes SET
-                total_novos       = ?,
-                total_atualizados = ?,
-                total_erros       = ?,
-                status            = 'concluido',
-                confirmado_em     = datetime('now')
-            WHERE id = ?
-            """,
-            (
-                resultado.novos,
-                resultado.ja_existentes,
-                resultado.nao_reconhecidos + resultado.sem_documento,
-                importacao_id,
-            ),
+        self._importacao_repository.finalizar_importacao(
+            importacao_id=importacao_id,
+            total_erros=resultado.nao_reconhecidos + resultado.sem_documento,
+            total_novos=resultado.novos,
+            total_atualizados=resultado.ja_existentes,
+            status="concluido",
+            conn=conn,
         )

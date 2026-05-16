@@ -13,7 +13,6 @@ import plotly.express as px
 import streamlit as st
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from db.connection import get_connection
 from core.engine.status import (
     STATUS_ORDEM,
     NOME_TRECHO,
@@ -21,6 +20,7 @@ from core.engine.status import (
     carregar_alertas,
 )
 from core.exporters.excel_exporter import exportar_lista_mestra, exportar_alertas
+from core.services.importacao_service import ImportacaoService
 from app.session import require_contrato, sidebar_contexto
 from core.auth.permissions import widget_seletor_perfil
 
@@ -31,23 +31,14 @@ STATUS_COR: dict[str, str] = {
     "Aprovado":      "#27ae60",
 }
 
+_importacao_service = ImportacaoService()
+
 # ---------------------------------------------------------------------------
 # Acesso a dados
 # ---------------------------------------------------------------------------
 
 def _ultima_importacao(contrato_id: int) -> dict | None:
-    with get_connection() as conn:
-        row = conn.execute(
-            """
-            SELECT origem, arquivo_importado, total_registros, total_novos,
-                   total_atualizados, total_erros, confirmado_em
-            FROM importacoes
-            WHERE contrato_id = ? AND status = 'concluido'
-            ORDER BY id DESC LIMIT 1
-            """,
-            (contrato_id,),
-        ).fetchone()
-    return dict(row) if row else None
+    return _importacao_service.obter_ultima_importacao(contrato_id)
 
 
 # ---------------------------------------------------------------------------

@@ -20,11 +20,12 @@ from core.importers.arquivos_importer import ArquivosImporter
 from core.engine.preview_arquivos import gerar_preview
 from core.engine.status import NOME_TRECHO
 from core.services.contract_service import ContractService
-from db.connection import get_connection
+from core.services.importacao_service import ImportacaoService
 from app.session import set_contrato_ativo, sidebar_contexto
 from core.auth.permissions import widget_seletor_perfil, require_permission
 
 _contract_service = ContractService()
+_importacao_service = ImportacaoService()
 
 # ---------------------------------------------------------------------------
 # Acesso a dados
@@ -39,19 +40,7 @@ def _criar_contrato(nome: str, cliente: str) -> int:
 
 
 def _historico_importacoes(contrato_id: int) -> list[dict]:
-    with get_connection() as conn:
-        rows = conn.execute(
-            """
-            SELECT origem, arquivo_importado, total_registros, total_novos,
-                   total_atualizados, total_erros, status, confirmado_em
-            FROM importacoes
-            WHERE contrato_id = ?
-            ORDER BY id DESC
-            LIMIT 10
-            """,
-            (contrato_id,),
-        ).fetchall()
-    return [dict(r) for r in rows]
+    return _importacao_service.listar_historico_importacoes(contrato_id)
 
 
 def _importar_arquivo(conteudo: bytes, contrato_id: int, origem: str):
