@@ -11,8 +11,8 @@ import sys
 import streamlit as st
 
 sys.path.insert(0, os.path.dirname(__file__))
-from db.connection import get_connection
 from app.session import set_contrato_ativo
+from core.services.contract_service import ContractService
 
 st.set_page_config(
     page_title="Lista Mestra",
@@ -20,44 +20,7 @@ st.set_page_config(
     layout="wide",
 )
 
-# ---------------------------------------------------------------------------
-# Dados
-# ---------------------------------------------------------------------------
-
-def _verificar_banco() -> bool:
-    try:
-        with get_connection() as conn:
-            conn.execute("SELECT 1 FROM contratos LIMIT 1")
-        return True
-    except Exception:
-        return False
-
-
-def _listar_contratos() -> list[dict]:
-    with get_connection() as conn:
-        rows = conn.execute(
-            """
-            SELECT
-                c.id, c.nome, c.cliente,
-                (SELECT COUNT(*) FROM documentos_previstos dp WHERE dp.contrato_id = c.id) AS previstos,
-                (SELECT COUNT(*) FROM documentos d WHERE d.contrato_id = c.id) AS documentos,
-                (SELECT COUNT(*) FROM revisoes r
-                 JOIN documentos d2 ON d2.id = r.documento_id
-                 WHERE d2.contrato_id = c.id) AS revisoes
-            FROM contratos c
-            WHERE c.ativo = 1
-            ORDER BY c.nome
-            """
-        ).fetchall()
-    return [dict(r) for r in rows]
-
-
-def _criar_contrato(nome: str, cliente: str) -> int:
-    with get_connection() as conn:
-        conn.execute(
-            "INSERT INTO contratos (nome, cliente) VALUES (?, ?)", (nome, cliente)
-        )
-        return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+_contract_service = ContractService()
 
 
 def _home() -> None:
@@ -67,7 +30,7 @@ def _home() -> None:
     # Verificação do banco
     # -----------------------------------------------------------------------
 
-    if not _verificar_banco():
+    if not _contract_service.verificar_banco():
         st.error("Banco de dados não encontrado. Execute `python scripts/init_db.py` primeiro.")
         st.stop()
 
@@ -75,7 +38,7 @@ def _home() -> None:
     # Grade de contratos
     # -----------------------------------------------------------------------
 
-    contratos = _listar_contratos()
+    contratos = _contract_service.listar_contratos_com_metricas()
 
     if contratos:
         st.subheader("Contratos ativos")
@@ -132,9 +95,10 @@ def _home() -> None:
             if not nome_inp.strip():
                 st.error("O nome do contrato é obrigatório.")
             else:
-                novo_id = _criar_contrato(nome_inp.strip(), cliente_inp.strip())
-                set_contrato_ativo(novo_id, nome_inp.strip(), cliente_inp.strip())
-                st.success(f"Contrato **{nome_inp.strip()}** criado com sucesso.")
+                dados = _contract_service.validar_dados_contrato(nome_inp, cliente_inp)
+                novo_id = _contract_service.criar_contrato(dados["nome"], dados["cliente"])
+                set_contrato_ativo(novo_id, dados["nome"], dados["cliente"])
+                st.success(f"Contrato **{dados['nome']}** criado com sucesso.")
                 st.switch_page("pages/2_Importacao.py")
 
 

@@ -7,7 +7,7 @@ Centraliza seleção de contrato ativo e helpers de contexto de sidebar.
 
 import streamlit as st
 
-from db.connection import get_connection
+from core.services.contract_service import ContractService
 
 _KEY_ID      = "contrato_id"
 _KEY_NOME    = "contrato_nome"
@@ -42,15 +42,18 @@ def require_contrato() -> dict:
     if contrato:
         return contrato
 
-    with get_connection() as conn:
-        row = conn.execute(
-            "SELECT id, nome, cliente FROM contratos WHERE ativo = 1 ORDER BY id LIMIT 1"
-        ).fetchone()
-
-    if row:
-        d = dict(row)
-        set_contrato_ativo(d["id"], d["nome"], d.get("cliente") or "")
-        return {"id": d["id"], "nome": d["nome"], "cliente": d.get("cliente") or ""}
+    contrato_ativo = ContractService().obter_contrato_ativo()
+    if contrato_ativo:
+        set_contrato_ativo(
+            contrato_ativo["id"],
+            contrato_ativo["nome"],
+            contrato_ativo.get("cliente") or "",
+        )
+        return {
+            "id": contrato_ativo["id"],
+            "nome": contrato_ativo["nome"],
+            "cliente": contrato_ativo.get("cliente") or "",
+        }
 
     st.warning("Nenhum contrato encontrado. Crie um contrato na página inicial.")
     st.page_link("main.py", label="← Ir para Contratos", icon="🏠")

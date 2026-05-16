@@ -19,28 +19,23 @@ from core.importers.id_importer import IdImporter
 from core.importers.arquivos_importer import ArquivosImporter
 from core.engine.preview_arquivos import gerar_preview
 from core.engine.status import NOME_TRECHO
+from core.services.contract_service import ContractService
 from db.connection import get_connection
 from app.session import set_contrato_ativo, sidebar_contexto
 from core.auth.permissions import widget_seletor_perfil, require_permission
+
+_contract_service = ContractService()
 
 # ---------------------------------------------------------------------------
 # Acesso a dados
 # ---------------------------------------------------------------------------
 
 def _listar_contratos() -> list[dict]:
-    with get_connection() as conn:
-        rows = conn.execute(
-            "SELECT id, nome, cliente FROM contratos WHERE ativo = 1 ORDER BY nome"
-        ).fetchall()
-    return [dict(r) for r in rows]
+    return _contract_service.listar_contratos_ativos()
 
 
 def _criar_contrato(nome: str, cliente: str) -> int:
-    with get_connection() as conn:
-        conn.execute(
-            "INSERT INTO contratos (nome, cliente) VALUES (?, ?)", (nome, cliente)
-        )
-        return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+    return _contract_service.criar_contrato(nome, cliente)
 
 
 def _historico_importacoes(contrato_id: int) -> list[dict]:
