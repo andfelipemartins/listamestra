@@ -13,14 +13,9 @@ import plotly.express as px
 import streamlit as st
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from core.engine.status import (
-    STATUS_ORDEM,
-    NOME_TRECHO,
-    carregar_progresso,
-    carregar_alertas,
-)
+from core.engine.status import STATUS_ORDEM
 from core.exporters.excel_exporter import exportar_lista_mestra, exportar_alertas
-from core.services.importacao_service import ImportacaoService
+from core.services.dashboard_service import DashboardService
 from app.session import require_contrato, sidebar_contexto
 from core.auth.permissions import widget_seletor_perfil
 
@@ -31,40 +26,32 @@ STATUS_COR: dict[str, str] = {
     "Aprovado":      "#27ae60",
 }
 
-_importacao_service = ImportacaoService()
-
-# ---------------------------------------------------------------------------
-# Acesso a dados
-# ---------------------------------------------------------------------------
-
-def _ultima_importacao(contrato_id: int) -> dict | None:
-    return _importacao_service.obter_ultima_importacao(contrato_id)
+_service = DashboardService()
 
 
 # ---------------------------------------------------------------------------
 # Componentes de UI
 # ---------------------------------------------------------------------------
 
-def _kpis(df: pd.DataFrame):
-    total = len(df)
-    counts = df["status_atual"].value_counts()
-    ja_aprovados = int(df["ja_aprovado"].sum())
-
+def _kpis(metricas: dict):
     c0, c1, c2, c3, c4, c5 = st.columns(6)
-    c0.metric("Total Previstos", total)
+    c0.metric("Total Previstos", metricas["total_previstos"])
     for col, status in zip([c1, c2, c3, c4], STATUS_ORDEM):
-        n = int(counts.get(status, 0))
-        pct = n / total * 100 if total else 0
+        n = metricas["contagem_por_status"][status]
+        pct = metricas["percentual_por_status"][status]
         col.metric(status, n, f"{pct:.1f}%")
-    pct_ap = ja_aprovados / total * 100 if total else 0
-    c5.metric("Já Aprovados ✓", ja_aprovados, f"{pct_ap:.1f}%",
-              help="Documentos com ao menos uma revisão aprovada (inclusive com revisões posteriores em curso)")
+    c5.metric(
+        "Já Aprovados ✓",
+        metricas["ja_aprovados"],
+        f"{metricas['percentual_avanco']:.1f}%",
+        help="Documentos com ao menos uma revisão aprovada (inclusive com revisões posteriores em curso)",
+    )
 
 
-def _progresso_e_pizza_geral(df: pd.DataFrame):
-    total = len(df)
-    ja_aprovados = int(df["ja_aprovado"].sum())
-    pct = ja_aprovados / total * 100 if total else 0
+def _progresso_e_pizza_geral(metricas: dict, distribuicao: dict):
+    total = metricas["total_previstos"]
+    ja_aprovados = metricas["ja_aprovados"]
+    pct = metricas["percentual_avanco"]
 
     col_bar, col_pizza = st.columns([2, 1])
 
@@ -74,23 +61,8 @@ def _progresso_e_pizza_geral(df: pd.DataFrame):
         )
         st.progress(pct / 100)
 
-        # Barra empilhada por trecho — status atual da última revisão
-        contagem = (
-            df.groupby(["nome_trecho", "status_atual"])
-            .size()
-            .reset_index(name="qtd")
-        )
-        trechos = contagem["nome_trecho"].unique().tolist()
-        completo = pd.MultiIndex.from_product(
-            [trechos, STATUS_ORDEM], names=["nome_trecho", "status_atual"]
-        )
-        contagem = (
-            contagem.set_index(["nome_trecho", "status_atual"])
-            .reindex(completo, fill_value=0)
-            .reset_index()
-        )
         fig_bar = px.bar(
-            contagem,
+            distribuicao["por_trecho"],
             x="nome_trecho",
             y="qtd",
             color="status_atual",
@@ -107,13 +79,7 @@ def _progresso_e_pizza_geral(df: pd.DataFrame):
         st.plotly_chart(fig_bar, use_container_width=True)
 
     with col_pizza:
-        contagem_geral = (
-            df["status_atual"]
-            .value_counts()
-            .reindex(STATUS_ORDEM, fill_value=0)
-            .reset_index()
-        )
-        contagem_geral.columns = ["status_atual", "qtd"]
+        contagem_geral = distribuicao["geral"]
         contagem_geral = contagem_geral[contagem_geral["qtd"] > 0]
         fig_geral = px.pie(
             contagem_geral,
@@ -131,25 +97,16 @@ def _progresso_e_pizza_geral(df: pd.DataFrame):
         st.plotly_chart(fig_geral, use_container_width=True)
 
 
-def _pizzas_por_trecho(df: pd.DataFrame):
-    trechos = sorted(df["trecho"].unique())
-    if not trechos:
+def _pizzas_por_trecho(progresso_por_trecho: list[dict]):
+    if not progresso_por_trecho:
         return
 
     st.subheader("Por Trecho")
-    cols = st.columns(len(trechos))
+    cols = st.columns(len(progresso_por_trecho))
 
-    for col, trecho in zip(cols, trechos):
-        df_t = df[df["trecho"] == trecho]
-        nome = NOME_TRECHO.get(trecho, trecho)
-
-        contagem = (
-            df_t["status_atual"]
-            .value_counts()
-            .reindex(STATUS_ORDEM, fill_value=0)
-            .reset_index()
-        )
-        contagem.columns = ["status_atual", "qtd"]
+    for col, item in zip(cols, progresso_por_trecho):
+        nome = item["nome_trecho"]
+        contagem = item["contagem_status"]
         contagem = contagem[contagem["qtd"] > 0]
 
         fig = px.pie(
@@ -167,20 +124,19 @@ def _pizzas_por_trecho(df: pd.DataFrame):
         )
         col.plotly_chart(fig, use_container_width=True)
 
-        # Métricas resumidas embaixo de cada pizza — usa ja_aprovado (histórico)
-        total_t = len(df_t)
-        aprovados_t = int(df_t["ja_aprovado"].sum())
-        pct_t = aprovados_t / total_t * 100 if total_t else 0
+        total_t = item["total"]
+        aprovados_t = item["ja_aprovados"]
+        pct_t = item["percentual"]
         col.progress(pct_t / 100, text=f"{pct_t:.0f}% já aprovado ({aprovados_t}/{total_t})")
 
 
-def _alertas(alertas: list[dict], dias: int):
+def _alertas(alertas: list[dict], dias: int, resumo: dict):
     if not alertas:
         return
 
-    n_analise = sum(1 for a in alertas if a["tipo"] == "analise_prolongada")
-    n_sem     = sum(1 for a in alertas if a["tipo"] == "sem_inicio")
-    titulo    = f"{len(alertas)} alerta(s)"
+    n_analise = resumo["analise_prolongada"]
+    n_sem     = resumo["sem_inicio"]
+    titulo    = f"{resumo['total']} alerta(s)"
     if n_analise:
         titulo += f" — {n_analise} em análise prolongada (>{dias} dias)"
     if n_sem:
@@ -252,7 +208,7 @@ sidebar_contexto()
 
 st.title(contrato["nome"])
 
-ultima = _ultima_importacao(contrato["id"])
+ultima = _service.obter_ultima_importacao(contrato["id"])
 if ultima:
     st.caption(
         f"Última importação: **{ultima['arquivo_importado']}** "
@@ -260,7 +216,7 @@ if ultima:
         f"{ultima['total_novos']} novos, {ultima['total_atualizados']} atualizados"
     )
 
-df = carregar_progresso(contrato["id"])
+df = _service.carregar_progresso(contrato["id"])
 
 if df.empty:
     st.info(
@@ -284,7 +240,10 @@ with st.sidebar:
     st.divider()
     st.markdown("### Exportar")
 
-alertas = carregar_alertas(contrato["id"], dias_analise=dias_alerta)
+alertas = _service.carregar_alertas(contrato["id"], dias_analise=dias_alerta)
+resumo_pendencias = _service.carregar_pendencias_resumidas(
+    contrato["id"], dias_analise=dias_alerta, alertas=alertas,
+)
 
 with st.sidebar:
     nome_arquivo_lm = contrato["nome"].replace(" ", "_")
@@ -305,13 +264,17 @@ with st.sidebar:
         )
 
 if alertas:
-    _alertas(alertas, dias_alerta)
+    _alertas(alertas, dias_alerta, resumo_pendencias)
     st.divider()
 
-_kpis(df)
+metricas = _service.carregar_metricas_principais(contrato["id"], df)
+distribuicao = _service.carregar_distribuicao_status(contrato["id"], df)
+por_trecho = _service.carregar_progresso_por_trecho(contrato["id"], df)
+
+_kpis(metricas)
 st.divider()
-_progresso_e_pizza_geral(df)
+_progresso_e_pizza_geral(metricas, distribuicao)
 st.divider()
-_pizzas_por_trecho(df)
+_pizzas_por_trecho(por_trecho)
 st.divider()
 _tabela_documentos(df)

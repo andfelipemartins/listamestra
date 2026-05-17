@@ -18,7 +18,10 @@ from typing import Optional
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from core.engine.disciplinas import SITUACOES_APROVADO
+from core.repositories.revisao_repository import RevisaoRepository
 from db.connection import get_connection
+
+_revisao_repository = RevisaoRepository()
 
 
 def recalcular_emissao_inicial(conn, documento_id: int) -> None:
@@ -26,19 +29,7 @@ def recalcular_emissao_inicial(conn, documento_id: int) -> None:
     Atualiza revisoes.emissao_inicial para todas as revisões do documento.
     Deve ser chamada após qualquer INSERT ou UPDATE em revisoes.
     """
-    rows = conn.execute(
-        """
-        SELECT id, data_emissao, situacao
-        FROM revisoes
-        WHERE documento_id = ?
-        ORDER BY
-            CASE WHEN data_emissao IS NULL THEN 1 ELSE 0 END,
-            data_emissao ASC,
-            revisao ASC,
-            versao ASC
-        """,
-        (documento_id,),
-    ).fetchall()
+    rows = _revisao_repository.listar_para_recalculo(documento_id, conn=conn)
 
     n = len(rows)
     for i, row in enumerate(rows):
@@ -53,10 +44,7 @@ def recalcular_emissao_inicial(conn, documento_id: int) -> None:
         else:
             label = f"REVISÃO {i}"
 
-        conn.execute(
-            "UPDATE revisoes SET emissao_inicial = ? WHERE id = ?",
-            (label, row["id"]),
-        )
+        _revisao_repository.atualizar_emissao_inicial(row["id"], label, conn=conn)
 
 
 def recalcular_por_documento_id(documento_id: int, db_path: Optional[str] = None) -> None:

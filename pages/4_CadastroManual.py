@@ -17,11 +17,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from core.parsers.registry import ParserRegistry
 from core.parsers.codigo_builder import parsear_lista_codigos, mesclar_codigos
-from core.importers.cadastro_importer import salvar_documento_revisao
 from core.engine.disciplinas import MODALIDADES, SITUACOES
+from core.services.cadastro_service import CadastroService
 from app.session import require_contrato, sidebar_contexto
 from core.auth.permissions import require_permission, widget_seletor_perfil
-from db.connection import get_connection
 
 st.set_page_config(
     page_title="Cadastro Manual — SCLME",
@@ -38,37 +37,10 @@ contrato = require_contrato()
 require_permission("create_document")
 
 _registry = ParserRegistry()
+_service = CadastroService(parser_registry=_registry)
 
 st.caption(f"Contrato: **{contrato['nome']}**")
 st.divider()
-
-# ---------------------------------------------------------------------------
-# Acesso a dados
-# ---------------------------------------------------------------------------
-
-def _buscar_documento(contrato_id: int, codigo: str) -> Optional[dict]:
-    with get_connection() as conn:
-        row = conn.execute(
-            "SELECT * FROM documentos WHERE contrato_id = ? AND codigo = ?",
-            (contrato_id, codigo),
-        ).fetchone()
-    return dict(row) if row else None
-
-
-def _listar_revisoes(documento_id: int) -> list[dict]:
-    with get_connection() as conn:
-        rows = conn.execute(
-            """
-            SELECT label_revisao, versao, emissao_inicial, data_emissao, situacao
-            FROM revisoes
-            WHERE documento_id = ?
-            ORDER BY
-                CASE WHEN data_emissao IS NULL THEN 1 ELSE 0 END,
-                data_emissao ASC, revisao ASC, versao ASC
-            """,
-            (documento_id,),
-        ).fetchall()
-    return [dict(r) for r in rows]
 
 
 # ---------------------------------------------------------------------------
@@ -314,11 +286,11 @@ st.divider()
 # permitindo checar campos obrigatórios em tempo real para habilitar/desabilitar o botão)
 for codigo, parsed in list(validos):
     ks       = _ks(codigo)
-    existing = _buscar_documento(contrato["id"], codigo)
+    existing = _service.buscar_documento_existente(contrato["id"], codigo)
     trecho   = parsed.extras.get("nome_trecho", "—")
     header   = f"📄 {codigo} — {parsed.tipo} | {trecho}"
     if existing:
-        revisoes_ex = _listar_revisoes(existing["id"])
+        revisoes_ex = _service.listar_revisoes_existentes(existing["id"])
         header += f" *(já existe — {len(revisoes_ex)} revisão(ões))*"
 
     # Botão de remoção fica fora do expander, sempre visível à direita do cabeçalho
@@ -366,14 +338,14 @@ salvar = st.button(label_btn, type="primary", disabled=not pode_salvar, use_cont
 if salvar:
     resultados = []
     for codigo, _ in validos:
-        msg = salvar_documento_revisao(
+        resultado = _service.cadastrar_documento_manual(
             contrato["id"],
             codigo,
             _ler_doc_fields(codigo),
             _ler_rev_fields(codigo),
             _ler_grds(codigo),
         )
-        resultados.append((codigo, msg))
+        resultados.append((codigo, resultado.mensagem))
 
     st.session_state["cm_resultados"] = resultados
     st.session_state["cm_salvo"]      = True

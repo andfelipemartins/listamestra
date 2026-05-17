@@ -16,82 +16,21 @@ from db.connection import get_connection
 from core.engine.status import STATUS_ORDEM, NOME_TRECHO, classificar_status
 from core.engine.disciplinas import ESTRUTURA
 from core.exporters.excel_exporter import exportar_historico_revisoes
-from core.formatacao import fmt_inteiro, fmt_data, disciplina_do_codigo, filtrar_documentos
-from core.parsers.registry import ParserRegistry
+from core.formatacao import fmt_inteiro, fmt_data, filtrar_documentos
+from core.repositories.documento_repository import DocumentoRepository
+from core.repositories.revisao_repository import RevisaoRepository
+from core.services.documento_service import DocumentoService
 from app.session import require_contrato, sidebar_contexto
 from core.auth.permissions import widget_seletor_perfil, require_permission
 
-_registry = ParserRegistry()
-
-
-def _trecho_do_codigo(codigo: str) -> str:
-    """Deriva o trecho a partir do código documental via parser."""
-    try:
-        resultado = _registry.parse(codigo)
-        if hasattr(resultado, "extras"):
-            return resultado.extras.get("trecho", "")
-    except Exception:
-        pass
-    return ""
+_documento_repository = DocumentoRepository()
+_revisao_repository = RevisaoRepository()
+_service = DocumentoService(_documento_repository, _revisao_repository)
 
 
 @st.cache_data(ttl=300)
 def _listar_documentos_enriquecidos(contrato_id: int) -> list[dict]:
-    with get_connection() as conn:
-        rows = conn.execute(
-            """
-            SELECT d.id, d.codigo, d.titulo, d.tipo, d.trecho,
-                   d.modalidade, d.disciplina, d.contrato_id,
-                   r.situacao, r.data_emissao
-            FROM documentos d
-            LEFT JOIN revisoes r
-                   ON r.documento_id = d.id AND r.ultima_revisao = 1
-            WHERE d.contrato_id = ?
-            ORDER BY d.trecho, d.codigo
-            """,
-            (contrato_id,),
-        ).fetchall()
-    docs = [dict(r) for r in rows]
-    for doc in docs:
-        trecho = doc.get("trecho") or ""
-        doc["nome_trecho"] = NOME_TRECHO.get(trecho, trecho)
-        disc = doc.get("disciplina") or disciplina_do_codigo(doc["codigo"]) or ""
-        doc["disciplina_display"] = disc
-        doc["disciplina_desc"] = ESTRUTURA.get(disc, "")
-        doc["status_atual"] = classificar_status(doc.get("situacao"), doc.get("data_emissao"))
-    return docs
-
-
-def _carregar_documento(doc_id: int) -> dict | None:
-    with get_connection() as conn:
-        row = conn.execute(
-            "SELECT * FROM documentos WHERE id = ?",
-            (doc_id,),
-        ).fetchone()
-    return dict(row) if row else None
-
-
-def _carregar_revisoes(doc_id: int) -> list[dict]:
-    with get_connection() as conn:
-        rows = conn.execute(
-            """
-            SELECT r.id, r.revisao, r.versao, r.label_revisao, r.emissao_inicial,
-                   r.data_elaboracao, r.data_emissao, r.data_analise,
-                   r.dias_elaboracao, r.dias_analise,
-                   r.situacao_real, r.situacao, r.retorno,
-                   r.emissao_circular, r.analise_circular, r.data_circular,
-                   r.ultima_revisao, r.origem, r.criado_em
-            FROM revisoes r
-            WHERE r.documento_id = ?
-            ORDER BY
-                CASE WHEN r.data_emissao IS NULL THEN 1 ELSE 0 END,
-                r.data_emissao ASC,
-                r.revisao ASC,
-                r.versao ASC
-            """,
-            (doc_id,),
-        ).fetchall()
-    return [dict(r) for r in rows]
+    return _service.listar_documentos_enriquecidos(contrato_id)
 
 
 def _carregar_grds(revisao_ids: list[int]) -> dict[int, list[dict]]:
@@ -129,19 +68,6 @@ def _carregar_arquivos(doc_id: int) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def _previsto(contrato_id: int, codigo: str) -> dict | None:
-    with get_connection() as conn:
-        row = conn.execute(
-            """
-            SELECT titulo, tipo, disciplina, trecho
-            FROM documentos_previstos
-            WHERE contrato_id = ? AND codigo = ? AND ativo = 1
-            """,
-            (contrato_id, codigo),
-        ).fetchone()
-    return dict(row) if row else None
-
-
 # ---------------------------------------------------------------------------
 # Componentes de UI
 # ---------------------------------------------------------------------------
@@ -162,15 +88,7 @@ def _badge(status: str) -> str:
     )
 
 
-def _ficha(doc: dict, contrato_id: int):
-    status_atual = "—"
-    revisoes = _carregar_revisoes(doc["id"])
-    ultima = next((r for r in revisoes if r["ultima_revisao"]), None)
-    if ultima:
-        status_atual = classificar_status(ultima.get("situacao"), ultima.get("data_emissao"))
-
-    previsto = _previsto(contrato_id, doc["codigo"])
-
+def _ficha(doc: dict, revisoes: list[dict], status_atual: str, previsto: dict | None):
     st.markdown(
         f"### {doc['codigo']}"
         f"&nbsp;&nbsp;{_badge(status_atual)}",
@@ -182,31 +100,16 @@ def _ficha(doc: dict, contrato_id: int):
     col1, col2, col3 = st.columns(3)
     with col1:
         st.markdown(f"**Tipo:** {doc.get('tipo') or '—'}")
-        trecho = (
-            doc.get("trecho")
-            or (previsto.get("trecho") if previsto else None)
-            or _trecho_do_codigo(doc["codigo"])
-            or ""
-        )
-        if trecho:
-            nome_t = NOME_TRECHO.get(trecho, trecho)
-            st.markdown(f"**Trecho:** {nome_t} ({trecho})")
+        trecho_display = _service.obter_trecho_exibicao(doc, previsto)
+        if trecho_display:
+            st.markdown(f"**Trecho:** {trecho_display}")
         else:
             st.markdown("**Trecho:** —")
         st.markdown(f"**Modalidade:** {doc.get('modalidade') or '—'}")
     with col2:
-        disc = (
-            doc.get("disciplina")
-            or (previsto.get("disciplina") if previsto else None)
-            or disciplina_do_codigo(doc["codigo"])
-            or ""
-        )
-        if disc:
-            desc_disc = ESTRUTURA.get(disc, "")
-            if desc_disc:
-                st.markdown(f"**Estrutura:** {disc} — {desc_disc}")
-            else:
-                st.markdown(f"**Estrutura:** {disc}")
+        disc_display = _service.obter_disciplina_exibicao(doc, previsto)
+        if disc_display:
+            st.markdown(f"**Estrutura:** {disc_display}")
         else:
             st.markdown("**Estrutura:** —")
         st.markdown(f"**Fase:** {fmt_inteiro(doc.get('fase'))}")
@@ -216,8 +119,6 @@ def _ficha(doc: dict, contrato_id: int):
         st.markdown(f"**Origem:** {doc.get('origem') or '—'}")
         criado = (doc.get("criado_em") or "")[:16].replace("T", " ")
         st.markdown(f"**Registrado em:** {criado or '—'}")
-
-    return revisoes
 
 
 def _linha_do_tempo(revisoes: list[dict]):
@@ -232,13 +133,7 @@ def _linha_do_tempo(revisoes: list[dict]):
     for rev in revisoes:
         emissao = rev.get("emissao_inicial") or f"Rev{rev.get('revisao', '?')}"
         status_rev = classificar_status(rev.get("situacao"), rev.get("data_emissao"))
-        cor = _STATUS_COLOR.get(status_rev, "#aaa")
 
-        label_header = (
-            f"**{emissao}**"
-            f"&nbsp;&nbsp;{_badge(status_rev)}"
-            f"&nbsp;&nbsp;<small style='color:#888'>{rev.get('data_emissao') or 'sem data'}</small>"
-        )
         data_emissao_fmt = fmt_data(rev.get("data_emissao")) if rev.get("data_emissao") else "sem data"
         with st.expander(f"{emissao} — {data_emissao_fmt} — {status_rev}", expanded=rev.get("ultima_revisao") == 1):
             c1, c2, c3 = st.columns(3)
@@ -315,18 +210,20 @@ def _exibir_tabela(filtrados: list[dict], busca: str) -> None:
         legenda += f" Mostrando os primeiros {LIMITE_RESULTADOS} — refine a busca para ver mais."
     st.caption(legenda)
 
-    linhas = [
-        {
-            "Código":    doc["codigo"],
-            "Tipo":      doc.get("tipo") or "—",
-            "Trecho":    doc.get("nome_trecho") or doc.get("trecho") or "—",
-            "Estrutura": doc.get("disciplina_display") or "—",
-            "Status":    doc.get("status_atual") or "—",
-            "Título":    doc.get("titulo") or "(sem título)",
-        }
-        for doc in exibir
-    ]
-    df = pd.DataFrame(linhas)
+    resumos = [_service.montar_resumo_documento(doc) for doc in exibir]
+    df = pd.DataFrame(
+        [
+            {
+                "Código":    r["codigo"],
+                "Tipo":      r["tipo"],
+                "Trecho":    r["nome_trecho"],
+                "Estrutura": r["disciplina_display"],
+                "Status":    r["status_atual"],
+                "Título":    r["titulo"],
+            }
+            for r in resumos
+        ]
+    )
 
     event = st.dataframe(
         df,
@@ -386,10 +283,14 @@ _exibir_tabela(filtrados, busca)
 
 doc_id = st.session_state.get("doc_pagina_id")
 if doc_id:
-    doc = _carregar_documento(doc_id)
-    if doc and doc.get("contrato_id") == contrato["id"]:
+    detalhe = _service.carregar_detalhe_documento(doc_id)
+    if detalhe and detalhe["documento"].get("contrato_id") == contrato["id"]:
+        doc = detalhe["documento"]
+        revisoes = detalhe["revisoes"]
+        previsto = _service.buscar_previsto(contrato["id"], doc["codigo"])
+
         st.divider()
-        revisoes = _ficha(doc, contrato["id"])
+        _ficha(doc, revisoes, detalhe["status_atual"], previsto)
 
         with st.sidebar:
             st.markdown("### Exportar")

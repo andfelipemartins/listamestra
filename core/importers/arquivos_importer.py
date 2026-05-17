@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from db.connection import get_connection
 from core.parsers.arquivo_parser import parsear_arquivo, ArquivoParseado, ErroParsearArquivo
 from core.engine.preview_arquivos import ResultadoPreview
+from core.repositories.documento_repository import DocumentoRepository
 from core.repositories.importacao_repository import ImportacaoRepository
 
 
@@ -43,6 +44,7 @@ class ArquivosImporter:
     def __init__(self, db_path: Optional[str] = None):
         self._db_path = db_path
         self._importacao_repository = ImportacaoRepository(db_path)
+        self._documento_repository = DocumentoRepository(db_path)
 
     def importar_texto(
         self,
@@ -135,11 +137,9 @@ class ArquivosImporter:
             resultado.ja_existentes += 1
 
     def _buscar_documento(self, conn, contrato_id: int, codigo: str) -> Optional[int]:
-        row = conn.execute(
-            "SELECT id FROM documentos WHERE contrato_id = ? AND codigo = ?",
-            (contrato_id, codigo),
-        ).fetchone()
-        return row[0] if row else None
+        return self._documento_repository.buscar_id_por_codigo(
+            contrato_id, codigo, conn=conn
+        )
 
     def _registrar_inconsistencia(self, conn, importacao_id, documento_codigo, tipo, descricao):
         conn.execute(

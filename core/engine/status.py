@@ -17,6 +17,7 @@ from typing import Optional
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+from core.repositories.documento_repository import DocumentoRepository
 from db.connection import get_connection
 
 # ---------------------------------------------------------------------------
@@ -113,16 +114,9 @@ def carregar_alertas(
                 })
 
         # Previstos sem nenhuma revisão
-        rows_sem = conn.execute(
-            """
-            SELECT dp.codigo, COALESCE(dp.titulo, '') AS titulo
-            FROM documentos_previstos dp
-            LEFT JOIN documentos d ON d.contrato_id = dp.contrato_id AND d.codigo = dp.codigo
-            LEFT JOIN revisoes r ON r.documento_id = d.id
-            WHERE dp.contrato_id = ? AND dp.ativo = 1 AND r.id IS NULL
-            """,
-            (contrato_id,),
-        ).fetchall()
+        rows_sem = DocumentoRepository(db_path).listar_documentos_sem_revisao(
+            contrato_id, conn=conn
+        )
 
         for row in rows_sem:
             alertas.append({

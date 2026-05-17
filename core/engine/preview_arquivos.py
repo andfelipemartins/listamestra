@@ -16,6 +16,9 @@ from typing import Dict, List, Optional
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from db.connection import get_connection
 from core.parsers.arquivo_parser import parsear_arquivo, ArquivoParseado, ErroParsearArquivo
+from core.repositories.documento_repository import DocumentoRepository
+
+_documento_repository = DocumentoRepository()
 
 
 @dataclass
@@ -137,15 +140,6 @@ def _ja_existe(conn, contrato_id: int, nome_arquivo: str) -> bool:
 
 
 def _buscar_documento(conn, contrato_id: int, codigo: str) -> Optional[dict]:
-    row = conn.execute(
-        """
-        SELECT d.id,
-               COALESCE(d.titulo, dp.titulo) AS titulo
-        FROM documentos d
-        LEFT JOIN documentos_previstos dp
-               ON dp.contrato_id = d.contrato_id AND dp.codigo = d.codigo
-        WHERE d.contrato_id = ? AND d.codigo = ?
-        """,
-        (contrato_id, codigo),
-    ).fetchone()
-    return dict(row) if row else None
+    return _documento_repository.buscar_documento_com_titulo_previsto(
+        contrato_id, codigo, conn=conn
+    )

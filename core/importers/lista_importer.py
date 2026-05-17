@@ -25,7 +25,9 @@ from typing import Optional
 from db.connection import get_connection
 from core.parsers.registry import ParserRegistry
 from core.engine.emissao_inicial import recalcular_emissao_inicial
+from core.repositories.documento_repository import DocumentoRepository
 from core.repositories.importacao_repository import ImportacaoRepository
+from core.repositories.revisao_repository import RevisaoRepository
 
 # Posições das colunas (índice 0) na aba "Lista de documentos"
 # A planilha tem dois níveis de cabeçalho: linha 1 = grupos (ALYA, METRÔ...),
@@ -101,6 +103,8 @@ class ListaImporter:
         self._db_path = db_path
         self._registry = ParserRegistry()
         self._importacao_repository = ImportacaoRepository(db_path)
+        self._documento_repository = DocumentoRepository(db_path)
+        self._revisao_repository = RevisaoRepository(db_path)
 
     def importar(self, arquivo: str, contrato_id: int) -> ResultadoImportacao:
         df = self._ler_planilha(arquivo)
@@ -294,42 +298,14 @@ class ListaImporter:
         return True
 
     def _recalcular_emissao_inicial(self, conn, contrato_id: int) -> None:
-        doc_ids = conn.execute(
-            "SELECT id FROM documentos WHERE contrato_id = ?",
-            (contrato_id,),
-        ).fetchall()
-        for row in doc_ids:
-            recalcular_emissao_inicial(conn, row["id"])
+        for doc_id in self._documento_repository.listar_ids_por_contrato(
+            contrato_id, conn=conn
+        ):
+            recalcular_emissao_inicial(conn, doc_id)
 
     def _marcar_ultimas_revisoes(self, conn, contrato_id):
-        conn.execute(
-            """
-            UPDATE revisoes SET ultima_revisao = 0
-            WHERE documento_id IN (SELECT id FROM documentos WHERE contrato_id = ?)
-            """,
-            (contrato_id,),
-        )
-        conn.execute(
-            """
-            UPDATE revisoes SET ultima_revisao = 1
-            WHERE id IN (
-                SELECT r.id
-                FROM revisoes r
-                JOIN documentos d ON r.documento_id = d.id
-                WHERE d.contrato_id = ?
-                  AND r.id = (
-                      SELECT r2.id
-                      FROM revisoes r2
-                      WHERE r2.documento_id = r.documento_id
-                      ORDER BY
-                          CASE WHEN r2.data_emissao IS NULL THEN 1 ELSE 0 END ASC,
-                          r2.data_emissao DESC,
-                          r2.id DESC
-                      LIMIT 1
-                  )
-            )
-            """,
-            (contrato_id,),
+        self._revisao_repository.recalcular_ultimas_por_contrato(
+            contrato_id, conn=conn
         )
 
     # --- controle de importação ---
