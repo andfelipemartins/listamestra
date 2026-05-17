@@ -141,7 +141,11 @@ Nao faz parte do escopo imediato:
 
 ## Direcao do Produto
 
-A direcao atual e retomar os marcos funcionais (Marco 11 em diante) com a consolidacao arquitetural concluida.
+Com a consolidacao arquitetural concluida (Marco 10.6), o proximo passo e o Marco 10.7 — Revisao do Cadastro Manual e Fluxo de Entrada.
+
+O Marco 10.7 melhora a experiencia operacional do lancamento de documentos antes de avancar para novos grandes fluxos (Central de Pendencias, Edicao, GRDs). O objetivo e reduzir erro humano e retrabalho no ponto de entrada mais critico: o cadastro manual de documentos tecnicos.
+
+Apos o Marco 10.7, o roadmap retoma os marcos funcionais (Marco 11 em diante).
 
 ## Resultado do Marco 10.6
 

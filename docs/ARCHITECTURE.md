@@ -55,6 +55,8 @@ Contem as telas Streamlit:
 
 Hoje as paginas fazem mais do que deveriam: capturam input, exibem output, acessam banco, montam payloads e aplicam parte da regra de aplicacao.
 
+O Marco 10.7 refatora `pages/4_CadastroManual.py` para introduzir entrada segmentada de codigo, campos derivados somente leitura, preview de confirmacao e suporte a lote, sem alterar o `CadastroService`.
+
 Diretriz futura: paginas devem funcionar como camada de UI/controller leve.
 
 ### `app/`

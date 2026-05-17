@@ -22,6 +22,7 @@ Este roadmap registra a sequencia de marcos do SCLME e explicita a insercao do M
 | 9 | Motor de status | Calcular status, alertas e aprovacao historica | Concluido |
 | 10 | Exportacao de relatorios | Gerar arquivos Excel de apoio | Concluido |
 | 10.6 | Consolidacao Arquitetural Pre-Produto | Reduzir acoplamento e preparar crescimento | Concluido |
+| 10.7 | Revisao do Cadastro Manual e Fluxo de Entrada | Transformar o Cadastro Manual em fluxo seguro e controlado | Pendente |
 
 ## Marco 10.6 - Consolidacao Arquitetural Pre-Produto
 
@@ -61,9 +62,60 @@ O Marco 10.6 entregou:
 - paginas `1_Dashboard.py`, `4_CadastroManual.py` e `5_Documento.py` refatoradas para consumir exclusivamente as novas camadas;
 - suite de testes com 570 testes passando.
 
-## Marcos Apos o 10.6
+## Marco 10.7 - Revisao do Cadastro Manual e Fluxo de Entrada
 
-Com a consolidacao arquitetural concluida, o roadmap funcional pode ser retomado:
+### Objetivo
+
+Transformar o Cadastro Manual em um fluxo mais seguro, controlado e produtivo para lancamento de documentos tecnicos.
+
+### Motivacao
+
+O Cadastro Manual atual e fragil para uso operacional:
+
+- o codigo documental e preenchido de forma livre, sem validacao segmentada;
+- campos derivados do codigo (tipo, trecho, estrutura/disciplina, etapa, sequencial) sao digitados manualmente, gerando erros de consistencia;
+- nao existe previa consolidada antes de salvar;
+- nao e possivel cadastrar multiplos documentos em uma unica operacao;
+- a interface permite que erros humanos passem sem bloqueio.
+
+### Resultado Esperado
+
+O Marco 10.7 devera entregar:
+
+- componente de entrada segmentada do codigo documental;
+- opcao de colar codigo completo e decompor automaticamente via parser existente;
+- campos derivados do codigo (tipo, trecho, disciplina, etapa, sequencial) exibidos como somente leitura;
+- preview consolidado dos dados antes de salvar;
+- confirmacao explicita antes da persistencia;
+- cadastro em lote (multiplos documentos em uma unica operacao);
+- reaproveitamento do `CadastroService` existente;
+- testes para entrada segmentada, preview e lote.
+
+### Sub-marcos
+
+| Sub-marco | Descricao |
+| --- | --- |
+| 10.7.1 | Documentar o Marco 10.7 |
+| 10.7.2 | Criar componente de codigo segmentado |
+| 10.7.3 | Travar campos derivados do codigo |
+| 10.7.4 | Criar preview antes de salvar |
+| 10.7.5 | Criar cadastro em lote |
+| 10.7.6 | Ajustar UX visual do Cadastro Manual |
+| 10.7.7 | Atualizar testes e documentacao |
+
+### Fora do Escopo
+
+- Central de Pendencias;
+- GRDs;
+- PDF;
+- Snapshots mensais;
+- Django ou SQLAlchemy;
+- Nova autenticacao;
+- Alteracao de schema, salvo se estritamente necessario e justificado.
+
+## Marcos Apos o 10.7
+
+Com a revisao do fluxo de entrada concluida, o roadmap funcional de novas funcionalidades pode avancar:
 
 | Marco | Nome | Objetivo |
 | --- | --- | --- |

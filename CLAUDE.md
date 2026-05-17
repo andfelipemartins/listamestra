@@ -193,6 +193,7 @@ with get_connection() as conn:
 | 9 | Motor de status | ✅ Concluído |
 | 10 | Exportação de relatórios | ✅ Concluído |
 | 10.6 | Consolidação Arquitetural Pré-Produto | ✅ Concluído |
+| 10.7 | Revisão do Cadastro Manual e Fluxo de Entrada | 🔲 Pendente |
 | 11 | Central de Pendências e Edição Operacional | 🔲 Pendente |
 | 12 | Página de Edição e Correção de Documento | 🔲 Pendente |
 | 13 | Conciliação Assistida | 🔲 Pendente |
@@ -207,6 +208,17 @@ with get_connection() as conn:
 ---
 
 ## Descrição dos Marcos Futuros
+
+### Marco 10.7 — Revisão do Cadastro Manual e Fluxo de Entrada
+Transformar o Cadastro Manual em um fluxo mais seguro, controlado e produtivo para lançamento de documentos técnicos.
+
+**Problemas que resolve:** código documental preenchido de forma livre; campos derivados digitados manualmente; ausência de prévia antes de salvar; impossibilidade de cadastrar múltiplos documentos em uma operação; interface que permite erros sem bloqueio.
+
+**Sub-marcos:** 10.7.1 Documentar o Marco 10.7 · 10.7.2 Componente de código segmentado · 10.7.3 Travar campos derivados · 10.7.4 Preview antes de salvar · 10.7.5 Cadastro em lote · 10.7.6 UX visual · 10.7.7 Testes e documentação.
+
+**Entregas:** entrada segmentada do código; opção de colar código completo e decompor via parser; campos derivados (tipo, trecho, disciplina, etapa, sequencial) somente leitura; preview consolidado com confirmação explícita; cadastro em lote; reaproveitamento do `CadastroService`; testes de segmentação, preview e lote.
+
+**Fora do escopo:** Central de Pendências, GRDs, PDF, Snapshots, Django, SQLAlchemy, nova autenticação, alteração de schema sem justificativa.
 
 ### Marco 11 — Central de Pendências e Edição Operacional
 Página central onde o usuário vê tudo que exige ação e consegue tratar sem sair do app.
