@@ -21,7 +21,7 @@ Este roadmap registra a sequencia de marcos do SCLME e explicita a insercao do M
 | 8 | Cadastro manual | Permitir cadastro manual de documentos e revisoes | Concluido |
 | 9 | Motor de status | Calcular status, alertas e aprovacao historica | Concluido |
 | 10 | Exportacao de relatorios | Gerar arquivos Excel de apoio | Concluido |
-| 10.6 | Consolidacao Arquitetural Pre-Produto | Reduzir acoplamento e preparar crescimento | Em consolidacao |
+| 10.6 | Consolidacao Arquitetural Pre-Produto | Reduzir acoplamento e preparar crescimento | Concluido |
 
 ## Marco 10.6 - Consolidacao Arquitetural Pre-Produto
 
@@ -40,19 +40,30 @@ O MVP ja prova valor operacional, mas a analise arquitetural identificou riscos:
 - ausencia de services/repositories;
 - riscos para multiusuario, autenticacao e deploy corporativo.
 
-### Resultado Esperado
+### Resultado Entregue
 
-O Marco 10.6 deve entregar:
+O Marco 10.6 entregou:
 
-- documentacao de arquitetura atual;
-- visao de produto;
-- ADRs sobre stack atual, Django futuro e services/repositories;
-- ordem recomendada de refatoracao;
-- alinhamento de que novas features grandes devem aguardar reducao de acoplamento.
+- documentacao de arquitetura atual (`docs/ARCHITECTURE.md`);
+- visao de produto (`docs/PRODUCT_VISION.md`);
+- ADRs sobre stack atual, Django futuro e services/repositories (`docs/adr/`);
+- camada completa de repositories implementada e testada:
+  - `ContractRepository`;
+  - `ImportacaoRepository`;
+  - `DocumentoRepository`;
+  - `RevisaoRepository`;
+- camada completa de services implementada e testada:
+  - `ContractService`;
+  - `ImportacaoService`;
+  - `DocumentoService`;
+  - `CadastroService`;
+  - `DashboardService`;
+- paginas `1_Dashboard.py`, `4_CadastroManual.py` e `5_Documento.py` refatoradas para consumir exclusivamente as novas camadas;
+- suite de testes com 570 testes passando.
 
 ## Marcos Apos o 10.6
 
-Depois do Marco 10.6, o roadmap funcional pode ser retomado:
+Com a consolidacao arquitetural concluida, o roadmap funcional pode ser retomado:
 
 | Marco | Nome | Objetivo |
 | --- | --- | --- |
@@ -62,20 +73,11 @@ Depois do Marco 10.6, o roadmap funcional pode ser retomado:
 | 14 | GRDs | Criar area propria para consulta e controle de GRDs |
 | 15 | Importador de Status GED/PW | Importar relatorios externos de status e atualizar acompanhamento |
 
-## Diretriz Para Retomada dos Marcos Funcionais
+## Pendencias Arquiteturais Remanescentes
 
-Antes de iniciar features grandes dos Marcos 11 a 15, priorizar:
+Os itens abaixo nao foram bloqueantes para o Marco 10.6 e podem ser tratados incrementalmente:
 
-1. `ContratosRepository`;
-2. `ImportacoesRepository`;
-3. `DocumentosRepository`;
-4. `RevisoesRepository`;
-5. `DocumentoService`;
-6. `CadastroService`;
-7. `DashboardService`;
-8. `ArquivosService`;
-9. separacao de `core/auth` puro e `app/auth` UI;
-10. remocao gradual de `sys.path.insert`.
-
-Essa ordem reduz risco tecnico sem interromper o uso atual do MVP.
+- `ArquivosService`;
+- separacao de `core/auth` puro e `app/auth` UI;
+- remocao gradual de `sys.path.insert`.
 

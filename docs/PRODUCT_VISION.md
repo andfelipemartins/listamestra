@@ -1,8 +1,8 @@
 # Visao de Produto do SCLME
 
-Marco 10.6 - Consolidacao Arquitetural Pre-Produto.
+Marco 10.6 - Consolidacao Arquitetural Pre-Produto — Concluido.
 
-Data: 2026-05-16
+Data de conclusao: 2026-05-16
 
 ## O Que E o SCLME
 
@@ -72,7 +72,9 @@ O SCLME ja possui:
 - exportadores Excel;
 - permissoes basicas;
 - banco SQLite;
-- testes automatizados.
+- repositories: `ContractRepository`, `ImportacaoRepository`, `DocumentoRepository`, `RevisaoRepository`;
+- services: `ContractService`, `ImportacaoService`, `DocumentoService`, `CadastroService`, `DashboardService`;
+- testes automatizados (570 testes).
 
 ## MVP Tecnico, Produto Interno e SaaS Futuro
 
@@ -139,18 +141,17 @@ Nao faz parte do escopo imediato:
 
 ## Direcao do Produto
 
-A direcao atual e consolidar o MVP em uma versao pre-produto, reduzindo acoplamento e preparando crescimento sem migracao prematura.
+A direcao atual e retomar os marcos funcionais (Marco 11 em diante) com a consolidacao arquitetural concluida.
 
-O foco do Marco 10.6 e documentar e orientar a evolucao arquitetural antes de retomar novas funcionalidades de produto.
+## Resultado do Marco 10.6
 
-## Definicao de Sucesso do Marco 10.6
+O Marco 10.6 foi bem sucedido. Criterios atingidos:
 
-O Marco 10.6 e bem sucedido se:
-
-- o estado atual da arquitetura estiver documentado;
-- os riscos tecnicos forem conhecidos;
-- a estrategia de nao migrar agora estiver registrada;
-- a futura possibilidade de Django estiver documentada;
-- a criacao de services/repositories estiver definida como proximo passo tecnico;
-- o roadmap deixar claro que a consolidacao vem antes do Marco 11.
+- estado atual da arquitetura documentado (`docs/ARCHITECTURE.md`);
+- riscos tecnicos conhecidos e registrados;
+- estrategia de nao migrar agora registrada (`docs/adr/0001-stack-atual.md`);
+- futura possibilidade de Django documentada (`docs/adr/0002-estrategia-django-futura.md`);
+- criacao de services/repositories definida e implementada (`docs/adr/0003-camada-services-repositories.md`);
+- roadmap atualizado com Marco 10.6 concluido antes do Marco 11;
+- suite de testes com 570 testes passando.
 
