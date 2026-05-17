@@ -1,8 +1,8 @@
 # Arquitetura do SCLME
 
-Marco 10.6 - Consolidacao Arquitetural Pre-Produto.
+Marco 10.6 - Consolidacao Arquitetural Pre-Produto — Concluido.
 
-Data: 2026-05-16
+Data de conclusao: 2026-05-16
 
 ## Objetivo
 
@@ -33,9 +33,11 @@ core/                    Regras e modulos reutilizaveis
   exporters/             Exportacoes Excel
   importers/             Importadores de Lista, ID, arquivos e cadastro
   parsers/               Parsers de codigos e arquivos
+  repositories/          Acesso ao banco por entidade (implementado no Marco 10.6)
+  services/              Orquestracao de regras de aplicacao (implementado no Marco 10.6)
 db/                      Conexao SQLite e banco local
 scripts/                 Inicializacao e migracoes simples
-tests/                   Testes automatizados
+tests/                   Testes automatizados (570 testes — Marco 10.6)
 docs/                    Documentacao tecnica, produto e ADRs
 ```
 
@@ -88,11 +90,29 @@ Contem `init_db.py`, que cria tabelas e faz migracoes simples/idempotentes.
 
 Diretriz futura: caso o projeto avance para Django ou PostgreSQL, esse papel deve ser substituido por migrations reais.
 
+### `core/repositories/`
+
+Implementado no Marco 10.6. Cada repository encapsula o acesso ao banco para uma entidade:
+
+- `ContractRepository`;
+- `ImportacaoRepository`;
+- `DocumentoRepository`;
+- `RevisaoRepository`.
+
+### `core/services/`
+
+Implementado no Marco 10.6. Cada service orquestra regras de aplicacao sem depender de Streamlit:
+
+- `ContractService`;
+- `ImportacaoService`;
+- `DocumentoService`;
+- `CadastroService`;
+- `DashboardService`.
+
 ### `tests/`
 
-Contem testes de parsers, importadores, engines, exportadores, auth e helpers de pagina.
-
-Diretriz futura: services e repositories devem nascer testados.
+Contem testes de parsers, importadores, engines, exportadores, auth, repositories e services.
+Suite atual: 570 testes.
 
 ## Pontos Fortes Atuais
 
@@ -109,15 +129,14 @@ Diretriz futura: services e repositories devem nascer testados.
 
 ## Dividas Tecnicas Identificadas
 
-### SQL Direto em `main.py` e `pages/`
+### SQL Direto em `main.py` e `pages/` (parcialmente resolvido)
 
-Ha consultas e escritas diretas em:
+No Marco 10.6, `pages/1_Dashboard.py`, `pages/4_CadastroManual.py` e `pages/5_Documento.py` foram refatoradas para consumir services e repositories.
+
+Ainda com SQL direto:
 
 - `main.py`;
-- `pages/1_Dashboard.py`;
 - `pages/2_Importacao.py`;
-- `pages/4_CadastroManual.py`;
-- `pages/5_Documento.py`;
 - `app/session.py`.
 
 Isso dificulta testes, manutencao e migracao futura.
@@ -180,20 +199,22 @@ SQLite + Streamlit atendem ao MVP e piloto controlado, mas nao resolvem gravacoe
 - Preservar testes existentes.
 - Toda extracao de service/repository deve manter comportamento atual.
 
-## Estrategia Recomendada
+## Estrategia — Progresso do Marco 10.6
 
-1. Criar camada de repositories.
-2. Mover consultas SQL das paginas para repositories.
-3. Criar services para orquestrar regras de aplicacao.
-4. Reduzir dependencia direta de `st.session_state`.
-5. Separar auth puro de auth UI.
-6. Reduzir retorno obrigatorio em DataFrame onde nao for necessario.
-7. Remover `sys.path.insert` gradualmente.
-8. Depois reavaliar Django.
+| Passo | Descricao | Status |
+| --- | --- | --- |
+| 1 | Criar camada de repositories | Concluido |
+| 2 | Mover consultas SQL das paginas para repositories | Concluido (parcial: paginas 1, 4, 5) |
+| 3 | Criar services para orquestrar regras de aplicacao | Concluido |
+| 4 | Reduzir dependencia direta de `st.session_state` | Parcial |
+| 5 | Separar auth puro de auth UI | Pendente |
+| 6 | Reduzir retorno obrigatorio em DataFrame onde nao for necessario | Pendente |
+| 7 | Remover `sys.path.insert` gradualmente | Pendente |
+| 8 | Depois reavaliar Django | Pendente |
 
 ## Conclusao
 
-O SCLME esta em bom estado como MVP funcional. O proximo passo correto nao e migrar stack, mas consolidar a arquitetura pre-produto.
+O Marco 10.6 foi concluido. A camada de repositories e services esta implementada e coberta por testes (suite com 570 testes passando). As paginas de maior complexidade foram refatoradas para consumir exclusivamente essas camadas.
 
-O Marco 10.6 formaliza essa decisao: reduzir acoplamento agora para permitir crescimento depois.
+O proximo passo e retomar os marcos funcionais (Marco 11 em diante) com a base arquitetural consolidada.
 

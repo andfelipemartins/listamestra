@@ -192,6 +192,7 @@ with get_connection() as conn:
 | 8 | Cadastro manual | ✅ Concluído |
 | 9 | Motor de status | ✅ Concluído |
 | 10 | Exportação de relatórios | ✅ Concluído |
+| 10.6 | Consolidação Arquitetural Pré-Produto | ✅ Concluído |
 | 11 | Central de Pendências e Edição Operacional | 🔲 Pendente |
 | 12 | Página de Edição e Correção de Documento | 🔲 Pendente |
 | 13 | Conciliação Assistida | 🔲 Pendente |
