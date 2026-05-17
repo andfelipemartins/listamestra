@@ -45,6 +45,93 @@ LINHA15_CLASSES: dict[str, str] = {
     "I": "Instalações",
 }
 
+LINHA15_CAMPOS_OBRIGATORIOS: tuple[str, ...] = (
+    "tipo",
+    "linha",
+    "trecho",
+    "subtrecho",
+    "unidade",
+    "etapa",
+    "classe",
+    "subclasse",
+    "sequencial",
+)
+
+
+def _texto(val) -> str:
+    return str(val or "").strip()
+
+
+def _numero_com_zeros(val, tamanho: int) -> str:
+    texto = _texto(val)
+    return texto.zfill(tamanho) if texto else ""
+
+
+def normalizar_partes_linha15(partes: dict) -> dict:
+    """Normaliza partes de um codigo Linha 15 preservando zeros a esquerda."""
+    return {
+        "tipo": _texto(partes.get("tipo")).upper(),
+        "linha": _numero_com_zeros(partes.get("linha"), 2),
+        "trecho": _numero_com_zeros(partes.get("trecho"), 2),
+        "subtrecho": _numero_com_zeros(partes.get("subtrecho"), 2),
+        "unidade": _numero_com_zeros(partes.get("unidade"), 2),
+        "etapa": _texto(partes.get("etapa")),
+        "classe": _texto(partes.get("classe")).upper(),
+        "subclasse": _texto(partes.get("subclasse")),
+        "sequencial": _numero_com_zeros(partes.get("sequencial"), 4),
+    }
+
+
+def validar_partes_linha15(partes: dict) -> list[str]:
+    """Retorna erros de preenchimento basico das partes do codigo."""
+    normalizadas = normalizar_partes_linha15(partes)
+    erros: list[str] = []
+
+    nomes = {
+        "tipo": "Tipo/Sigla",
+        "linha": "Linha",
+        "trecho": "Trecho",
+        "subtrecho": "Subtrecho",
+        "unidade": "Unidade",
+        "etapa": "Etapa",
+        "classe": "Classe",
+        "subclasse": "Subclasse",
+        "sequencial": "Sequencial",
+    }
+
+    for campo in LINHA15_CAMPOS_OBRIGATORIOS:
+        if not normalizadas[campo]:
+            erros.append(f"{nomes[campo]} e obrigatorio.")
+
+    checks = (
+        ("linha", 2),
+        ("trecho", 2),
+        ("subtrecho", 2),
+        ("unidade", 2),
+        ("sequencial", 4),
+    )
+    for campo, tamanho in checks:
+        valor = normalizadas[campo]
+        if valor and (not valor.isdigit() or len(valor) != tamanho):
+            erros.append(f"{nomes[campo]} deve ter {tamanho} digito(s).")
+
+    if normalizadas["etapa"] and (
+        not normalizadas["etapa"].isdigit() or len(normalizadas["etapa"]) != 1
+    ):
+        erros.append("Etapa deve ter 1 digito.")
+
+    if normalizadas["classe"] and (
+        not normalizadas["classe"].isalpha() or len(normalizadas["classe"]) != 1
+    ):
+        erros.append("Classe deve ter 1 letra.")
+
+    if normalizadas["subclasse"] and (
+        not normalizadas["subclasse"].isdigit() or len(normalizadas["subclasse"]) > 2
+    ):
+        erros.append("Subclasse deve ter 1 ou 2 digito(s).")
+
+    return erros
+
 
 def montar_codigo_linha15(
     tipo: str,
@@ -55,16 +142,38 @@ def montar_codigo_linha15(
     classe: str,
     subclasse: str,
     sequencial: str,
+    linha: str = "15",
 ) -> str:
     """
     Monta o código documental padrão Linha 15 a partir das partes individuais.
     Não valida entradas — a UI garante os campos antes de chamar.
     """
-    t   = str(trecho).zfill(2)
-    s   = str(subtrecho).zfill(2)
-    u   = str(unidade).zfill(2)
-    seq = str(sequencial).zfill(4)
-    return f"{tipo.upper()}-15.{t}.{s}.{u}-{etapa}{classe.upper()}{subclasse}-{seq}"
+    partes = normalizar_partes_linha15({
+        "tipo": tipo,
+        "linha": linha,
+        "trecho": trecho,
+        "subtrecho": subtrecho,
+        "unidade": unidade,
+        "etapa": etapa,
+        "classe": classe,
+        "subclasse": subclasse,
+        "sequencial": sequencial,
+    })
+    return (
+        f"{partes['tipo']}-{partes['linha']}.{partes['trecho']}."
+        f"{partes['subtrecho']}.{partes['unidade']}-"
+        f"{partes['etapa']}{partes['classe']}{partes['subclasse']}-"
+        f"{partes['sequencial']}"
+    )
+
+
+def montar_codigo_segmentado_linha15(partes: dict) -> str:
+    """Valida e monta um codigo Linha 15 a partir de um dict de partes."""
+    erros = validar_partes_linha15(partes)
+    if erros:
+        raise ValueError("; ".join(erros))
+    normalizadas = normalizar_partes_linha15(partes)
+    return montar_codigo_linha15(**normalizadas)
 
 
 def parsear_lista_codigos(texto: str, registry) -> tuple[list, list]:
@@ -115,6 +224,7 @@ def desmontar_codigo_linha15(codigo: str, registry) -> Optional[dict]:
     e = parsed.extras
     return {
         "tipo":       parsed.tipo,
+        "linha":      e.get("linha", "15"),
         "trecho":     e.get("trecho", "00"),
         "subtrecho":  e.get("subtrecho", "00"),
         "unidade":    e.get("unidade", "00"),

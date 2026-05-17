@@ -12,7 +12,10 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from core.parsers.codigo_builder import (
     montar_codigo_linha15,
+    montar_codigo_segmentado_linha15,
     desmontar_codigo_linha15,
+    normalizar_partes_linha15,
+    validar_partes_linha15,
     parsear_lista_codigos,
     mesclar_codigos,
     LINHA15_TIPOS,
@@ -98,6 +101,107 @@ class TestMontarCodigo:
             parsed = _registry.parse(codigo)
             assert parsed.valido is True
             assert parsed.extras["classe"] == classe
+
+    def test_linha_explicita(self):
+        codigo = montar_codigo_linha15(
+            tipo="DE",
+            linha="15",
+            trecho="25",
+            subtrecho="00",
+            unidade="00",
+            etapa="6",
+            classe="F",
+            subclasse="2",
+            sequencial="1015",
+        )
+        assert codigo == "DE-15.25.00.00-6F2-1015"
+
+
+class TestCodigoSegmentado:
+
+    def test_normaliza_partes_minusculas(self):
+        partes = normalizar_partes_linha15({
+            "tipo": "de",
+            "linha": "15",
+            "trecho": "25",
+            "subtrecho": "0",
+            "unidade": "0",
+            "etapa": "6",
+            "classe": "f",
+            "subclasse": "2",
+            "sequencial": "15",
+        })
+
+        assert partes == {
+            "tipo": "DE",
+            "linha": "15",
+            "trecho": "25",
+            "subtrecho": "00",
+            "unidade": "00",
+            "etapa": "6",
+            "classe": "F",
+            "subclasse": "2",
+            "sequencial": "0015",
+        }
+
+    def test_monta_codigo_a_partir_de_partes_validas(self):
+        codigo = montar_codigo_segmentado_linha15({
+            "tipo": "de",
+            "linha": "15",
+            "trecho": "25",
+            "subtrecho": "00",
+            "unidade": "00",
+            "etapa": "6",
+            "classe": "f",
+            "subclasse": "2",
+            "sequencial": "1015",
+        })
+
+        assert codigo == "DE-15.25.00.00-6F2-1015"
+
+    def test_preserva_zeros_a_esquerda(self):
+        codigo = montar_codigo_segmentado_linha15({
+            "tipo": "DE",
+            "linha": "15",
+            "trecho": "5",
+            "subtrecho": "0",
+            "unidade": "0",
+            "etapa": "6",
+            "classe": "A",
+            "subclasse": "1",
+            "sequencial": "7",
+        })
+
+        assert codigo == "DE-15.05.00.00-6A1-0007"
+
+    def test_detecta_parte_obrigatoria_ausente(self):
+        erros = validar_partes_linha15({
+            "tipo": "",
+            "linha": "15",
+            "trecho": "25",
+            "subtrecho": "00",
+            "unidade": "00",
+            "etapa": "6",
+            "classe": "F",
+            "subclasse": "2",
+            "sequencial": "1015",
+        })
+
+        assert any("Tipo" in erro for erro in erros)
+
+    def test_montar_segmentado_rejeita_parte_ausente(self):
+        with pytest.raises(ValueError, match="Sequencial"):
+            montar_codigo_segmentado_linha15({
+                "tipo": "DE",
+                "linha": "15",
+                "trecho": "25",
+                "subtrecho": "00",
+                "unidade": "00",
+                "etapa": "6",
+                "classe": "F",
+                "subclasse": "2",
+                "sequencial": "",
+            })
 
 
 # ---------------------------------------------------------------------------

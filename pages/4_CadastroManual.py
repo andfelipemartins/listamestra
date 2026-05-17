@@ -19,6 +19,7 @@ from core.parsers.registry import ParserRegistry
 from core.parsers.codigo_builder import parsear_lista_codigos, mesclar_codigos
 from core.engine.disciplinas import MODALIDADES, SITUACOES
 from core.services.cadastro_service import CadastroService
+from app.components.codigo_segmentado import entrada_codigo_segmentado
 from app.session import require_contrato, sidebar_contexto
 from core.auth.permissions import require_permission, widget_seletor_perfil
 
@@ -197,6 +198,27 @@ def _limpar_tudo() -> None:
 # Key versionada: incrementar a versão no rerun cria um novo widget vazio,
 # contornando a restrição do Streamlit de não permitir modificar session_state
 # de um widget já instanciado no mesmo ciclo.
+st.markdown("**Adicionar documento individual**")
+codigo_segmentado = entrada_codigo_segmentado(_registry, key_prefix="cm_codigo_segmentado")
+
+adicionar_segmentado = st.button(
+    "Adicionar codigo",
+    disabled=not codigo_segmentado["valido"],
+    key="cm_btn_adicionar_segmentado",
+)
+
+if adicionar_segmentado:
+    novos_validos, invalidos_batch = parsear_lista_codigos(codigo_segmentado["codigo"], _registry)
+    existentes = st.session_state.get("cm_validos", [])
+    merged, duplicatas = mesclar_codigos(novos_validos, existentes)
+
+    st.session_state["cm_validos"] = merged
+    st.session_state["cm_invalidos_batch"] = invalidos_batch
+    st.session_state["cm_duplicatas"] = duplicatas
+    st.rerun()
+
+st.divider()
+
 _ver     = st.session_state.get("cm_input_version", 0)
 _txt_key = f"cm_texto_codigos_{_ver}"
 
