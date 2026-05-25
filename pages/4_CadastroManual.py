@@ -4,6 +4,7 @@ pages/4_CadastroManual.py
 Cadastro manual de documentos e revisões.
 Aceita um ou vários códigos colados de uma vez (um por linha).
 A lista é acumulativa: novos códigos são adicionados sem apagar os anteriores.
+Preview consolidado antes de salvar — o usuário confirma explicitamente (Marco 10.7.4).
 """
 
 import os
@@ -19,7 +20,7 @@ from core.parsers.registry import ParserRegistry
 from core.parsers.codigo_builder import parsear_lista_codigos, mesclar_codigos
 from core.engine.disciplinas import MODALIDADES, SITUACOES
 from core.services.cadastro_service import CadastroService
-from app.components.codigo_segmentado import entrada_codigo_segmentado
+from app.components.dados_derivados_codigo import exibir_dados_derivados_codigo
 from app.session import require_contrato, sidebar_contexto
 from core.auth.permissions import require_permission, widget_seletor_perfil
 
@@ -192,33 +193,86 @@ def _limpar_tudo() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Preview consolidado (modo somente leitura antes de salvar)
+# ---------------------------------------------------------------------------
+
+def _renderizar_preview(validos: list, contrato_id: int) -> None:
+    """Exibe resumo readonly de todos os documentos e botões de confirmação."""
+    n = len(validos)
+    st.info(f"**Revisão antes de salvar** — {n} documento(s) serão persistidos após confirmação.")
+
+    for codigo, parsed in validos:
+        existing    = _service.buscar_documento_existente(contrato_id, codigo)
+        doc_fields  = _ler_doc_fields(codigo)
+        rev_fields  = _ler_rev_fields(codigo)
+        erros       = _service.validar_campos_obrigatorios(doc_fields, rev_fields)
+        dados_deriv = _service.obter_dados_derivados_parseado(parsed)
+
+        e      = parsed.extras
+        trecho = e.get("nome_trecho", "—")
+
+        with st.container(border=True):
+            st.markdown(f"**📄 {codigo}** — {parsed.tipo} | {trecho}")
+
+            if existing:
+                revisoes_ex = _service.listar_revisoes_existentes(existing["id"])
+                st.warning(
+                    f"⚠️ Documento já existe no banco com {len(revisoes_ex)} revisão(ões). "
+                    "Nova revisão será adicionada."
+                )
+
+            for erro in erros:
+                st.error(f"❌ Campo obrigatório faltando: {erro}")
+
+            exibir_dados_derivados_codigo(dados_deriv)
+
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.caption(f"**Título/Objeto:** {doc_fields.get('titulo') or '—'}")
+                st.caption(f"**Responsável:** {doc_fields.get('responsavel') or '—'}")
+                st.caption(f"**Modalidade:** {doc_fields.get('modalidade') or '—'}")
+            with c2:
+                st.caption(f"**Revisão:** {rev_fields.get('label_revisao') or '—'}")
+                st.caption(f"**Versão:** {rev_fields.get('versao') or '—'}")
+                st.caption(f"**Situação:** {rev_fields.get('situacao') or '—'}")
+            with c3:
+                st.caption(f"**Data Elaboração:** {rev_fields.get('data_elaboracao') or '—'}")
+                st.caption(f"**Data Emissão:** {rev_fields.get('data_emissao') or '—'}")
+                st.caption(f"**Data Análise:** {rev_fields.get('data_analise') or '—'}")
+
+    st.divider()
+    col_confirmar, col_voltar = st.columns(2)
+    with col_voltar:
+        if st.button("Voltar e Editar", use_container_width=True):
+            st.session_state["cm_modo_preview"] = False
+            st.rerun()
+    with col_confirmar:
+        confirmar = st.button("Confirmar e Salvar", type="primary", use_container_width=True)
+
+    if confirmar:
+        resultados = []
+        for codigo, _ in validos:
+            resultado = _service.cadastrar_documento_manual(
+                contrato_id,
+                codigo,
+                _ler_doc_fields(codigo),
+                _ler_rev_fields(codigo),
+                _ler_grds(codigo),
+            )
+            resultados.append((codigo, resultado.mensagem))
+        st.session_state["cm_resultados"]  = resultados
+        st.session_state["cm_salvo"]       = True
+        st.session_state["cm_modo_preview"] = False
+        st.rerun()
+
+
+# ---------------------------------------------------------------------------
 # Entrada de códigos — caixa + botão (acumulativo)
 # ---------------------------------------------------------------------------
 
 # Key versionada: incrementar a versão no rerun cria um novo widget vazio,
 # contornando a restrição do Streamlit de não permitir modificar session_state
 # de um widget já instanciado no mesmo ciclo.
-st.markdown("**Adicionar documento individual**")
-codigo_segmentado = entrada_codigo_segmentado(_registry, key_prefix="cm_codigo_segmentado")
-
-adicionar_segmentado = st.button(
-    "Adicionar codigo",
-    disabled=not codigo_segmentado["valido"],
-    key="cm_btn_adicionar_segmentado",
-)
-
-if adicionar_segmentado:
-    novos_validos, invalidos_batch = parsear_lista_codigos(codigo_segmentado["codigo"], _registry)
-    existentes = st.session_state.get("cm_validos", [])
-    merged, duplicatas = mesclar_codigos(novos_validos, existentes)
-
-    st.session_state["cm_validos"] = merged
-    st.session_state["cm_invalidos_batch"] = invalidos_batch
-    st.session_state["cm_duplicatas"] = duplicatas
-    st.rerun()
-
-st.divider()
-
 _ver     = st.session_state.get("cm_input_version", 0)
 _txt_key = f"cm_texto_codigos_{_ver}"
 
@@ -250,6 +304,7 @@ if analisar:
     st.session_state["cm_invalidos_batch"] = invalidos_batch
     st.session_state["cm_duplicatas"]      = duplicatas
     st.session_state["cm_input_version"]   = _ver + 1   # nova key → caixa vazia no próximo render
+    st.session_state["cm_modo_preview"]    = False       # novo lote reinicia no modo formulário
     st.rerun()
 
 # ---------------------------------------------------------------------------
@@ -292,7 +347,8 @@ validos = st.session_state.get("cm_validos", [])
 if not validos:
     st.stop()
 
-n = len(validos)
+n            = len(validos)
+modo_preview = st.session_state.get("cm_modo_preview", False)
 
 col_info, col_limpar = st.columns([5, 1])
 with col_info:
@@ -304,71 +360,65 @@ with col_limpar:
 
 st.divider()
 
-# Renderiza campos por código (sem st.form — session_state atualiza a cada interação,
-# permitindo checar campos obrigatórios em tempo real para habilitar/desabilitar o botão)
-for codigo, parsed in list(validos):
-    ks       = _ks(codigo)
-    existing = _service.buscar_documento_existente(contrato["id"], codigo)
-    trecho   = parsed.extras.get("nome_trecho", "—")
-    header   = f"📄 {codigo} — {parsed.tipo} | {trecho}"
-    if existing:
-        revisoes_ex = _service.listar_revisoes_existentes(existing["id"])
-        header += f" *(já existe — {len(revisoes_ex)} revisão(ões))*"
-
-    # Botão de remoção fica fora do expander, sempre visível à direita do cabeçalho
-    col_exp, col_rem = st.columns([20, 1])
-    with col_rem:
-        if st.button("✕", key=f"cm_btn_remover_{ks}", help="Remover este documento da lista"):
-            _limpar_codigo(codigo)
-            st.session_state["cm_validos"] = [
-                (c, p) for c, p in validos if c != codigo
-            ]
-            st.rerun()
-    with col_exp:
-        with st.expander(header, expanded=False):
-            e = parsed.extras
-            st.caption(
-                f"**{parsed.tipo}** — {parsed.descricao_tipo} · "
-                f"Trecho: **{e.get('nome_trecho', '—')}** · "
-                f"Etapa: **{e.get('etapa', '—')}** · "
-                f"Disciplina: **{e.get('classe', '')}{e.get('subclasse', '')}**"
-            )
-
-            st.markdown("**Dados do Documento**")
-            _secao_documento(codigo, existing)
-
-            st.divider()
-            st.markdown("**Dados da Revisão**")
-            _secao_revisao(codigo)
-
-            st.divider()
-            st.markdown("**GRD — opcional**")
-            _secao_grds(codigo)
-
 # ---------------------------------------------------------------------------
-# Botão de salvamento
+# Modo formulário (edição) — expanders com campos editáveis
 # ---------------------------------------------------------------------------
 
-pode_salvar = _campos_obrigatorios_preenchidos(validos)
-label_btn   = f"Salvar {n} documento(s)" if n > 1 else "Salvar documento"
+if not modo_preview:
+    for codigo, parsed in list(validos):
+        ks       = _ks(codigo)
+        existing = _service.buscar_documento_existente(contrato["id"], codigo)
+        trecho   = parsed.extras.get("nome_trecho", "—")
+        header   = f"📄 {codigo} — {parsed.tipo} | {trecho}"
+        if existing:
+            revisoes_ex = _service.listar_revisoes_existentes(existing["id"])
+            header += f" *(já existe — {len(revisoes_ex)} revisão(ões))*"
 
-if not pode_salvar:
-    st.caption("⚠️ Preencha Descrição/Objeto e Revisão em todos os documentos para habilitar o salvamento.")
+        # Botão de remoção fica fora do expander, sempre visível à direita do cabeçalho
+        col_exp, col_rem = st.columns([20, 1])
+        with col_rem:
+            if st.button("✕", key=f"cm_btn_remover_{ks}", help="Remover este documento da lista"):
+                _limpar_codigo(codigo)
+                st.session_state["cm_validos"] = [
+                    (c, p) for c, p in validos if c != codigo
+                ]
+                st.rerun()
+        with col_exp:
+            with st.expander(header, expanded=False):
+                dados_derivados = _service.obter_dados_derivados_parseado(parsed)
+                exibir_dados_derivados_codigo(dados_derivados)
 
-salvar = st.button(label_btn, type="primary", disabled=not pode_salvar, use_container_width=True)
+                st.divider()
 
-if salvar:
-    resultados = []
-    for codigo, _ in validos:
-        resultado = _service.cadastrar_documento_manual(
-            contrato["id"],
-            codigo,
-            _ler_doc_fields(codigo),
-            _ler_rev_fields(codigo),
-            _ler_grds(codigo),
-        )
-        resultados.append((codigo, resultado.mensagem))
+                st.markdown("**Dados do Documento**")
+                _secao_documento(codigo, existing)
 
-    st.session_state["cm_resultados"] = resultados
-    st.session_state["cm_salvo"]      = True
-    st.rerun()
+                st.divider()
+                st.markdown("**Dados da Revisão**")
+                _secao_revisao(codigo)
+
+                st.divider()
+                st.markdown("**GRD — opcional**")
+                _secao_grds(codigo)
+
+    # Botão para entrar no modo preview
+    pode_salvar = _campos_obrigatorios_preenchidos(validos)
+
+    if not pode_salvar:
+        st.caption("⚠️ Preencha Descrição/Objeto e Revisão em todos os documentos para habilitar o salvamento.")
+
+    if st.button(
+        "Revisar antes de salvar",
+        type="primary",
+        disabled=not pode_salvar,
+        use_container_width=True,
+    ):
+        st.session_state["cm_modo_preview"] = True
+        st.rerun()
+
+# ---------------------------------------------------------------------------
+# Modo preview — resumo readonly + confirmação explícita
+# ---------------------------------------------------------------------------
+
+else:
+    _renderizar_preview(validos, contrato["id"])

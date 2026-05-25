@@ -22,7 +22,7 @@ Este roadmap registra a sequencia de marcos do SCLME e explicita a insercao do M
 | 9 | Motor de status | Calcular status, alertas e aprovacao historica | Concluido |
 | 10 | Exportacao de relatorios | Gerar arquivos Excel de apoio | Concluido |
 | 10.6 | Consolidacao Arquitetural Pre-Produto | Reduzir acoplamento e preparar crescimento | Concluido |
-| 10.7 | Revisao do Cadastro Manual e Fluxo de Entrada | Transformar o Cadastro Manual em fluxo seguro e controlado | Pendente |
+| 10.7 | Revisao do Cadastro Manual e Fluxo de Entrada | Transformar o Cadastro Manual em fluxo seguro e controlado | Em andamento |
 
 ## Marco 10.6 - Consolidacao Arquitetural Pre-Produto
 
@@ -70,38 +70,48 @@ Transformar o Cadastro Manual em um fluxo mais seguro, controlado e produtivo pa
 
 ### Motivacao
 
-O Cadastro Manual atual e fragil para uso operacional:
+O Cadastro Manual precisava de:
 
-- o codigo documental e preenchido de forma livre, sem validacao segmentada;
-- campos derivados do codigo (tipo, trecho, estrutura/disciplina, etapa, sequencial) sao digitados manualmente, gerando erros de consistencia;
-- nao existe previa consolidada antes de salvar;
-- nao e possivel cadastrar multiplos documentos em uma unica operacao;
-- a interface permite que erros humanos passem sem bloqueio.
+- validacao mais clara do codigo documental antes de salvar;
+- exibicao somente leitura dos dados derivados do codigo (tipo, trecho, disciplina, etapa, sequencial);
+- previa consolidada antes de persistir;
+- suporte natural a multiplos documentos por operacao;
+- reducao de erro humano sem complicar a interface.
 
-### Resultado Esperado
+### Decisao de Produto — Entrada por Lista
 
-O Marco 10.7 devera entregar:
+O Marco 10.7 definiu que o fluxo de entrada principal e a **lista de codigos colados e analisados via textarea**, nao um formulario segmentado campo a campo. Essa decisao foi tomada apos experimentacao:
 
-- componente de entrada segmentada do codigo documental;
-- opcao de colar codigo completo e decompor automaticamente via parser existente;
-- campos derivados do codigo (tipo, trecho, disciplina, etapa, sequencial) exibidos como somente leitura;
-- preview consolidado dos dados antes de salvar;
-- confirmacao explicita antes da persistencia;
-- cadastro em lote (multiplos documentos em uma unica operacao);
-- reaproveitamento do `CadastroService` existente;
-- testes para entrada segmentada, preview e lote.
+- formulario segmentado individual foi implementado e testado;
+- a abordagem aumentou complexidade de UI sem ganho operacional claro;
+- o modelo de colar multiplos codigos (um por linha) e mais rapido para o uso real;
+- o cadastro em lote ja funciona naturalmente pelo textarea.
 
-### Sub-marcos
+### Resultado Entregue
 
-| Sub-marco | Descricao |
-| --- | --- |
-| 10.7.1 | Documentar o Marco 10.7 |
-| 10.7.2 | Criar componente de codigo segmentado |
-| 10.7.3 | Travar campos derivados do codigo |
-| 10.7.4 | Criar preview antes de salvar |
-| 10.7.5 | Criar cadastro em lote |
-| 10.7.6 | Ajustar UX visual do Cadastro Manual |
-| 10.7.7 | Atualizar testes e documentacao |
+Concluido no marco:
+
+- `lógica pura validar_partes_codigo` em `core/parsers/codigo_builder.py`;
+- componente `app/components/dados_derivados_codigo.py` para exibicao somente leitura;
+- metodo `CadastroService.obter_dados_derivados_parseado` para extrair campos derivados do parse;
+- dados derivados (tipo, linha, trecho, nome do trecho, subtrecho, unidade, etapa, classe/subclasse, disciplina/estrutura, sequencial) exibidos readonly em cada card do Cadastro Manual;
+- textarea como fluxo principal de entrada de codigos (aceita um ou varios);
+- testes atualizados verificando que o fluxo principal e o textarea e que o fluxo segmentado individual nao existe.
+
+### Pendente
+
+| Sub-marco | Descricao | Status |
+| --- | --- | --- |
+| 10.7.1 | Documentar o Marco 10.7 | Concluido |
+| 10.7.2 | Entrada segmentada (experimentacao, decisao: textarea e o fluxo) | Concluido |
+| 10.7.3 | Exibir dados derivados como somente leitura nos cards | Concluido |
+| 10.7.4 | Preview consolidado antes de salvar | Concluido |
+| 10.7.5 | UX visual — revisao dos cards e do fluxo de cadastro | Pendente |
+| 10.7.6 | Atualizar testes e documentacao final | Pendente |
+
+### Proximo Passo
+
+O proximo sub-marco e o **10.7.5 — UX visual — revisao dos cards e do fluxo de cadastro**.
 
 ### Fora do Escopo
 

@@ -113,9 +113,40 @@ class TestValidarCodigo:
         resultado = service.validar_codigo(contrato_id, _CODIGO_VALIDO)
 
         assert resultado.dados_derivados["tipo"] == "DE"
+        assert resultado.dados_derivados["linha"] == "15"
         assert resultado.dados_derivados["disciplina"] == "A1"
         assert resultado.dados_derivados["fase"] == "6"
         assert resultado.dados_derivados["trecho"] == "25"
+        assert resultado.dados_derivados["subtrecho"] == "00"
+        assert resultado.dados_derivados["unidade"] == "00"
+        assert resultado.dados_derivados["sequencial"] == "1001"
+
+    def test_codigo_valido_extrai_descricao_de_disciplina(self, service):
+        dados = service.obter_dados_derivados_codigo("DE-15.25.00.00-6F2-1015")
+
+        assert dados["tipo"] == "DE"
+        assert dados["trecho"] == "25"
+        assert dados["nome_trecho"] == "Ragueb Chohfi"
+        assert dados["etapa"] == "6"
+        assert dados["classe_subclasse"] == "F2"
+        assert dados["sequencial"] == "1015"
+        assert dados["disciplina_mapeada"] is True
+        assert dados["disciplina_descricao"] == "PROJETO GEOMÉTRICO HORIZONTAL"
+
+    def test_trecho_nao_mapeado_e_indicado(self, service):
+        dados = service.obter_dados_derivados_codigo("DE-15.99.00.00-6F2-1015")
+
+        assert dados["trecho"] == "99"
+        assert dados["nome_trecho"] == "Trecho 99"
+        assert dados["trecho_mapeado"] is False
+
+    def test_disciplina_nao_mapeada_e_indicada(self, service):
+        dados = service.obter_dados_derivados_codigo("DE-15.25.00.00-6X9-1015")
+
+        assert dados["classe_subclasse"] == "X9"
+        assert dados["disciplina"] == "X9"
+        assert dados["disciplina_descricao"] == ""
+        assert dados["disciplina_mapeada"] is False
 
     def test_codigo_invalido_retorna_resultado_invalido(self, service, contrato_id):
         resultado = service.validar_codigo(contrato_id, _CODIGO_INVALIDO)

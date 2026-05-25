@@ -193,7 +193,7 @@ with get_connection() as conn:
 | 9 | Motor de status | ✅ Concluído |
 | 10 | Exportação de relatórios | ✅ Concluído |
 | 10.6 | Consolidação Arquitetural Pré-Produto | ✅ Concluído |
-| 10.7 | Revisão do Cadastro Manual e Fluxo de Entrada | 🔲 Pendente |
+| 10.7 | Revisão do Cadastro Manual e Fluxo de Entrada | 🔄 Em andamento |
 | 11 | Central de Pendências e Edição Operacional | 🔲 Pendente |
 | 12 | Página de Edição e Correção de Documento | 🔲 Pendente |
 | 13 | Conciliação Assistida | 🔲 Pendente |
@@ -210,13 +210,15 @@ with get_connection() as conn:
 ## Descrição dos Marcos Futuros
 
 ### Marco 10.7 — Revisão do Cadastro Manual e Fluxo de Entrada
-Transformar o Cadastro Manual em um fluxo mais seguro, controlado e produtivo para lançamento de documentos técnicos.
+Transformar o Cadastro Manual em um fluxo mais seguro, controlado e produtivo para lançamento de documentos técnicos. **Em andamento.**
 
-**Problemas que resolve:** código documental preenchido de forma livre; campos derivados digitados manualmente; ausência de prévia antes de salvar; impossibilidade de cadastrar múltiplos documentos em uma operação; interface que permite erros sem bloqueio.
+**Decisão de produto:** fluxo principal é a lista de códigos colados e analisados via textarea (não formulário segmentado individual). O textarea aceita múltiplos códigos (um por linha) — o cadastro em lote já funciona naturalmente.
 
-**Sub-marcos:** 10.7.1 Documentar o Marco 10.7 · 10.7.2 Componente de código segmentado · 10.7.3 Travar campos derivados · 10.7.4 Preview antes de salvar · 10.7.5 Cadastro em lote · 10.7.6 UX visual · 10.7.7 Testes e documentação.
+**Já entregue:** `validar_partes_codigo` em `codigo_builder.py`; `dados_derivados_codigo.py` (exibição somente leitura); `CadastroService.obter_dados_derivados_parseado`; dados derivados (tipo, trecho, disciplina, etapa, sequencial) readonly em cada card do Cadastro Manual; testes verificando fluxo principal.
 
-**Entregas:** entrada segmentada do código; opção de colar código completo e decompor via parser; campos derivados (tipo, trecho, disciplina, etapa, sequencial) somente leitura; preview consolidado com confirmação explícita; cadastro em lote; reaproveitamento do `CadastroService`; testes de segmentação, preview e lote.
+**Sub-marcos concluídos:** 10.7.1 Documentação · 10.7.2 Experimentação segmentada (entrada por lista mantida) · 10.7.3 Dados derivados readonly nos cards.
+
+**Pendente:** 10.7.4 Preview consolidado antes de salvar · 10.7.5 UX visual dos cards · 10.7.6 Testes e documentação final.
 
 **Fora do escopo:** Central de Pendências, GRDs, PDF, Snapshots, Django, SQLAlchemy, nova autenticação, alteração de schema sem justificativa.
 

@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from core.importers.cadastro_importer import salvar_documento_revisao
+from core.engine.disciplinas import ESTRUTURA
+from core.parsers.codigo_builder import LINHA15_TRECHOS
 from core.parsers.registry import ParserRegistry
 from core.repositories.documento_repository import DocumentoRepository
 from core.repositories.revisao_repository import RevisaoRepository
@@ -77,17 +79,40 @@ class CadastroService:
         e = parsed.extras or {}
         classe = e.get("classe", "") or ""
         subclasse = e.get("subclasse", "") or ""
+        disciplina = (classe + subclasse) or None
+        trecho = e.get("trecho", "") or ""
+        nome_trecho = e.get("nome_trecho", "") or ""
+        disciplina_descricao = ESTRUTURA.get(disciplina or "", "")
         return {
             "tipo": parsed.tipo,
             "descricao_tipo": parsed.descricao_tipo,
-            "trecho": e.get("trecho", ""),
-            "nome_trecho": e.get("nome_trecho", ""),
+            "linha": e.get("linha", ""),
+            "trecho": trecho,
+            "nome_trecho": nome_trecho,
+            "trecho_mapeado": trecho in LINHA15_TRECHOS,
+            "subtrecho": e.get("subtrecho", ""),
+            "unidade": e.get("unidade", ""),
             "etapa": e.get("etapa", ""),
             "classe": classe,
             "subclasse": subclasse,
-            "disciplina": (classe + subclasse) or None,
+            "classe_subclasse": disciplina,
+            "disciplina": disciplina,
+            "disciplina_descricao": disciplina_descricao,
+            "disciplina_mapeada": bool(disciplina_descricao),
             "fase": e.get("etapa") or None,
+            "sequencial": e.get("sequencial", ""),
         }
+
+    def obter_dados_derivados_parseado(self, parse_result) -> dict:
+        """Retorna dados derivados de um parse valido, sem acessar banco/UI."""
+        if not getattr(parse_result, "valido", False):
+            return {}
+        return self._extrair_dados_derivados(parse_result)
+
+    def obter_dados_derivados_codigo(self, codigo: str) -> dict:
+        """Parseia codigo e retorna os dados derivados, se o codigo for valido."""
+        parsed = self._registry.parse(codigo)
+        return self.obter_dados_derivados_parseado(parsed)
 
     def validar_codigo(
         self, contrato_id: int, codigo: str

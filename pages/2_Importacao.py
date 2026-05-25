@@ -21,6 +21,7 @@ from core.engine.preview_arquivos import gerar_preview
 from core.engine.status import NOME_TRECHO
 from core.services.contract_service import ContractService
 from core.services.importacao_service import ImportacaoService
+from core.services.importacao_preview_service import gerar_preview_lista, ResultadoPreviewLista
 from app.session import set_contrato_ativo, sidebar_contexto
 from core.auth.permissions import widget_seletor_perfil, require_permission
 
@@ -124,23 +125,212 @@ def _resultado_badge(resultado, origem: str):
                 st.caption(f"... e mais {len(resultado.inconsistencias) - 20} ocorrências.")
 
 
+def _renderizar_preview_lista(
+    preview: ResultadoPreviewLista,
+    contrato_id: int,
+    preview_key: str,
+    arquivo_key: str,
+    nome_key: str,
+) -> None:
+    """Renderiza o resumo do dry-run e os botões de confirmação/cancelamento."""
+    if preview.tem_erro_fatal:
+        st.error(f"❌ Erro fatal ao processar o arquivo: {preview.erro_fatal_mensagem}")
+        if st.button("Tentar outro arquivo", key="btn_cancelar_fatal_lista"):
+            for k in (preview_key, arquivo_key, nome_key):
+                st.session_state.pop(k, None)
+            st.rerun()
+        return
+
+    st.warning("⚠️ **Prévia da importação — nenhuma alteração foi gravada ainda.**")
+    st.caption("Revise as mudanças abaixo antes de confirmar.")
+
+    # KPIs de impacto
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("Linhas lidas",         preview.total_lidas)
+    c2.metric("Docs novos",           preview.novos_documentos)
+    c3.metric("Docs atualizados",     preview.documentos_atualizados)
+    c4.metric("Revisões novas",       preview.novas_revisoes)
+    c5.metric("Revisões atualizadas", preview.revisoes_atualizadas)
+
+    # Inconsistências
+    if preview.total_inconsistencias > 0:
+        with st.expander(
+            f"⚠️ {preview.total_inconsistencias} inconsistência(s) detectada(s) — ver detalhes"
+        ):
+            for inc in preview.inconsistencias[:30]:
+                st.markdown(f"- `{inc['codigo']}` — **{inc['tipo']}**: {inc['descricao']}")
+            if preview.total_inconsistencias > 30:
+                st.caption(f"… e mais {preview.total_inconsistencias - 30} ocorrências.")
+
+    st.divider()
+
+    # Tabela de mudanças de status
+    st.subheader("Mudanças de status detectadas")
+    if preview.mudancas_de_status:
+        rows_status = [
+            {
+                "Código":        m.codigo,
+                "Título":        (m.titulo or "")[:60],
+                "Trecho":        m.trecho,
+                "Status antes":  m.status_antes or "Novo",
+                "Status depois": m.status_depois,
+                "Situação":      m.situacao_depois or "—",
+            }
+            for m in preview.mudancas_de_status
+        ]
+        st.dataframe(
+            pd.DataFrame(rows_status),
+            use_container_width=True,
+            hide_index=True,
+        )
+    else:
+        st.success("Nenhuma mudança de status atual detectada.")
+
+    # Documentos que passarão a ser "já aprovado"
+    if preview.mudancas_ja_aprovado:
+        with st.expander(
+            f"✅ {len(preview.mudancas_ja_aprovado)} documento(s) que passarão a 'já aprovado'"
+        ):
+            for m in preview.mudancas_ja_aprovado:
+                st.markdown(f"- `{m.codigo}` — {m.titulo}")
+
+    # Visão expandida de todos os documentos com mudança
+    if preview.mudancas:
+        with st.expander(
+            f"Ver todos os {len(preview.mudancas)} documentos com mudança relevante"
+        ):
+            rows_all = [
+                {
+                    "Código":         m.codigo,
+                    "Tipo":           m.tipo,
+                    "Status antes":   m.status_antes or "Novo",
+                    "Status depois":  m.status_depois,
+                    "Situação":       m.situacao_depois or "—",
+                    "Já aprovado ✓":  "✓" if m.ja_aprovado_depois else "",
+                }
+                for m in preview.mudancas
+            ]
+            st.dataframe(
+                pd.DataFrame(rows_all),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+    # Revisões novas e atualizadas detectadas pela comparação de chaves
+    if preview.linhas_novas:
+        with st.expander(f"🆕 {len(preview.linhas_novas)} revisão(ões) nova(s)"):
+            rows_novas = [
+                {
+                    "Código":    l.codigo,
+                    "Rev":       l.label_revisao,
+                    "Versão":    l.versao,
+                    "Situação":  l.situacao or "—",
+                    "Emissão":   l.data_emissao or "—",
+                    "Análise":   l.data_analise or "—",
+                }
+                for l in preview.linhas_novas
+            ]
+            st.dataframe(pd.DataFrame(rows_novas), use_container_width=True, hide_index=True)
+
+    if preview.linhas_atualizadas:
+        with st.expander(f"✏️ {len(preview.linhas_atualizadas)} revisão(ões) atualizada(s)"):
+            rows_atual = [
+                {
+                    "Código":    l.codigo,
+                    "Rev":       l.label_revisao,
+                    "Versão":    l.versao,
+                    "Situação":  l.situacao or "—",
+                    "Emissão":   l.data_emissao or "—",
+                    "Análise":   l.data_analise or "—",
+                }
+                for l in preview.linhas_atualizadas
+            ]
+            st.dataframe(pd.DataFrame(rows_atual), use_container_width=True, hide_index=True)
+
+    # Issues bloqueantes da engine de ciclo documental
+    if preview.tem_lifecycle_bloqueante:
+        st.error(
+            f"🚫 **{len(preview.lifecycle_bloqueantes)} problema(s) bloqueante(s) detectado(s) "
+            "pela engine de ciclo documental.** Corrija os dados no Excel antes de importar."
+        )
+        with st.expander("Ver detalhes dos problemas bloqueantes"):
+            for issue in preview.lifecycle_bloqueantes:
+                chave = issue.linha_chave or "—"
+                st.markdown(f"- `{chave}` — {issue.descricao}")
+    elif preview.lifecycle_results:
+        avisos = [issue for lr in preview.lifecycle_results for issue in lr.issues_avisos]
+        if avisos:
+            with st.expander(f"⚠️ {len(avisos)} aviso(s) da engine de ciclo documental"):
+                for issue in avisos:
+                    chave = issue.linha_chave or "—"
+                    st.markdown(f"- `{chave}` — {issue.descricao}")
+
+    st.divider()
+
+    col_conf, col_cancel = st.columns([1, 4])
+    with col_cancel:
+        if st.button("Cancelar prévia", key="btn_cancelar_lista"):
+            for k in (preview_key, arquivo_key, nome_key):
+                st.session_state.pop(k, None)
+            st.rerun()
+    with col_conf:
+        confirmar = st.button(
+            "Confirmar importação",
+            type="primary",
+            key="btn_confirmar_lista",
+            disabled=preview.tem_lifecycle_bloqueante,
+        )
+
+    if confirmar:
+        bytes_arquivo = st.session_state.get(arquivo_key, b"")
+        with st.spinner("Importando…"):
+            try:
+                resultado = _importar_arquivo(bytes_arquivo, contrato_id, "lista")
+                _resultado_badge(resultado, "lista")
+            except Exception as e:
+                st.error(f"Erro na importação: {e}")
+        for k in (preview_key, arquivo_key, nome_key):
+            st.session_state.pop(k, None)
+
+
 def _tab_lista(contrato_id: int):
+    PREVIEW_KEY  = f"imp_lista_preview_{contrato_id}"
+    ARQUIVO_KEY  = f"imp_lista_bytes_{contrato_id}"
+    NOME_KEY     = f"imp_lista_nome_{contrato_id}"
+
     st.markdown(
         "Importa a aba **Lista de documentos** do arquivo Excel. "
         "Cada linha é tratada como uma revisão de um documento."
     )
+
+    # Estado B: preview aguardando confirmação
+    if PREVIEW_KEY in st.session_state:
+        _renderizar_preview_lista(
+            st.session_state[PREVIEW_KEY],
+            contrato_id,
+            PREVIEW_KEY,
+            ARQUIVO_KEY,
+            NOME_KEY,
+        )
+        return
+
+    # Estado A: upload
     arquivo = st.file_uploader(
         "Arquivo Excel (.xlsx)", type=["xlsx"], key="upload_lista"
     )
     if arquivo:
         st.caption(f"Arquivo selecionado: **{arquivo.name}** ({arquivo.size // 1024} KB)")
-        if st.button("Importar Lista de Documentos", type="primary", key="btn_lista"):
-            with st.spinner("Importando…"):
+        if st.button("Analisar importação", type="primary", key="btn_analisar_lista"):
+            with st.spinner("Analisando…"):
                 try:
-                    resultado = _importar_arquivo(arquivo.read(), contrato_id, "lista")
-                    _resultado_badge(resultado, "lista")
+                    bytes_arquivo = arquivo.read()
+                    preview = gerar_preview_lista(bytes_arquivo, arquivo.name, contrato_id)
+                    st.session_state[PREVIEW_KEY] = preview
+                    st.session_state[ARQUIVO_KEY] = bytes_arquivo
+                    st.session_state[NOME_KEY]    = arquivo.name
+                    st.rerun()
                 except Exception as e:
-                    st.error(f"Erro na importação: {e}")
+                    st.error(f"Erro ao analisar o arquivo: {e}")
 
 
 def _tab_id(contrato_id: int):
