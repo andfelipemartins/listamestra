@@ -18,7 +18,8 @@ def _campo(label: str, valor) -> None:
 
 def exibir_dados_derivados_codigo(dados: dict) -> None:
     """Renderiza dados derivados como informacao somente leitura."""
-    st.markdown("**Dados derivados do codigo**")
+    st.markdown("🔒 **Dados derivados do código (somente leitura)**")
+    st.caption("Valores extraídos automaticamente do código — não editáveis.")
 
     with st.container(border=True):
         c1, c2, c3, c4 = st.columns(4)

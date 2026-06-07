@@ -226,6 +226,7 @@ def _renderizar_preview(validos: list, contrato_id: int) -> None:
 
             exibir_dados_derivados_codigo(dados_deriv)
 
+            st.markdown("✏️ **Dados informados (editáveis)**")
             c1, c2, c3 = st.columns(3)
             with c1:
                 st.caption(f"**Título/Objeto:** {doc_fields.get('titulo') or '—'}")
@@ -390,11 +391,13 @@ if not modo_preview:
 
                 st.divider()
 
-                st.markdown("**Dados do Documento**")
+                st.markdown("✏️ **Dados do Documento — campos editáveis**")
+                st.caption("Campos com * são obrigatórios.")
                 _secao_documento(codigo, existing)
 
                 st.divider()
-                st.markdown("**Dados da Revisão**")
+                st.markdown("✏️ **Dados da Revisão — campos editáveis**")
+                st.caption("Campos com * são obrigatórios.")
                 _secao_revisao(codigo)
 
                 st.divider()

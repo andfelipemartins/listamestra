@@ -82,3 +82,32 @@ def test_cadastro_manual_nao_salva_sem_preview():
     # Nao ha botao de salvar direto sem preview
     assert "Salvar documento" not in source
     assert "Salvar {n} documento" not in source
+
+
+# ---------------------------------------------------------------------------
+# Testes de UX visual dos cards (Block 002) — readonly vs editável
+# ---------------------------------------------------------------------------
+
+def test_dados_derivados_marcados_como_somente_leitura():
+    """O componente de dados derivados deve sinalizar explicitamente readonly."""
+    source = Path("app/components/dados_derivados_codigo.py").read_text(encoding="utf-8")
+    assert "somente leitura" in source
+
+
+def test_cadastro_manual_marca_secoes_editaveis():
+    """A página deve identificar claramente as seções de campos editáveis."""
+    source = Path("pages/4_CadastroManual.py").read_text(encoding="utf-8")
+    assert "campos editáveis" in source or "campos editaveis" in source
+
+
+def test_cadastro_manual_sinaliza_campos_obrigatorios():
+    """A página deve trazer legenda explícita sobre campos obrigatórios."""
+    source = Path("pages/4_CadastroManual.py").read_text(encoding="utf-8")
+    assert "são obrigatórios" in source
+
+
+def test_preview_usa_linguagem_readonly_editavel_consistente():
+    """O modo preview deve reaproveitar o componente readonly e marcar editáveis."""
+    source = Path("pages/4_CadastroManual.py").read_text(encoding="utf-8")
+    assert "exibir_dados_derivados_codigo" in source
+    assert "Dados informados (editáveis)" in source
