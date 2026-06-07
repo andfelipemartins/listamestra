@@ -111,3 +111,22 @@ def test_preview_usa_linguagem_readonly_editavel_consistente():
     source = Path("pages/4_CadastroManual.py").read_text(encoding="utf-8")
     assert "exibir_dados_derivados_codigo" in source
     assert "Dados informados (editáveis)" in source
+
+
+# ---------------------------------------------------------------------------
+# Remoção da seção GRD do Cadastro Manual (Block 003)
+# ---------------------------------------------------------------------------
+
+def test_cadastro_manual_nao_tem_secao_grd():
+    """A GRD saiu do Cadastro Manual (virou página própria — block-003)."""
+    source = Path("pages/4_CadastroManual.py").read_text(encoding="utf-8")
+    assert "_secao_grds" not in source
+    assert "_ler_grds" not in source
+    assert "GRD — opcional" not in source
+    assert "cm_grd_" not in source
+
+
+def test_cadastro_manual_salva_sem_grds():
+    """A chamada de cadastro não passa mais GRDs."""
+    source = Path("pages/4_CadastroManual.py").read_text(encoding="utf-8")
+    assert "_ler_grds(codigo)" not in source

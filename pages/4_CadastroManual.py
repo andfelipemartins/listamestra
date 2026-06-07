@@ -114,17 +114,6 @@ def _secao_revisao(codigo: str) -> None:
         st.text_input("Nº Circular", key=f"cm_num_circular_{ks}", placeholder="Ex: 558/2024")
 
 
-def _secao_grds(codigo: str) -> None:
-    ks = _ks(codigo)
-    setores = [("producao", "Produção"), ("topografia", "Topografia"), ("qualidade", "Qualidade")]
-    cols = st.columns(len(setores))
-    for col, (setor, nome) in zip(cols, setores):
-        with col:
-            st.markdown(f"*{nome}*")
-            st.text_input(f"Nº GRD", key=f"cm_grd_num_{setor}_{ks}", placeholder="Ex: GRD-001")
-            st.date_input("Data Envio", value=None, key=f"cm_grd_data_{setor}_{ks}", format="DD/MM/YYYY")
-
-
 def _ler_doc_fields(codigo: str) -> dict:
     ks = _ks(codigo)
     return {
@@ -148,16 +137,6 @@ def _ler_rev_fields(codigo: str) -> dict:
         "data_circular":   _iso(st.session_state.get(f"cm_data_circular_{ks}")),
         "num_circular":    (st.session_state.get(f"cm_num_circular_{ks}") or "").strip() or None,
     }
-
-
-def _ler_grds(codigo: str) -> list[dict]:
-    ks = _ks(codigo)
-    grds = []
-    for setor in ("producao", "topografia", "qualidade"):
-        num  = (st.session_state.get(f"cm_grd_num_{setor}_{ks}") or "").strip() or None
-        data = _iso(st.session_state.get(f"cm_grd_data_{setor}_{ks}"))
-        grds.append({"setor": setor, "numero_grd": num, "data_envio": data})
-    return grds
 
 
 def _campos_obrigatorios_preenchidos(validos: list) -> bool:
@@ -258,7 +237,6 @@ def _renderizar_preview(validos: list, contrato_id: int) -> None:
                 codigo,
                 _ler_doc_fields(codigo),
                 _ler_rev_fields(codigo),
-                _ler_grds(codigo),
             )
             resultados.append((codigo, resultado.mensagem))
         st.session_state["cm_resultados"]  = resultados
@@ -399,10 +377,6 @@ if not modo_preview:
                 st.markdown("✏️ **Dados da Revisão — campos editáveis**")
                 st.caption("Campos com * são obrigatórios.")
                 _secao_revisao(codigo)
-
-                st.divider()
-                st.markdown("**GRD — opcional**")
-                _secao_grds(codigo)
 
     # Botão para entrar no modo preview
     pode_salvar = _campos_obrigatorios_preenchidos(validos)

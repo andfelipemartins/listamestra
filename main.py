@@ -109,6 +109,7 @@ pg = st.navigation(
         st.Page("pages/2_Importacao.py", title="IMPORTAR", icon=":material/file_upload:"),
         st.Page("pages/3_Comparacao.py", title="DETALHAMENTO", icon=":material/find_in_page:"),
         st.Page("pages/4_CadastroManual.py", title="CADASTRAR DOCUMENTO", icon=":material/edit_document:"),
+        st.Page("pages/6_GRD.py", title="GERAR GRD", icon=":material/inventory_2:"),
         st.Page("pages/5_Documento.py", title="PESQUISAR DOCUMENTO", icon=":material/search:"),
     ]
 )

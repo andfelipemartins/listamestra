@@ -165,6 +165,31 @@ CREATE TABLE IF NOT EXISTS grds (
 );
 
 -- ============================================================
+-- GRD em lote (remessa) — Marco 14 (base) / Block 003
+-- grd_remessas = cabeçalho da remessa; grd_itens = revisões vinculadas.
+-- Modelo aditivo: a tabela legada `grds` (por revisão+setor) permanece intacta.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS grd_remessas (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    contrato_id  INTEGER NOT NULL REFERENCES contratos(id),
+    numero_grd   TEXT,
+    data_envio   TEXT,
+    setor        TEXT,            -- setor/destinatário
+    trecho       TEXT,
+    modulo       TEXT,
+    observacoes  TEXT,
+    criado_em    TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS grd_itens (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    grd_id      INTEGER NOT NULL REFERENCES grd_remessas(id) ON DELETE CASCADE,
+    revisao_id  INTEGER NOT NULL REFERENCES revisoes(id),
+    criado_em   TEXT DEFAULT (datetime('now')),
+    UNIQUE(grd_id, revisao_id)
+);
+
+-- ============================================================
 -- Índices para performance
 -- ============================================================
 CREATE INDEX IF NOT EXISTS idx_documentos_codigo    ON documentos(codigo);
@@ -173,6 +198,9 @@ CREATE INDEX IF NOT EXISTS idx_revisoes_documento   ON revisoes(documento_id);
 CREATE INDEX IF NOT EXISTS idx_revisoes_situacao    ON revisoes(situacao);
 CREATE INDEX IF NOT EXISTS idx_previstos_codigo     ON documentos_previstos(codigo);
 CREATE INDEX IF NOT EXISTS idx_grds_revisao         ON grds(revisao_id);
+CREATE INDEX IF NOT EXISTS idx_grd_remessas_contrato ON grd_remessas(contrato_id);
+CREATE INDEX IF NOT EXISTS idx_grd_itens_grd         ON grd_itens(grd_id);
+CREATE INDEX IF NOT EXISTS idx_grd_itens_revisao     ON grd_itens(revisao_id);
 
 """
 
