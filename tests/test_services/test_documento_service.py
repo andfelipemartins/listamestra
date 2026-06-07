@@ -78,7 +78,9 @@ def _criar_revisao(rev_repo, doc_id, **kwargs):
             "label_revisao": kwargs.get("label_revisao", "00"),
             "emissao_inicial": kwargs.get("emissao_inicial"),
             "data_emissao": kwargs.get("data_emissao"),
+            "data_analise": kwargs.get("data_analise"),
             "situacao": kwargs.get("situacao"),
+            "situacao_real": kwargs.get("situacao_real"),
             "ultima_revisao": int(kwargs.get("ultima_revisao", 0)),
             "origem": "teste",
         }
@@ -432,3 +434,122 @@ class TestListagemDocumentos:
 
         assert len(docs) == 1
         assert docs[0]["tipo"] == "MC"
+
+
+# ---------------------------------------------------------------------------
+# Resultado de linha (engine) na linha do tempo do documento
+# ---------------------------------------------------------------------------
+
+class TestResultadoLinhaNoDetalhe:
+    """
+    carregar_detalhe_documento enriquece cada revisao com 'resultado_linha'
+    (label visual vindo da engine), e o status consolidado vem da engine.
+    """
+
+    def test_revisoes_recebem_resultado_linha(self, service, doc_repo, rev_repo, contrato_id):
+        doc_id = _criar_doc(doc_repo, contrato_id, "DE-15.23.17.84-6J2-1005")
+        _criar_revisao(rev_repo, doc_id, revisao=1, label_revisao="1",
+                       situacao="NÃO APROVADO", data_emissao="2025-07-30",
+                       data_analise="2025-08-10", ultima_revisao=0)
+        _criar_revisao(rev_repo, doc_id, revisao=0, label_revisao="0",
+                       situacao="APROVADO", data_emissao="2026-02-23",
+                       data_analise="2026-03-10", ultima_revisao=0)
+        _criar_revisao(rev_repo, doc_id, revisao=None, label_revisao="A1",
+                       situacao="EM ANÁLISE", data_emissao="2026-05-14",
+                       ultima_revisao=1)
+
+        detalhe = service.carregar_detalhe_documento(doc_id)
+
+        # Toda revisao tem resultado_linha preenchido
+        assert all("resultado_linha" in r for r in detalhe["revisoes"])
+
+    def test_revisao_nao_aprovada_exibe_nao_aprovado_nao_em_revisao(
+        self, service, doc_repo, rev_repo, contrato_id
+    ):
+        """Requisito central: revisão antiga NÃO APROVADO não vira 'Em Revisão'."""
+        doc_id = _criar_doc(doc_repo, contrato_id, "DE-15.23.17.84-6J2-2001")
+        _criar_revisao(rev_repo, doc_id, revisao=1, label_revisao="1",
+                       situacao="NÃO APROVADO", data_emissao="2025-07-30",
+                       data_analise="2025-08-10", ultima_revisao=0)
+        _criar_revisao(rev_repo, doc_id, revisao=2, label_revisao="2",
+                       situacao="NÃO APROVADO", data_emissao="2025-09-24",
+                       data_analise="2025-10-05", ultima_revisao=1)
+
+        detalhe = service.carregar_detalhe_documento(doc_id)
+        por_label = {r["label_revisao"]: r["resultado_linha"] for r in detalhe["revisoes"]}
+
+        assert por_label["1"] == "NÃO APROVADO"
+        assert por_label["1"] != "Em Revisão"
+
+    def test_sequencia_real_exibe_labels_esperados(
+        self, service, doc_repo, rev_repo, contrato_id
+    ):
+        """Caso DE-15.23.17.84-6J2-1005 da spec: labels normalizados por linha."""
+        doc_id = _criar_doc(doc_repo, contrato_id, "DE-15.23.17.84-6J2-1005")
+        for rev, lbl, sit, de, da in [
+            (1, "1", "NÃO APROVADO", "2025-07-30", "2025-08-10"),
+            (2, "2", "NÃO APROVADO", "2025-09-24", "2025-10-05"),
+            (3, "3", "NÃO APROVADO", "2025-10-23", "2025-11-10"),
+            (4, "4", "NÃO APROVADO", "2025-11-26", "2025-12-15"),
+            (0, "0", "APROVADO",     "2026-02-23", "2026-03-10"),
+        ]:
+            _criar_revisao(rev_repo, doc_id, revisao=rev, label_revisao=lbl, situacao=sit,
+                           data_emissao=de, data_analise=da, ultima_revisao=0)
+        _criar_revisao(rev_repo, doc_id, revisao=5, label_revisao="A1", situacao="EM ANÁLISE",
+                       data_emissao="2026-05-14", ultima_revisao=1)
+
+        detalhe = service.carregar_detalhe_documento(doc_id)
+        por_label = {r["label_revisao"]: r["resultado_linha"] for r in detalhe["revisoes"]}
+
+        assert por_label["1"] == "NÃO APROVADO"
+        assert por_label["2"] == "NÃO APROVADO"
+        assert por_label["3"] == "NÃO APROVADO"
+        assert por_label["4"] == "NÃO APROVADO"
+        assert por_label["0"] == "APROVADO"
+        assert por_label["A1"] == "EM ANÁLISE"
+
+        # Status consolidado do documento vem da engine
+        assert detalhe["status_atual"] == "Em Análise"
+        assert detalhe["ja_aprovado"] is True
+
+    def test_compat_nao_conforme(self, service, doc_repo, rev_repo, contrato_id):
+        doc_id = _criar_doc(doc_repo, contrato_id, "DE-15.23.17.84-6J2-2002")
+        _criar_revisao(rev_repo, doc_id, label_revisao="1", situacao="NÃO CONFORME",
+                       data_emissao="2025-03-01", data_analise="2025-03-20",
+                       ultima_revisao=1)
+
+        detalhe = service.carregar_detalhe_documento(doc_id)
+
+        assert detalhe["revisoes"][0]["resultado_linha"] == "NÃO CONFORME"
+
+    def test_compat_sem_data_emissao_em_elaboracao(
+        self, service, doc_repo, rev_repo, contrato_id
+    ):
+        doc_id = _criar_doc(doc_repo, contrato_id, "DE-15.23.17.84-6J2-2003")
+        _criar_revisao(rev_repo, doc_id, label_revisao="0", situacao=None,
+                       data_emissao=None, ultima_revisao=1)
+
+        detalhe = service.carregar_detalhe_documento(doc_id)
+
+        assert detalhe["revisoes"][0]["resultado_linha"] == "EM ELABORAÇÃO"
+
+    def test_compat_emitida_sem_analise_em_analise(
+        self, service, doc_repo, rev_repo, contrato_id
+    ):
+        doc_id = _criar_doc(doc_repo, contrato_id, "DE-15.23.17.84-6J2-2004")
+        _criar_revisao(rev_repo, doc_id, label_revisao="0", situacao=None,
+                       data_emissao="2025-05-01", ultima_revisao=1)
+
+        detalhe = service.carregar_detalhe_documento(doc_id)
+
+        assert detalhe["revisoes"][0]["resultado_linha"] == "EM ANÁLISE"
+
+    def test_compat_aprovada(self, service, doc_repo, rev_repo, contrato_id):
+        doc_id = _criar_doc(doc_repo, contrato_id, "DE-15.23.17.84-6J2-2005")
+        _criar_revisao(rev_repo, doc_id, label_revisao="0", situacao="APROVADO",
+                       data_emissao="2025-05-01", data_analise="2025-05-20",
+                       ultima_revisao=1)
+
+        detalhe = service.carregar_detalhe_documento(doc_id)
+
+        assert detalhe["revisoes"][0]["resultado_linha"] == "APROVADO"

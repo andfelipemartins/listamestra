@@ -13,7 +13,7 @@ import streamlit as st
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from db.connection import get_connection
-from core.engine.status import STATUS_ORDEM, NOME_TRECHO, classificar_status
+from core.engine.status import STATUS_ORDEM, NOME_TRECHO
 from core.engine.disciplinas import ESTRUTURA
 from core.exporters.excel_exporter import exportar_historico_revisoes
 from core.formatacao import fmt_inteiro, fmt_data, filtrar_documentos
@@ -132,10 +132,13 @@ def _linha_do_tempo(revisoes: list[dict]):
 
     for rev in revisoes:
         emissao = rev.get("emissao_inicial") or f"Rev{rev.get('revisao', '?')}"
-        status_rev = classificar_status(rev.get("situacao"), rev.get("data_emissao"))
+        # Resultado visual da revisao individual — calculado pela engine de ciclo
+        # documental (DocumentoService) e injetado em cada dict de revisao.
+        # Fallback defensivo caso a revisao venha sem enriquecimento.
+        resultado_rev = rev.get("resultado_linha") or "—"
 
         data_emissao_fmt = fmt_data(rev.get("data_emissao")) if rev.get("data_emissao") else "sem data"
-        with st.expander(f"{emissao} — {data_emissao_fmt} — {status_rev}", expanded=rev.get("ultima_revisao") == 1):
+        with st.expander(f"{emissao} — {data_emissao_fmt} — {resultado_rev}", expanded=rev.get("ultima_revisao") == 1):
             c1, c2, c3 = st.columns(3)
             with c1:
                 label_rev = rev.get("label_revisao") or str(rev.get("revisao") or "—")

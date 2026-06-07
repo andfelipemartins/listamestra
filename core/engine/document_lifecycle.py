@@ -56,6 +56,19 @@ STATUS_ORDEM = [
     STATUS_CANCELADO,
 ]
 
+# Rotulos de RESULTADO de linha individual (exibicao na linha do tempo).
+# Vocabulario visual fechado — nunca expoe conceitos internos da engine
+# (superada, historica, inferida, status operacional). Reflete o resultado
+# proprio da revisao/versao, NAO o status consolidado do documento.
+# "Em Revisão" e status consolidado do documento, nao resultado de linha — por
+# isso uma revisao "NÃO APROVADO" exibe "NÃO APROVADO", e nao "Em Revisão".
+RESULTADO_NAO_APROVADO  = "NÃO APROVADO"
+RESULTADO_NAO_CONFORME  = "NÃO CONFORME"
+RESULTADO_APROVADO      = "APROVADO"
+RESULTADO_CANCELADO     = "CANCELADO"
+RESULTADO_EM_ANALISE    = "EM ANÁLISE"
+RESULTADO_EM_ELABORACAO = "EM ELABORAÇÃO"
+
 # Padroes de label de revisao
 _RE_NUMERICA      = re.compile(r"^\d+$")          # 0, 1, 2, ...
 _RE_LETRA_PURA    = re.compile(r"^[A-Z]$")        # A, B, C — aprovacao historica
@@ -141,6 +154,24 @@ class LifecycleLine:
     @property
     def tem_bloqueante(self) -> bool:
         return any(i.severidade == SeveridadeIssue.BLOQUEANTE for i in self.issues)
+
+    @property
+    def resultado_linha(self) -> str:
+        """
+        Resultado visual desta revisao individual (vocabulario fechado de exibicao).
+
+        Reflete o resultado proprio da linha — nao o status consolidado do
+        documento nem inferencias internas. Para o status consolidado do
+        documento use LifecycleResult.status_atual.
+        """
+        return LinePolicy.calcular(
+            self.linha.situacao, self.linha.data_emissao, self.linha.data_analise
+        )
+
+    @property
+    def resultado_linha_label(self) -> str:
+        """Alias semantico de resultado_linha (label pronto para a UI)."""
+        return self.resultado_linha
 
 
 @dataclass
@@ -273,6 +304,50 @@ class StatusPolicy:
             return STATUS_EM_ANALISE
 
         return STATUS_EM_ELABORACAO
+
+
+class LinePolicy:
+    """
+    Resultado VISUAL de uma linha individual (revisao/versao), para exibicao.
+
+    Diferente de StatusPolicy (status operacional/consolidado do documento),
+    este resultado:
+    - NAO mapeia "NÃO APROVADO" para "Em Revisão";
+    - NAO aplica inferencias entre linhas (superada/substituida/historica);
+    - reflete apenas o resultado proprio daquela revisao.
+
+    Vocabulario fechado de exibicao: NÃO APROVADO, NÃO CONFORME, APROVADO,
+    CANCELADO, EM ANÁLISE, EM ELABORAÇÃO. Conceitos internos nunca vazam aqui.
+    """
+
+    @staticmethod
+    def calcular(
+        situacao: Optional[str],
+        data_emissao: Optional[str],
+        data_analise: Optional[str] = None,
+    ) -> str:
+        s = (situacao or "").strip().upper()
+
+        if s == "CANCELADO":
+            return RESULTADO_CANCELADO
+
+        if s in SITUACOES_APROVADO:
+            return RESULTADO_APROVADO
+
+        if s == "NÃO APROVADO":
+            return RESULTADO_NAO_APROVADO
+
+        if s == "NÃO CONFORME":
+            return RESULTADO_NAO_CONFORME
+
+        # Situacao nao conclusiva → deriva do estado das datas.
+        # data_analise mantido na assinatura por simetria com StatusPolicy e
+        # uso futuro; o vocabulario fechado nao distingue "emitida e analisada
+        # sem situacao conclusiva" de "em analise".
+        if not data_emissao:
+            return RESULTADO_EM_ELABORACAO
+
+        return RESULTADO_EM_ANALISE
 
 
 # ---------------------------------------------------------------------------
@@ -590,6 +665,22 @@ def calcular_status_operacional(
     - Nao quebra compatibilidade com chamadas existentes (data_analise opcional).
     """
     return StatusPolicy.calcular(situacao, data_emissao, data_analise)
+
+
+def calcular_resultado_linha(
+    situacao: Optional[str],
+    data_emissao: Optional[str],
+    data_analise: Optional[str] = None,
+) -> str:
+    """
+    Resultado visual de uma linha individual (vocabulario fechado de exibicao).
+
+    Use na linha do tempo do documento para exibir o resultado proprio de cada
+    revisao (NÃO APROVADO, NÃO CONFORME, APROVADO, CANCELADO, EM ANÁLISE,
+    EM ELABORAÇÃO) — nunca conceitos internos da engine. Para o status
+    consolidado do documento use calcular_status_operacional / status_atual.
+    """
+    return LinePolicy.calcular(situacao, data_emissao, data_analise)
 
 
 def calcular_ja_aprovado(linhas: list[LinhaDocumental]) -> bool:

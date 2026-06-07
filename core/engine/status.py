@@ -44,6 +44,14 @@ def classificar_status(
     """
     Classifica o status de um documento a partir dos campos da última revisão.
 
+    ⚠️ LEGADO / USO RESTRITO. A fonte de verdade do ciclo documental é a
+    DocumentLifecycleEngine (core/engine/document_lifecycle.py). Para status
+    consolidado de documento e resultado de revisão individual, use a engine
+    (via DocumentoService). Esta função permanece apenas para:
+    - carregar_progresso() e carregar_alertas() (Dashboard), ainda baseados nela;
+    - compatibilidade com chamadas existentes.
+    Não usar para exibir status de linha histórica na linha do tempo.
+
     Regras (em ordem de precedência):
     1. situacao contém "APROVADO" (sem "NÃO") → Aprovado
     2. situacao contém "NÃO APROVADO"          → Em Revisão

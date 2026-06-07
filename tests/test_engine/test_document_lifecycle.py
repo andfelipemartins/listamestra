@@ -29,14 +29,23 @@ from core.engine.document_lifecycle import (
     # Politicas
     RevisionPolicy,
     StatusPolicy,
+    LinePolicy,
     # Constantes de status
     STATUS_APROVADO,
     STATUS_EM_REVISAO,
     STATUS_EM_ANALISE,
     STATUS_EM_ELABORACAO,
     STATUS_CANCELADO,
+    # Constantes de resultado de linha
+    RESULTADO_NAO_APROVADO,
+    RESULTADO_NAO_CONFORME,
+    RESULTADO_APROVADO,
+    RESULTADO_CANCELADO,
+    RESULTADO_EM_ANALISE,
+    RESULTADO_EM_ELABORACAO,
     # API de conveniencia
     calcular_status_operacional,
+    calcular_resultado_linha,
     calcular_ja_aprovado,
     calcular_ultima_revisao,
     calcular_emissao_inicial_labels,
@@ -775,3 +784,97 @@ class TestAnalisarImportacaoDocumental:
         resultado = analisar_importacao_documental(CODIGO, [])
         assert resultado.total_linhas == 0
         assert not resultado.tem_bloqueante
+
+
+# ---------------------------------------------------------------------------
+# Resultado de linha individual (LinePolicy / resultado_linha)
+# ---------------------------------------------------------------------------
+
+class TestResultadoLinhaPolicy:
+    """LinePolicy.calcular — resultado visual de linha (vocabulario fechado)."""
+
+    def test_nao_aprovado(self):
+        assert LinePolicy.calcular("NÃO APROVADO", "2025-01-01", "2025-02-01") == RESULTADO_NAO_APROVADO
+
+    def test_nao_conforme(self):
+        assert LinePolicy.calcular("NÃO CONFORME", "2025-01-01", "2025-02-01") == RESULTADO_NAO_CONFORME
+
+    def test_aprovado(self):
+        assert LinePolicy.calcular("APROVADO", "2025-01-01", "2025-02-01") == RESULTADO_APROVADO
+
+    def test_aprovado_variantes_normalizam(self):
+        assert LinePolicy.calcular("PARA APROVAÇÃO", "2025-01-01") == RESULTADO_APROVADO
+        assert LinePolicy.calcular("EM COLETA DE ASSINATURAS", "2025-01-01") == RESULTADO_APROVADO
+
+    def test_cancelado(self):
+        assert LinePolicy.calcular("CANCELADO", "2025-01-01") == RESULTADO_CANCELADO
+
+    def test_emitida_sem_analise_em_analise(self):
+        assert LinePolicy.calcular(None, "2025-01-01", None) == RESULTADO_EM_ANALISE
+
+    def test_situacao_em_analise_exibe_em_analise(self):
+        assert LinePolicy.calcular("EM ANÁLISE", "2025-01-01", None) == RESULTADO_EM_ANALISE
+
+    def test_sem_data_emissao_em_elaboracao(self):
+        assert LinePolicy.calcular(None, None, None) == RESULTADO_EM_ELABORACAO
+
+    def test_nao_aprovado_nunca_vira_em_revisao(self):
+        """NÃO APROVADO é resultado de linha; 'Em Revisão' é status consolidado."""
+        resultado = LinePolicy.calcular("NÃO APROVADO", "2025-01-01", "2025-02-01")
+        assert resultado == RESULTADO_NAO_APROVADO
+        assert resultado != STATUS_EM_REVISAO
+
+    def test_funcao_conveniencia_equivalente(self):
+        assert calcular_resultado_linha("NÃO APROVADO", "2025-01-01") == RESULTADO_NAO_APROVADO
+        assert calcular_resultado_linha("APROVADO", "2025-01-01") == RESULTADO_APROVADO
+
+
+class TestResultadoLinhaSequenciaReal:
+    """
+    Caso real DE-15.23.17.84-6J2-1005 (spec):
+    sequencia 1/1, 2/1, 3/1, 4/1 (NÃO APROVADO) → 0/1 (APROVADO) → A1/1 (EM ANÁLISE).
+    """
+
+    def _sequencia(self):
+        return [
+            linha("1", 1, situacao="NÃO APROVADO", data_emissao="2025-07-30", data_analise="2025-08-10"),
+            linha("2", 1, situacao="NÃO APROVADO", data_emissao="2025-09-24", data_analise="2025-10-05"),
+            linha("3", 1, situacao="NÃO APROVADO", data_emissao="2025-10-23", data_analise="2025-11-10"),
+            linha("4", 1, situacao="NÃO APROVADO", data_emissao="2025-11-26", data_analise="2025-12-15"),
+            linha("0", 1, situacao="APROVADO",     data_emissao="2026-02-23", data_analise="2026-03-10"),
+            linha("A1", 1, situacao="EM ANÁLISE",  data_emissao="2026-05-14"),
+        ]
+
+    def test_linhas_1_a_4_resultado_nao_aprovado(self):
+        resultado = analisar_linhas_documento(CODIGO, self._sequencia())
+        por_label = {ll.linha.label_revisao: ll.resultado_linha for ll in resultado.linhas}
+        assert por_label["1"] == RESULTADO_NAO_APROVADO
+        assert por_label["2"] == RESULTADO_NAO_APROVADO
+        assert por_label["3"] == RESULTADO_NAO_APROVADO
+        assert por_label["4"] == RESULTADO_NAO_APROVADO
+
+    def test_linha_0_resultado_aprovado(self):
+        resultado = analisar_linhas_documento(CODIGO, self._sequencia())
+        por_label = {ll.linha.label_revisao: ll.resultado_linha for ll in resultado.linhas}
+        assert por_label["0"] == RESULTADO_APROVADO
+
+    def test_linha_a1_resultado_em_analise(self):
+        resultado = analisar_linhas_documento(CODIGO, self._sequencia())
+        por_label = {ll.linha.label_revisao: ll.resultado_linha for ll in resultado.linhas}
+        assert por_label["A1"] == RESULTADO_EM_ANALISE
+
+    def test_status_documento_atual_em_analise(self):
+        resultado = analisar_linhas_documento(CODIGO, self._sequencia())
+        assert resultado.status_atual == STATUS_EM_ANALISE
+
+    def test_ja_aprovado_true(self):
+        resultado = analisar_linhas_documento(CODIGO, self._sequencia())
+        assert resultado.ja_aprovado is True
+
+    def test_resultado_linha_nao_expoe_conceitos_internos(self):
+        """Nenhum resultado de linha deve conter termos internos da engine."""
+        resultado = analisar_linhas_documento(CODIGO, self._sequencia())
+        proibidos = {"superada", "histórica", "historica", "inferida", "substituída", "substituida"}
+        for ll in resultado.linhas:
+            texto = ll.resultado_linha.lower()
+            assert not any(p in texto for p in proibidos)

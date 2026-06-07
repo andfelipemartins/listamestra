@@ -10,6 +10,11 @@ from typing import Optional
 
 from core.engine.disciplinas import ESTRUTURA
 from core.engine.status import NOME_TRECHO, classificar_status
+from core.engine.document_lifecycle import (
+    LinhaDocumental,
+    analisar_linhas_documento,
+    calcular_resultado_linha,
+)
 from core.formatacao import disciplina_do_codigo, filtrar_documentos
 from core.parsers.registry import ParserRegistry
 from core.repositories.documento_repository import DocumentoRepository
@@ -50,6 +55,61 @@ class DocumentoService:
 
     def listar_revisoes_do_documento(self, documento_id: int) -> list[dict]:
         return self._rev_repo.listar_por_documento(documento_id)
+
+    # ------------------------------------------------------------------
+    # Ciclo documental (engine como fonte de verdade)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _linha_documental_de_revisao(codigo: str, rev: dict) -> LinhaDocumental:
+        """Converte um dict de revisao (tabela revisoes) em LinhaDocumental."""
+        return LinhaDocumental(
+            codigo=codigo,
+            label_revisao=rev.get("label_revisao") or "0",
+            versao=rev.get("versao") or 1,
+            situacao=rev.get("situacao"),
+            data_emissao=rev.get("data_emissao"),
+            data_analise=rev.get("data_analise"),
+            data_elaboracao=rev.get("data_elaboracao"),
+            situacao_real=rev.get("situacao_real"),
+            id=rev.get("id"),
+            ordem=rev.get("id") or 0,
+            ja_persistida=True,
+        )
+
+    def enriquecer_revisoes_com_resultado(
+        self, codigo: str, revisoes: list[dict]
+    ):
+        """
+        Enriquece cada revisao com 'resultado_linha' calculado pela engine.
+
+        Muta os dicts em revisoes adicionando a chave 'resultado_linha' (label
+        visual da revisao individual). Retorna o LifecycleResult da analise
+        completa — fonte do status consolidado e de ja_aprovado.
+
+        A regra de status fica inteiramente na engine; a pagina apenas exibe.
+        """
+        if not revisoes:
+            return analisar_linhas_documento(codigo, [])
+
+        linhas = [self._linha_documental_de_revisao(codigo, r) for r in revisoes]
+        resultado = analisar_linhas_documento(codigo, linhas)
+
+        por_id = {
+            ll.linha.id: ll.resultado_linha
+            for ll in resultado.linhas
+            if ll.linha.id is not None
+        }
+        for rev in revisoes:
+            rev["resultado_linha"] = por_id.get(
+                rev.get("id"),
+                calcular_resultado_linha(
+                    rev.get("situacao"),
+                    rev.get("data_emissao"),
+                    rev.get("data_analise"),
+                ),
+            )
+        return resultado
 
     # ------------------------------------------------------------------
     # Enriquecimento e fallback
@@ -176,26 +236,32 @@ class DocumentoService:
     # ------------------------------------------------------------------
 
     def carregar_detalhe_documento(self, documento_id: int) -> Optional[dict]:
-        """Documento com revisoes e status atual resolvido.
+        """Documento com revisoes e status atual resolvido pela engine.
 
         Retorna None se nao existir. Estrutura do retorno:
           documento      — dict bruto da tabela documentos
-          revisoes       — lista ordenada da tabela revisoes
+          revisoes       — lista ordenada da tabela revisoes, cada uma enriquecida
+                           com 'resultado_linha' (label visual da revisao)
           ultima_revisao — dict da revisao marcada ultima_revisao=1, ou None
-          status_atual   — string classificada (classificar_status)
+          status_atual   — status consolidado do documento (DocumentLifecycleEngine)
+          ja_aprovado    — True se ha aprovacao historica em alguma revisao
+
+        O status consolidado e o resultado de cada linha vem da engine de ciclo
+        documental — fonte unica de verdade. classificar_status() (legado) nao
+        e mais usado aqui.
         """
         doc = self._doc_repo.buscar_por_id(documento_id)
         if doc is None:
             return None
         revisoes = self._rev_repo.listar_por_documento(documento_id)
         ultima = next((r for r in revisoes if r.get("ultima_revisao")), None)
-        status = classificar_status(
-            ultima.get("situacao") if ultima else None,
-            ultima.get("data_emissao") if ultima else None,
-        )
+
+        lifecycle = self.enriquecer_revisoes_com_resultado(doc["codigo"], revisoes)
+
         return {
             "documento": doc,
             "revisoes": revisoes,
             "ultima_revisao": ultima,
-            "status_atual": status,
+            "status_atual": lifecycle.status_atual,
+            "ja_aprovado": lifecycle.ja_aprovado,
         }
