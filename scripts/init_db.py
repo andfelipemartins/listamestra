@@ -211,6 +211,29 @@ _MIGRACOES = [
     ("revisoes",   "emissao_inicial", "TEXT"),
     ("revisoes",   "data_circular",   "TEXT"),
     ("arquivos",   "objeto",          "TEXT"),   # Marco 8 — imutável por arquivo
+    # GRD como entidade operacional (block-001 v2) — cabeçalho
+    ("grd_remessas", "status",           "TEXT DEFAULT 'rascunho'"),
+    ("grd_remessas", "destinatario",     "TEXT"),
+    ("grd_remessas", "ac",               "TEXT"),
+    ("grd_remessas", "obra",             "TEXT"),
+    ("grd_remessas", "emitido_por",      "TEXT"),
+    ("grd_remessas", "recebido_por",     "TEXT"),
+    ("grd_remessas", "data_recebimento", "TEXT"),
+    # GRD — snapshot congelado do item + cópias por formato
+    ("grd_itens", "codigo_snapshot",        "TEXT"),
+    ("grd_itens", "titulo_snapshot",        "TEXT"),
+    ("grd_itens", "label_revisao_snapshot", "TEXT"),
+    ("grd_itens", "versao_snapshot",        "INTEGER"),
+    ("grd_itens", "situacao_snapshot",      "TEXT"),
+    ("grd_itens", "data_emissao_snapshot",  "TEXT"),
+    ("grd_itens", "trecho_snapshot",        "TEXT"),
+    ("grd_itens", "disciplina_snapshot",    "TEXT"),
+    ("grd_itens", "qtd_a0",      "INTEGER DEFAULT 0"),
+    ("grd_itens", "qtd_a1",      "INTEGER DEFAULT 0"),
+    ("grd_itens", "qtd_a2",      "INTEGER DEFAULT 0"),
+    ("grd_itens", "qtd_a3",      "INTEGER DEFAULT 0"),
+    ("grd_itens", "qtd_a4",      "INTEGER DEFAULT 0"),
+    ("grd_itens", "qtd_digital", "INTEGER DEFAULT 0"),
 ]
 
 
@@ -220,6 +243,14 @@ def _migrar_esquema(conn: sqlite3.Connection) -> None:
         colunas = {row[1] for row in conn.execute(f"PRAGMA table_info({tabela})")}
         if coluna not in colunas:
             conn.execute(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {defn}")
+    # Número único de GRD por contrato (índice parcial — ignora números nulos/rascunho sem número)
+    conn.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_grd_numero_contrato
+        ON grd_remessas(contrato_id, numero_grd)
+        WHERE numero_grd IS NOT NULL
+        """
+    )
 
 
 def _normalizar_labels(conn: sqlite3.Connection) -> None:

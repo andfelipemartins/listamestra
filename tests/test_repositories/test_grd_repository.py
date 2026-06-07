@@ -129,3 +129,60 @@ class TestDocumentosParaGrd:
         _, r1 = _doc_com_revisao(db_path, contrato_id, "DE-15.25.00.00-6A1-1001")
         doc = repo.listar_documentos_para_grd(contrato_id)[0]
         assert doc["revisao_id"] == r1
+
+
+class TestNumeroEStatus:
+    def test_numero_existe(self, repo, contrato_id):
+        repo.criar_remessa({"contrato_id": contrato_id, "numero_grd": "GRD-1"})
+        assert repo.numero_existe(contrato_id, "GRD-1")
+        assert not repo.numero_existe(contrato_id, "GRD-2")
+
+    def test_numero_existe_ignora_excluido(self, repo, contrato_id):
+        gid = repo.criar_remessa({"contrato_id": contrato_id, "numero_grd": "GRD-1"})
+        assert not repo.numero_existe(contrato_id, "GRD-1", excluir_id=gid)
+
+    def test_status_default_rascunho(self, repo, contrato_id):
+        gid = repo.criar_remessa({"contrato_id": contrato_id, "numero_grd": "GRD-1"})
+        assert repo.buscar_por_id(gid)["status"] == "rascunho"
+
+    def test_atualizar_status(self, repo, contrato_id):
+        gid = repo.criar_remessa({"contrato_id": contrato_id, "numero_grd": "GRD-1"})
+        repo.atualizar_status(gid, "emitida")
+        assert repo.buscar_por_id(gid)["status"] == "emitida"
+
+    def test_atualizar_status_invalido(self, repo, contrato_id):
+        gid = repo.criar_remessa({"contrato_id": contrato_id})
+        with pytest.raises(ValueError):
+            repo.atualizar_status(gid, "xpto")
+
+    def test_buscar_por_numero(self, repo, contrato_id):
+        repo.criar_remessa({"contrato_id": contrato_id, "numero_grd": "GRD-ABC"})
+        assert repo.buscar_por_numero(contrato_id, "GRD-ABC")["numero_grd"] == "GRD-ABC"
+
+
+class TestSnapshotItem:
+    def test_adicionar_item_snapshot(self, repo, db_path, contrato_id):
+        _, r1 = _doc_com_revisao(db_path, contrato_id, "DE-15.25.00.00-6A1-1001")
+        gid = repo.criar_remessa({"contrato_id": contrato_id, "numero_grd": "GRD-1"})
+        repo.adicionar_item_snapshot(gid, {
+            "revisao_id": r1, "codigo_snapshot": "DE-15.25.00.00-6A1-1001",
+            "titulo_snapshot": "Planta", "label_revisao_snapshot": "0",
+            "versao_snapshot": 1, "situacao_snapshot": "APROVADO",
+            "qtd_a1": 2, "qtd_digital": 5,
+        })
+        it = repo.listar_itens(gid)[0]
+        assert it["codigo"] == "DE-15.25.00.00-6A1-1001"
+        assert it["situacao"] == "APROVADO"
+        assert it["qtd_a1"] == 2 and it["qtd_digital"] == 5
+
+    def test_listar_remessas_filtro_status(self, repo, contrato_id):
+        g1 = repo.criar_remessa({"contrato_id": contrato_id, "numero_grd": "GRD-1"})
+        repo.atualizar_status(g1, "cancelada")
+        repo.criar_remessa({"contrato_id": contrato_id, "numero_grd": "GRD-2"})
+        assert len(repo.listar_remessas(contrato_id, {"status": "cancelada"})) == 1
+        assert len(repo.listar_remessas(contrato_id, {"status": "rascunho"})) == 1
+
+    def test_listar_remessas_filtro_numero(self, repo, contrato_id):
+        repo.criar_remessa({"contrato_id": contrato_id, "numero_grd": "GRD-ABC"})
+        repo.criar_remessa({"contrato_id": contrato_id, "numero_grd": "GRD-XYZ"})
+        assert len(repo.listar_remessas(contrato_id, {"numero": "ABC"})) == 1

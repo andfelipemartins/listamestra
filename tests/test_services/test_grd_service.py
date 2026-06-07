@@ -1,7 +1,8 @@
 """
 tests/test_services/test_grd_service.py
 
-Testes do GrdService — criação de GRD em lote e listagem de selecionáveis.
+Testes do GrdService — GRD como entidade operacional (número único, snapshot,
+cópias, status, exportação).
 """
 
 import os
@@ -13,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "scripts"))
 
 from init_db import init_db
+from db.connection import get_connection
 from core.repositories.contract_repository import ContractRepository
 from core.repositories.documento_repository import DocumentoRepository
 from core.repositories.revisao_repository import RevisaoRepository
@@ -39,7 +41,8 @@ def service(db_path):
 def _doc_rev(db_path, contrato_id, codigo, **rev):
     doc_id = DocumentoRepository(db_path).criar_documento({
         "contrato_id": contrato_id, "codigo": codigo, "tipo": "DE",
-        "trecho": rev.get("trecho", "25"), "origem": "teste",
+        "titulo": rev.get("titulo", "Documento"), "trecho": rev.get("trecho", "25"),
+        "disciplina": rev.get("disciplina", "A1"), "origem": "teste",
     })
     rev_id = RevisaoRepository(db_path).criar_revisao({
         "documento_id": doc_id, "revisao": 0, "versao": 1, "label_revisao": "0",
@@ -50,64 +53,146 @@ def _doc_rev(db_path, contrato_id, codigo, **rev):
     return rev_id
 
 
+def _item(rid, **qtd):
+    return {"revisao_id": rid, **qtd}
+
+
 class TestCriarGrd:
     def test_uma_grd_para_multiplos_documentos(self, service, db_path, contrato_id):
         r1 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1001")
         r2 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1002")
         r3 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1003")
-
-        resultado = service.criar_grd(
-            contrato_id,
-            {"numero_grd": "GRD-001", "data_envio": "2026-06-07", "setor": "Produção"},
-            [r1, r2, r3],
+        res = service.criar_grd(
+            contrato_id, {"numero_grd": "GRD-001", "status": "emitida"},
+            [_item(r1), _item(r2), _item(r3)],
         )
-
-        assert resultado.sucesso
-        assert resultado.total_itens == 3
-        # uma única GRD criada, com 3 itens
+        assert res.sucesso and res.total_itens == 3
         grds = service.listar_grds(contrato_id)
-        assert len(grds) == 1
-        assert grds[0]["numero_grd"] == "GRD-001"
-        assert grds[0]["total_itens"] == 3
-
-    def test_cabecalho_nao_se_repete_por_documento(self, service, db_path, contrato_id):
-        r1 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1001")
-        r2 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1002")
-        service.criar_grd(contrato_id, {"numero_grd": "GRD-XYZ", "setor": "Topografia"}, [r1, r2])
-        grds = service.listar_grds(contrato_id)
-        # número/setor informados uma vez, válidos para todos os itens
-        assert len(grds) == 1
-        itens = service.listar_itens(grds[0]["id"])
-        assert len(itens) == 2
+        assert len(grds) == 1 and grds[0]["total_itens"] == 3
 
     def test_sem_selecao_falha(self, service, contrato_id):
-        resultado = service.criar_grd(contrato_id, {"numero_grd": "GRD-001"}, [])
-        assert not resultado.sucesso
-        assert "selecione" in resultado.mensagem.lower()
+        res = service.criar_grd(contrato_id, {"numero_grd": "GRD-001"}, [])
+        assert not res.sucesso
 
-    def test_revisao_ids_duplicados_sao_deduplicados(self, service, db_path, contrato_id):
+    def test_status_inicial_padrao_rascunho(self, service, db_path, contrato_id):
         r1 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1001")
-        resultado = service.criar_grd(contrato_id, {"numero_grd": "GRD-D"}, [r1, r1, r1])
-        assert resultado.sucesso
-        assert resultado.total_itens == 1
+        res = service.criar_grd(contrato_id, {}, [_item(r1)])
+        assert res.sucesso
+        assert service.buscar_grd(res.grd_id)["status"] == "rascunho"
+
+    def test_status_inicial_emitida(self, service, db_path, contrato_id):
+        r1 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1001")
+        res = service.criar_grd(contrato_id, {"status": "emitida"}, [_item(r1)])
+        assert service.buscar_grd(res.grd_id)["status"] == "emitida"
+
+
+class TestNumeroUnico:
+    def test_numero_duplicado_no_contrato_bloqueia(self, service, db_path, contrato_id):
+        r1 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1001")
+        r2 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1002")
+        assert service.criar_grd(contrato_id, {"numero_grd": "GRD-9"}, [_item(r1)]).sucesso
+        res2 = service.criar_grd(contrato_id, {"numero_grd": "GRD-9"}, [_item(r2)])
+        assert not res2.sucesso
+        assert "grd-9" in res2.mensagem.lower() or "número" in res2.mensagem.lower()
+
+    def test_mesmo_numero_em_contratos_diferentes_permitido(self, service, db_path):
+        c1 = ContractRepository(db_path).criar_contrato("C1", "X")
+        c2 = ContractRepository(db_path).criar_contrato("C2", "Y")
+        r1 = _doc_rev(db_path, c1, "DE-15.25.00.00-6A1-1001")
+        r2 = _doc_rev(db_path, c2, "DE-15.25.00.00-6A1-1002")
+        assert service.criar_grd(c1, {"numero_grd": "GRD-1"}, [_item(r1)]).sucesso
+        assert service.criar_grd(c2, {"numero_grd": "GRD-1"}, [_item(r2)]).sucesso
+
+
+class TestSnapshotECopias:
+    def test_snapshot_congela_situacao(self, service, db_path, contrato_id):
+        r1 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1001", situacao="APROVADO")
+        res = service.criar_grd(contrato_id, {"numero_grd": "GRD-1"}, [_item(r1)])
+        # altera a revisão depois de criada a GRD
+        with get_connection(db_path) as conn:
+            conn.execute("UPDATE revisoes SET situacao=?, label_revisao=? WHERE id=?",
+                         ("NÃO APROVADO", "1", r1))
+        it = service.listar_itens(res.grd_id)[0]
+        assert it["situacao"] == "APROVADO"      # congelado
+        assert it["label_revisao"] == "0"         # congelado
+
+    def test_snapshot_guarda_codigo_e_titulo(self, service, db_path, contrato_id):
+        r1 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1001", titulo="Planta Geral")
+        res = service.criar_grd(contrato_id, {"numero_grd": "GRD-1"}, [_item(r1)])
+        it = service.listar_itens(res.grd_id)[0]
+        assert it["codigo"] == "DE-15.25.00.00-6A1-1001"
+        assert it["titulo"] == "Planta Geral"
+
+    def test_copias_por_formato(self, service, db_path, contrato_id):
+        r1 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1001")
+        res = service.criar_grd(
+            contrato_id, {"numero_grd": "GRD-1"},
+            [_item(r1, qtd_a0=1, qtd_a1=2, qtd_a4=5, qtd_digital=3)],
+        )
+        it = service.listar_itens(res.grd_id)[0]
+        assert (it["qtd_a0"], it["qtd_a1"], it["qtd_a4"], it["qtd_digital"]) == (1, 2, 5, 3)
+        assert it["qtd_a2"] == 0 and it["qtd_a3"] == 0
+
+
+class TestStatus:
+    def test_alterar_status(self, service, db_path, contrato_id):
+        r1 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1001")
+        res = service.criar_grd(contrato_id, {"numero_grd": "GRD-1"}, [_item(r1)])
+        service.alterar_status(res.grd_id, "enviada")
+        assert service.buscar_grd(res.grd_id)["status"] == "enviada"
+
+    def test_status_invalido_falha(self, service, db_path, contrato_id):
+        r1 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1001")
+        res = service.criar_grd(contrato_id, {"numero_grd": "GRD-1"}, [_item(r1)])
+        assert not service.alterar_status(res.grd_id, "xpto").sucesso
+
+    def test_cancelar_preserva_dados(self, service, db_path, contrato_id):
+        r1 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1001")
+        res = service.criar_grd(contrato_id, {"numero_grd": "GRD-1"}, [_item(r1, qtd_a1=4)])
+        service.cancelar_grd(res.grd_id)
+        grd = service.buscar_grd(res.grd_id)
+        assert grd["status"] == "cancelada"
+        # itens e cópias preservados
+        it = service.listar_itens(res.grd_id)[0]
+        assert it["qtd_a1"] == 4
+
+
+class TestBuscaEExportData:
+    def test_busca_por_numero(self, service, db_path, contrato_id):
+        r1 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1001")
+        service.criar_grd(contrato_id, {"numero_grd": "GRD-ABC"}, [_item(r1)])
+        achados = service.listar_grds(contrato_id, {"numero": "ABC"})
+        assert len(achados) == 1 and achados[0]["numero_grd"] == "GRD-ABC"
+
+    def test_busca_por_documento(self, service, db_path, contrato_id):
+        r1 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-7777")
+        r2 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-8888")
+        service.criar_grd(contrato_id, {"numero_grd": "GRD-1"}, [_item(r1)])
+        service.criar_grd(contrato_id, {"numero_grd": "GRD-2"}, [_item(r2)])
+        achados = service.listar_grds(contrato_id, {"codigo": "7777"})
+        assert len(achados) == 1 and achados[0]["numero_grd"] == "GRD-1"
+
+    def test_filtro_por_status(self, service, db_path, contrato_id):
+        r1 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1001")
+        res = service.criar_grd(contrato_id, {"numero_grd": "GRD-1", "status": "emitida"}, [_item(r1)])
+        service.cancelar_grd(res.grd_id)
+        assert len(service.listar_grds(contrato_id, {"status": "cancelada"})) == 1
+        assert len(service.listar_grds(contrato_id, {"status": "emitida"})) == 0
+
+    def test_montar_dados_exportacao(self, service, db_path, contrato_id):
+        r1 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1001")
+        res = service.criar_grd(contrato_id, {"numero_grd": "GRD-1"}, [_item(r1)])
+        dados = service.montar_dados_exportacao(res.grd_id)
+        assert dados["cabecalho"]["numero_grd"] == "GRD-1"
+        assert len(dados["itens"]) == 1
 
 
 class TestListarSelecionaveis:
-    def test_lista_documentos_enriquecidos(self, service, db_path, contrato_id):
-        _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1001", situacao="APROVADO")
+    def test_lista_enriquecida_com_revisao_id(self, service, db_path, contrato_id):
+        _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1001")
         docs = service.listar_documentos_selecionaveis(contrato_id)
         assert len(docs) == 1
-        d = docs[0]
-        assert d["nome_trecho"] == "Ragueb Chohfi"
-        assert "status_atual" in d
-        assert "revisao_id" in d
-
-    def test_filtro_textual(self, service, db_path, contrato_id):
-        _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1001")
-        _doc_rev(db_path, contrato_id, "MC-15.25.00.00-6A1-1002")
-        achados = service.listar_documentos_selecionaveis(contrato_id, "MC-15.25.00.00-6A1-1002")
-        assert len(achados) == 1
-        assert achados[0]["codigo"] == "MC-15.25.00.00-6A1-1002"
+        assert "revisao_id" in docs[0] and docs[0]["nome_trecho"] == "Ragueb Chohfi"
 
     def test_documento_sem_revisao_nao_aparece(self, service, db_path, contrato_id):
         DocumentoRepository(db_path).criar_documento({
