@@ -246,6 +246,27 @@ class TestToken:
         gid = service.criar_grd(contrato_id, {"numero_grd": "GRD-1"}, [_item(r1)]).grd_id
         assert not service.gerar_token_recebimento(gid).sucesso  # rascunho
 
+    def test_token_rejeitado_para_recebida(self, service, db_path, contrato_id):
+        r1 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1001")
+        gid = service.criar_grd(contrato_id, {"numero_grd": "GRD-1"}, [_item(r1)]).grd_id
+        service.emitir_grd(gid); service.marcar_enviada(gid)
+        service.marcar_recebida(gid, "João", "Eng")
+        assert not service.gerar_token_recebimento(gid).sucesso
+
+    def test_token_rejeitado_para_anulada(self, service, db_path, contrato_id):
+        r1 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1001")
+        gid = service.criar_grd(contrato_id, {"numero_grd": "GRD-1"}, [_item(r1)]).grd_id
+        service.emitir_grd(gid); service.anular_grd(gid, "erro")
+        assert not service.gerar_token_recebimento(gid).sucesso
+
+    def test_reclicar_nao_troca_token(self, service, db_path, contrato_id):
+        r1 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1001")
+        gid = service.criar_grd(contrato_id, {"numero_grd": "GRD-1"}, [_item(r1)]).grd_id
+        service.emitir_grd(gid)
+        t1 = service.gerar_token_recebimento(gid).mensagem
+        t2 = service.gerar_token_recebimento(gid).mensagem
+        assert t1 == t2  # idempotente — não gera outro token
+
     def test_registrar_recebimento_por_token(self, service, db_path, contrato_id):
         r1 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1001")
         gid = service.criar_grd(contrato_id, {"numero_grd": "GRD-1"}, [_item(r1)]).grd_id

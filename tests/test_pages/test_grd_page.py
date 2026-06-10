@@ -83,7 +83,30 @@ def test_grd_page_prepara_token():
     source = _src()
     assert "gerar_token_recebimento" in source
     # deixa claro que a página pública ainda não existe
-    assert "não implementad" in source.lower() or "block futuro" in source.lower()
+    assert "ainda não está implementada" in source.lower() or "adr 0004" in source.lower()
+
+
+def test_grd_page_token_feedback_sobrevive_rerun():
+    """Feedback do token usa session_state (sobrevive ao rerun) e é limpo depois."""
+    source = _src()
+    assert "grd_token_feedback" in source
+    assert "Token de recebimento gerado" in source
+    # o flag é definido antes do rerun e removido após exibir
+    assert 'del st.session_state["grd_token_feedback"]' in source
+
+
+def test_grd_page_token_persistente_readonly():
+    """Token exibido em campo somente-leitura, com observação de página pública."""
+    source = _src()
+    assert "disabled=True" in source
+    assert "página pública ainda não está implementada" in source
+
+
+def test_grd_page_token_nao_chamado_de_link():
+    """Vocabulário: 'Token de recebimento', não 'link de recebimento'."""
+    source = _src().lower()
+    assert "link de recebimento" not in source
+    assert "token de recebimento" in source
 
 
 def test_grd_page_avisa_congelamento():

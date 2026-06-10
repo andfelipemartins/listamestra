@@ -51,21 +51,44 @@ def _iso(val) -> Optional[str]:
     return None
 
 
+_TOKEN_OBS = (
+    "Este token será usado futuramente para gerar um link público de recebimento. "
+    "A página pública ainda não está implementada (ver ADR 0004)."
+)
+
+
 def _bloco_token(g: dict) -> None:
-    """Geração/exibição do token de recebimento (link público é block futuro)."""
-    if g.get("token_recebimento"):
+    """
+    Geração/exibição do token de recebimento.
+
+    O feedback de sucesso sobrevive ao st.rerun() via session_state (limpo após
+    exibido). É um *token*, não um link — não há URL funcional ainda.
+    """
+    gid = g["id"]
+    token = g.get("token_recebimento")
+
+    # Feedback persistente: sobrevive ao rerun que ocorre logo após gerar.
+    if st.session_state.get("grd_token_feedback") == gid:
+        st.success("Token de recebimento gerado.")
+        del st.session_state["grd_token_feedback"]
+
+    if token:
+        st.markdown("**Token de recebimento gerado**")
         st.text_input(
-            "Token de recebimento (link público — ainda não implementado)",
-            value=g["token_recebimento"], key=f"grd_tok_show_{g['id']}", disabled=True,
+            "Token de recebimento", value=token,
+            key=f"grd_tok_show_{gid}", disabled=True,
         )
-        st.caption("Distribua por qualquer canal (WhatsApp, e-mail, Teams, QR…). "
-                   "A página pública de confirmação será um block futuro (ver ADR 0004).")
-    if st.button("Gerar token de recebimento", key=f"grd_gtok_{g['id']}", use_container_width=True):
-        res = _service.gerar_token_recebimento(g["id"])
-        (st.success if res.sucesso else st.warning)(
-            "Token gerado — copie e distribua." if res.sucesso else res.mensagem
-        )
-        st.rerun()
+        st.caption(f"{_TOKEN_OBS} Token já vinculado a esta GRD.")
+        return
+
+    # Sem token ainda: oferece a geração. (Botão só aparece em emitida/enviada.)
+    if st.button("Gerar token de recebimento", key=f"grd_gtok_{gid}", use_container_width=True):
+        res = _service.gerar_token_recebimento(gid)
+        if res.sucesso:
+            st.session_state["grd_token_feedback"] = gid
+            st.rerun()
+        else:
+            st.warning(res.mensagem)
 
 
 def _bloco_anular(g: dict) -> None:
