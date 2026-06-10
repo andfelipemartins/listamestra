@@ -100,6 +100,51 @@ pytest tests/ -v --cov=core --cov-report=term-missing
 
 ---
 
+## Banco demo (apresentação / Streamlit Cloud)
+
+O banco operacional `db/sclme.db` é **local e não versionado** (contém dados reais).
+Para apresentações há um **banco demo fictício e versionado** em
+`data/demo/sclme_demo.db` — somente dados de demonstração, sem informações reais.
+
+A seleção do banco é feita pela variável de ambiente **`SCLME_DB_MODE`**:
+
+| `SCLME_DB_MODE` | Banco usado |
+|-----------------|-------------|
+| (não definida)  | `db/sclme.db` (operacional local) |
+| `demo`          | `data/demo/sclme_demo.db` (demonstração) |
+
+### Gerar/regenerar o banco demo
+
+```bash
+python scripts/create_demo_db.py    # recria data/demo/sclme_demo.db do zero
+```
+
+### Rodar o app em modo demo
+
+```bash
+# Windows (PowerShell)
+$env:SCLME_DB_MODE = "demo"; streamlit run main.py
+# Linux/macOS
+SCLME_DB_MODE=demo streamlit run main.py
+```
+
+### Streamlit Cloud
+
+Defina a variável de ambiente em **Settings → Secrets/Variables**:
+
+```
+SCLME_DB_MODE = "demo"
+```
+
+O banco demo já está versionado no repositório; se por algum motivo estiver
+ausente, ele é **gerado automaticamente** na primeira conexão em modo demo
+(via `scripts/create_demo_db.py`).
+
+> ⚠️ `db/sclme.db` nunca é versionado (está no `.gitignore`). Para uso local
+> operacional, rode `python scripts/init_db.py` e importe seus dados reais.
+
+---
+
 ## Padrão de Código — Linha 15 (Metrô SP)
 
 Formato: `TIPO-LINHA.TRECHO.SUBTRECHO.UNIDADE-ETAPACLS-SEQUENCIAL`
