@@ -43,3 +43,22 @@ def test_nao_importa_classificar_status():
             for alias in node.names:
                 importados.add(alias.name)
     assert "classificar_status" not in importados
+
+
+# ---------------------------------------------------------------------------
+# Integração de GRDs no detalhe do documento (block-002 v2)
+# ---------------------------------------------------------------------------
+
+def test_documento_integra_grds_via_service():
+    """GRDs no detalhe vêm do GrdService (snapshot), não de SQL direto."""
+    source = _PAGINA.read_text(encoding="utf-8")
+    assert "GrdService" in source
+    assert "listar_grds_por_revisao" in source
+    # não consulta mais a tabela legada grds via SQL
+    assert "FROM grds" not in source
+
+
+def test_documento_grd_mostra_status_e_recebimento():
+    source = _PAGINA.read_text(encoding="utf-8")
+    assert "GRDs vinculadas" in source
+    assert "recebido_por" in source

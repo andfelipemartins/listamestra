@@ -51,6 +51,56 @@ def _iso(val) -> Optional[str]:
     return None
 
 
+def _bloco_token(g: dict) -> None:
+    """Geração/exibição do token de recebimento (link público é block futuro)."""
+    if g.get("token_recebimento"):
+        st.text_input(
+            "Token de recebimento (link público — ainda não implementado)",
+            value=g["token_recebimento"], key=f"grd_tok_show_{g['id']}", disabled=True,
+        )
+        st.caption("Distribua por qualquer canal (WhatsApp, e-mail, Teams, QR…). "
+                   "A página pública de confirmação será um block futuro (ver ADR 0004).")
+    if st.button("Gerar token de recebimento", key=f"grd_gtok_{g['id']}", use_container_width=True):
+        res = _service.gerar_token_recebimento(g["id"])
+        (st.success if res.sucesso else st.warning)(
+            "Token gerado — copie e distribua." if res.sucesso else res.mensagem
+        )
+        st.rerun()
+
+
+def _bloco_anular(g: dict) -> None:
+    motivo = st.text_input(
+        "Motivo da anulação", key=f"grd_motivo_{g['id']}",
+        placeholder="obrigatório para anular",
+    )
+    if st.button("Anular GRD", key=f"grd_anul_{g['id']}", use_container_width=True):
+        res = _service.anular_grd(g["id"], motivo)
+        (st.success if res.sucesso else st.warning)(res.mensagem)
+        if res.sucesso:
+            st.rerun()
+
+
+def _bloco_recebimento(g: dict) -> None:
+    st.markdown("**Registrar recebimento (manual)**")
+    rc1, rc2 = st.columns(2)
+    with rc1:
+        nome = st.text_input("Nome de quem recebeu *", key=f"grd_rnome_{g['id']}")
+    with rc2:
+        cargo = st.text_input("Cargo / Função *", key=f"grd_rcargo_{g['id']}")
+    data_rec = st.date_input("Data de recebimento", value=None,
+                             key=f"grd_rdata_{g['id']}", format="DD/MM/YYYY")
+    decl = st.text_input("Declaração (opcional — e-mail NÃO é obrigatório)",
+                         key=f"grd_rdecl_{g['id']}")
+    if st.button("Marcar como recebida", key=f"grd_rec_{g['id']}",
+                 type="primary", use_container_width=True):
+        res = _service.marcar_recebida(
+            g["id"], nome, cargo, declaracao=decl, recebido_em=_iso(data_rec)
+        )
+        (st.success if res.sucesso else st.warning)(res.mensagem)
+        if res.sucesso:
+            st.rerun()
+
+
 aba_nova, aba_consulta = st.tabs(["Nova GRD", "Consultar GRDs"])
 
 # ===========================================================================
@@ -186,8 +236,7 @@ with aba_consulta:
             numero = g.get("numero_grd") or "(sem número)"
             envio = fmt_data(g.get("data_envio")) if g.get("data_envio") else "—"
             status = g.get("status") or "—"
-            cancelada = status == "cancelada"
-            marca = "🚫 " if cancelada else "📦 "
+            marca = "🚫 " if status == "anulada" else "📦 "
             titulo = f"{marca}{numero} — {status.upper()} · {g.get('total_itens', 0)} doc(s) · Envio {envio}"
             with st.expander(titulo):
                 meta = []
@@ -218,33 +267,57 @@ with aba_consulta:
                         use_container_width=True, hide_index=True,
                     )
 
-                d1, d2, d3, d4 = st.columns(4)
-                with d1:
-                    st.download_button(
-                        "⬇️ Excel", data=_service.exportar_excel(g["id"]) or b"",
-                        file_name=f"GRD_{numero.replace('/', '-')}.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        key=f"grd_xls_{g['id']}", use_container_width=True,
-                    )
-                with d2:
-                    st.download_button(
-                        "⬇️ PDF", data=_service.exportar_pdf(g["id"]) or b"",
-                        file_name=f"GRD_{numero.replace('/', '-')}.pdf",
-                        mime="application/pdf",
-                        key=f"grd_pdf_{g['id']}", use_container_width=True,
-                    )
-                with d3:
-                    novo = st.selectbox(
-                        "Alterar status", options=list(STATUS_GRD),
-                        index=list(STATUS_GRD).index(status) if status in STATUS_GRD else 0,
-                        key=f"grd_st_{g['id']}",
-                    )
-                    if st.button("Aplicar", key=f"grd_apl_{g['id']}", use_container_width=True):
-                        st.success(_service.alterar_status(g["id"], novo).mensagem)
+                # Aviso de congelamento (qualquer status != rascunho é imutável nos itens)
+                if status == "recebida":
+                    st.info("🔒 GRD recebida — somente leitura (imutável).")
+                elif status == "anulada":
+                    st.warning(f"🚫 GRD anulada — somente leitura. Motivo: {g.get('motivo_anulacao') or '—'}")
+                elif status != "rascunho":
+                    st.caption("🔒 Itens congelados — a GRD não está mais em rascunho.")
+
+                # Downloads (disponíveis a partir de 'emitida')
+                if status != "rascunho":
+                    dcol1, dcol2 = st.columns(2)
+                    with dcol1:
+                        st.download_button(
+                            "⬇️ Excel", data=_service.exportar_excel(g["id"]) or b"",
+                            file_name=f"GRD_{numero.replace('/', '-')}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            key=f"grd_xls_{g['id']}", use_container_width=True,
+                        )
+                    with dcol2:
+                        st.download_button(
+                            "⬇️ PDF", data=_service.exportar_pdf(g["id"]) or b"",
+                            file_name=f"GRD_{numero.replace('/', '-')}.pdf",
+                            mime="application/pdf",
+                            key=f"grd_pdf_{g['id']}", use_container_width=True,
+                        )
+
+                # Ações controladas por status (sem alteração livre de status)
+                if status == "rascunho":
+                    a1, a2 = st.columns(2)
+                    with a1:
+                        if st.button("Emitir GRD", key=f"grd_emit_{g['id']}",
+                                     type="primary", use_container_width=True):
+                            res = _service.emitir_grd(g["id"])
+                            (st.success if res.sucesso else st.warning)(res.mensagem)
+                            st.rerun()
+                    with a2:
+                        if st.button("Excluir rascunho", key=f"grd_del_{g['id']}",
+                                     use_container_width=True):
+                            res = _service.excluir_rascunho(g["id"])
+                            (st.success if res.sucesso else st.warning)(res.mensagem)
+                            st.rerun()
+
+                elif status == "emitida":
+                    if st.button("Marcar como enviada", key=f"grd_env_{g['id']}",
+                                 type="primary", use_container_width=True):
+                        st.success(_service.marcar_enviada(g["id"]).mensagem)
                         st.rerun()
-                with d4:
-                    if not cancelada and st.button(
-                        "Cancelar GRD", key=f"grd_canc_{g['id']}", use_container_width=True
-                    ):
-                        st.warning(_service.cancelar_grd(g["id"]).mensagem)
-                        st.rerun()
+                    _bloco_token(g)
+                    _bloco_anular(g)
+
+                elif status == "enviada":
+                    _bloco_recebimento(g)
+                    _bloco_token(g)
+                    _bloco_anular(g)

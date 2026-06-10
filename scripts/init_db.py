@@ -219,6 +219,14 @@ _MIGRACOES = [
     ("grd_remessas", "emitido_por",      "TEXT"),
     ("grd_remessas", "recebido_por",     "TEXT"),
     ("grd_remessas", "data_recebimento", "TEXT"),
+    # GRD — ciclo formal + recebimento por token (block-002 v2)
+    ("grd_remessas", "motivo_anulacao",            "TEXT"),
+    ("grd_remessas", "anulada_em",                 "TEXT"),
+    ("grd_remessas", "token_recebimento",          "TEXT"),
+    ("grd_remessas", "token_recebimento_criado_em", "TEXT"),
+    ("grd_remessas", "recebido_em",                "TEXT"),
+    ("grd_remessas", "recebido_cargo",             "TEXT"),
+    ("grd_remessas", "declaracao_recebimento",     "TEXT"),
     # GRD — snapshot congelado do item + cópias por formato
     ("grd_itens", "codigo_snapshot",        "TEXT"),
     ("grd_itens", "titulo_snapshot",        "TEXT"),
@@ -251,6 +259,15 @@ def _migrar_esquema(conn: sqlite3.Connection) -> None:
         WHERE numero_grd IS NOT NULL
         """
     )
+    # Busca de GRD por token de recebimento
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_grd_token ON grd_remessas(token_recebimento)"
+    )
+    # Renomeia status legado 'cancelada' → 'anulada' (idempotente — block-002 v2)
+    if "grd_remessas" in {r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+    )}:
+        conn.execute("UPDATE grd_remessas SET status = 'anulada' WHERE status = 'cancelada'")
 
 
 def _normalizar_labels(conn: sqlite3.Connection) -> None:

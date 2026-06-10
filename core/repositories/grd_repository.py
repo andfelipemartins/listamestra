@@ -16,13 +16,16 @@ from typing import Optional
 
 from db.connection import get_connection
 
-STATUS_GRD = ("rascunho", "emitida", "enviada", "recebida", "cancelada")
+STATUS_GRD = ("rascunho", "emitida", "enviada", "recebida", "anulada")
 
 # Colunas de cabeçalho atualizáveis via atualizar_status / edição de rascunho.
 _CAMPOS_REMESSA_EDITAVEIS = (
     "status", "numero_grd", "data_envio", "setor", "trecho", "modulo",
     "observacoes", "destinatario", "ac", "obra", "emitido_por",
     "recebido_por", "data_recebimento",
+    # ciclo formal + recebimento por token (block-002)
+    "motivo_anulacao", "anulada_em", "recebido_em", "recebido_cargo",
+    "declaracao_recebimento", "token_recebimento", "token_recebimento_criado_em",
 )
 
 
@@ -270,3 +273,70 @@ class GrdRepository:
                 (contrato_id,),
             ).fetchall()
         return [dict(r) for r in rows]
+
+    # ------------------------------------------------------------------
+    # Ciclo formal: token, recebimento, anulação, exclusão
+    # ------------------------------------------------------------------
+
+    def salvar_token(self, grd_id: int, token: str, criado_em: str, conn=None) -> None:
+        with self._connect(conn) as c:
+            c.execute(
+                "UPDATE grd_remessas SET token_recebimento = ?, token_recebimento_criado_em = ? "
+                "WHERE id = ?",
+                (token, criado_em, grd_id),
+            )
+
+    def buscar_por_token(self, token: str, conn=None) -> dict | None:
+        if not token:
+            return None
+        with self._connect(conn) as c:
+            row = c.execute(
+                "SELECT * FROM grd_remessas WHERE token_recebimento = ?", (token,)
+            ).fetchone()
+        return dict(row) if row else None
+
+    def excluir_rascunho(self, grd_id: int, conn=None) -> bool:
+        """Remove fisicamente a GRD e seus itens — APENAS se estiver em rascunho.
+
+        Retorna True se excluiu. Itens caem por ON DELETE CASCADE, mas removemos
+        explicitamente por robustez (caso a FK não esteja ativa).
+        """
+        with self._connect(conn) as c:
+            row = c.execute(
+                "SELECT status FROM grd_remessas WHERE id = ?", (grd_id,)
+            ).fetchone()
+            if row is None or row["status"] != "rascunho":
+                return False
+            c.execute("DELETE FROM grd_itens WHERE grd_id = ?", (grd_id,))
+            c.execute("DELETE FROM grd_remessas WHERE id = ?", (grd_id,))
+            return True
+
+    def listar_por_revisao(self, revisao_ids, conn=None) -> dict:
+        """
+        GRDs vinculadas a cada revisão (via snapshot dos itens).
+
+        Retorna {revisao_id: [cabeçalho_grd, ...]}. Usa os dados congelados da GRD
+        (não recalcula a partir do documento).
+        """
+        ids = [int(r) for r in (revisao_ids or [])]
+        if not ids:
+            return {}
+        placeholders = ",".join("?" for _ in ids)
+        with self._connect(conn) as c:
+            rows = c.execute(
+                f"""
+                SELECT i.revisao_id,
+                       g.id, g.numero_grd, g.data_envio, g.destinatario, g.setor,
+                       g.status, g.recebido_por, g.recebido_cargo, g.recebido_em,
+                       g.data_recebimento, g.motivo_anulacao
+                FROM grd_itens i
+                JOIN grd_remessas g ON g.id = i.grd_id
+                WHERE i.revisao_id IN ({placeholders})
+                ORDER BY g.criado_em DESC, g.id DESC
+                """,
+                ids,
+            ).fetchall()
+        resultado: dict = {}
+        for r in rows:
+            resultado.setdefault(r["revisao_id"], []).append(dict(r))
+        return resultado

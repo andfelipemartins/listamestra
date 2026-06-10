@@ -177,12 +177,47 @@ class TestSnapshotItem:
 
     def test_listar_remessas_filtro_status(self, repo, contrato_id):
         g1 = repo.criar_remessa({"contrato_id": contrato_id, "numero_grd": "GRD-1"})
-        repo.atualizar_status(g1, "cancelada")
+        repo.atualizar_status(g1, "emitida")
+        repo.atualizar_status(g1, "anulada")
         repo.criar_remessa({"contrato_id": contrato_id, "numero_grd": "GRD-2"})
-        assert len(repo.listar_remessas(contrato_id, {"status": "cancelada"})) == 1
+        assert len(repo.listar_remessas(contrato_id, {"status": "anulada"})) == 1
         assert len(repo.listar_remessas(contrato_id, {"status": "rascunho"})) == 1
 
     def test_listar_remessas_filtro_numero(self, repo, contrato_id):
         repo.criar_remessa({"contrato_id": contrato_id, "numero_grd": "GRD-ABC"})
         repo.criar_remessa({"contrato_id": contrato_id, "numero_grd": "GRD-XYZ"})
         assert len(repo.listar_remessas(contrato_id, {"numero": "ABC"})) == 1
+
+
+class TestTokenExclusaoVinculo:
+    def test_salvar_e_buscar_token(self, repo, contrato_id):
+        gid = repo.criar_remessa({"contrato_id": contrato_id, "numero_grd": "GRD-1"})
+        repo.salvar_token(gid, "tok-abc-123", "2026-06-09T10:00:00")
+        achada = repo.buscar_por_token("tok-abc-123")
+        assert achada and achada["id"] == gid
+        assert repo.buscar_por_token("inexistente") is None
+
+    def test_excluir_rascunho(self, repo, contrato_id):
+        gid = repo.criar_remessa({"contrato_id": contrato_id, "numero_grd": "GRD-1"})
+        assert repo.excluir_rascunho(gid) is True
+        assert repo.buscar_por_id(gid) is None
+
+    def test_nao_excluir_se_nao_rascunho(self, repo, contrato_id):
+        gid = repo.criar_remessa({"contrato_id": contrato_id, "numero_grd": "GRD-1"})
+        repo.atualizar_status(gid, "emitida")
+        assert repo.excluir_rascunho(gid) is False
+        assert repo.buscar_por_id(gid) is not None
+
+    def test_excluir_rascunho_remove_itens(self, repo, db_path, contrato_id):
+        _, r1 = _doc_com_revisao(db_path, contrato_id, "DE-15.25.00.00-6A1-1001")
+        gid = repo.criar_remessa({"contrato_id": contrato_id, "numero_grd": "GRD-1"})
+        repo.adicionar_item_snapshot(gid, {"revisao_id": r1, "codigo_snapshot": "X"})
+        assert repo.excluir_rascunho(gid) is True
+        assert repo.listar_itens(gid) == []
+
+    def test_listar_por_revisao(self, repo, db_path, contrato_id):
+        _, r1 = _doc_com_revisao(db_path, contrato_id, "DE-15.25.00.00-6A1-1001")
+        gid = repo.criar_remessa({"contrato_id": contrato_id, "numero_grd": "GRD-1"})
+        repo.adicionar_item_snapshot(gid, {"revisao_id": r1, "codigo_snapshot": "X"})
+        por_rev = repo.listar_por_revisao([r1])
+        assert r1 in por_rev and por_rev[r1][0]["numero_grd"] == "GRD-1"

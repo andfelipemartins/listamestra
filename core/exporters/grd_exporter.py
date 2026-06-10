@@ -44,7 +44,23 @@ def _cabecalho_pares(cab: dict, total_itens: int) -> list[tuple]:
         ("A/C:", cab.get("ac") or "—"),
         ("Obra:", cab.get("obra") or "—"),
         ("Status:", cab.get("status") or "—"),
+        ("Emitido por:", cab.get("emitido_por") or "—"),
+        ("Recebido por:", cab.get("recebido_por") or "—"),
+        ("Cargo/Função:", cab.get("recebido_cargo") or "—"),
+        ("Data de recebimento:", cab.get("recebido_em") or cab.get("data_recebimento") or "—"),
     ]
+
+
+def _rodape_declaracao(cab: dict) -> str:
+    """Texto de declaração/assinatura para o rodapé do documento exportado."""
+    status = cab.get("status") or ""
+    if status == "anulada":
+        return f"GRD ANULADA — Motivo: {cab.get('motivo_anulacao') or '—'}"
+    decl = cab.get("declaracao_recebimento")
+    if decl:
+        return f"Declaração de recebimento: {decl}"
+    return ("Declaro o recebimento dos documentos relacionados nesta Guia de Remessa."
+            "\n\nNome: ____________________   Cargo: ____________________   Data: ____ / ____ / ______")
 
 
 # ---------------------------------------------------------------------------
@@ -95,6 +111,14 @@ def exportar_grd_excel(dados: dict) -> bytes:
         for col, valor in enumerate(_linha_item(i, it), start=1):
             cell = ws.cell(row=linha, column=col, value=valor)
             cell.border = borda
+
+    # Rodapé: declaração / assinatura
+    linha += 2
+    rod = ws.cell(row=linha, column=1, value=_rodape_declaracao(cab))
+    rod.font = Font(italic=True)
+    rod.alignment = Alignment(wrap_text=True, vertical="top")
+    ws.merge_cells(start_row=linha, start_column=1, end_row=linha, end_column=len(_COLUNAS))
+    ws.row_dimensions[linha].height = 60
 
     buffer = io.BytesIO()
     wb.save(buffer)
@@ -147,6 +171,9 @@ def exportar_grd_pdf(dados: dict) -> bytes:
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
     ]))
     elementos.append(tabela)
+    elementos.append(Spacer(1, 18))
+    rodape = _rodape_declaracao(cab).replace("\n", "<br/>")
+    elementos.append(Paragraph(rodape, styles["Italic"]))
 
     doc.build(elementos)
     buffer.seek(0)

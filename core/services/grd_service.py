@@ -23,6 +23,16 @@ from db.connection import get_connection
 STATUS_INICIAIS = ("rascunho", "emitida")
 _QTD_CAMPOS = ("qtd_a0", "qtd_a1", "qtd_a2", "qtd_a3", "qtd_a4", "qtd_digital")
 
+# Máquina de estados unidirecional da GRD (regra de domínio central,
+# reutilizável por qualquer adapter futuro — FastAPI/Django).
+TRANSICOES: dict[str, set] = {
+    "rascunho": {"emitida"},
+    "emitida":  {"enviada", "anulada"},
+    "enviada":  {"recebida", "anulada"},
+    "recebida": set(),   # imutável
+    "anulada":  set(),   # imutável
+}
+
 
 @dataclass
 class ResultadoGrd:
@@ -168,18 +178,128 @@ class GrdService:
         return snap
 
     # ------------------------------------------------------------------
-    # Status de ciclo
+    # Ciclo formal de status (unidirecional)
     # ------------------------------------------------------------------
 
-    def alterar_status(self, grd_id: int, novo_status: str, extra: Optional[dict] = None) -> ResultadoGrd:
-        if novo_status not in STATUS_GRD:
-            return ResultadoGrd(False, grd_id=grd_id, mensagem=f"Status inválido: {novo_status!r}.")
-        self._repo.atualizar_status(grd_id, novo_status, extra)
-        return ResultadoGrd(True, grd_id=grd_id, mensagem=f"Status alterado para '{novo_status}'.")
+    @staticmethod
+    def transicao_permitida(de: str, para: str) -> bool:
+        return para in TRANSICOES.get(de, set())
 
-    def cancelar_grd(self, grd_id: int) -> ResultadoGrd:
-        """Cancela a GRD (preserva todos os dados)."""
-        return self.alterar_status(grd_id, "cancelada")
+    def _transitar(self, grd_id: int, novo: str, extra: Optional[dict] = None) -> ResultadoGrd:
+        grd = self._repo.buscar_por_id(grd_id)
+        if grd is None:
+            return ResultadoGrd(False, grd_id=grd_id, mensagem="GRD não encontrada.")
+        atual = grd.get("status") or "rascunho"
+        if not self.transicao_permitida(atual, novo):
+            return ResultadoGrd(
+                False, grd_id=grd_id,
+                mensagem=f"Transição de status não permitida: '{atual}' → '{novo}'.",
+            )
+        self._repo.atualizar_status(grd_id, novo, extra)
+        return ResultadoGrd(True, grd_id=grd_id, mensagem=f"GRD agora está '{novo}'.")
+
+    def emitir_grd(self, grd_id: int) -> ResultadoGrd:
+        """rascunho → emitida. Exige número formal (reservado para sempre)."""
+        grd = self._repo.buscar_por_id(grd_id)
+        if grd is None:
+            return ResultadoGrd(False, grd_id=grd_id, mensagem="GRD não encontrada.")
+        numero = (grd.get("numero_grd") or "").strip()
+        if not numero:
+            return ResultadoGrd(False, grd_id=grd_id, mensagem="Informe o número da GRD antes de emitir.")
+        if self._repo.numero_existe(grd["contrato_id"], numero, excluir_id=grd_id):
+            return ResultadoGrd(False, grd_id=grd_id, mensagem=f"Número '{numero}' já usado neste contrato.")
+        return self._transitar(grd_id, "emitida")
+
+    def marcar_enviada(self, grd_id: int) -> ResultadoGrd:
+        """emitida → enviada."""
+        return self._transitar(grd_id, "enviada")
+
+    def marcar_recebida(
+        self, grd_id: int, recebido_por: str, recebido_cargo: str,
+        declaracao: Optional[str] = None, recebido_em: Optional[str] = None,
+    ) -> ResultadoGrd:
+        """enviada → recebida. Nome e cargo são obrigatórios. E-mail NÃO é exigido."""
+        if not (recebido_por or "").strip() or not (recebido_cargo or "").strip():
+            return ResultadoGrd(
+                False, grd_id=grd_id,
+                mensagem="Nome e cargo de quem recebeu são obrigatórios.",
+            )
+        from datetime import date
+        quando = recebido_em or date.today().isoformat()
+        extra = {
+            "recebido_por": recebido_por.strip(),
+            "recebido_cargo": recebido_cargo.strip(),
+            "declaracao_recebimento": (declaracao or "").strip() or None,
+            "recebido_em": quando,
+            "data_recebimento": quando,
+        }
+        return self._transitar(grd_id, "recebida", extra)
+
+    def anular_grd(self, grd_id: int, motivo: str) -> ResultadoGrd:
+        """emitida/enviada → anulada. Motivo obrigatório; não apaga dados."""
+        if not (motivo or "").strip():
+            return ResultadoGrd(False, grd_id=grd_id, mensagem="Motivo é obrigatório para anular a GRD.")
+        from datetime import datetime
+        extra = {"motivo_anulacao": motivo.strip(), "anulada_em": datetime.now().isoformat(timespec="seconds")}
+        return self._transitar(grd_id, "anulada", extra)
+
+    def excluir_rascunho(self, grd_id: int) -> ResultadoGrd:
+        """Exclusão física — apenas GRD em rascunho. Libera o número para reuso."""
+        if self._repo.excluir_rascunho(grd_id):
+            return ResultadoGrd(True, grd_id=grd_id, mensagem="Rascunho de GRD excluído.")
+        return ResultadoGrd(False, grd_id=grd_id, mensagem="Só é possível excluir GRD em rascunho.")
+
+    def pode_editar(self, grd_id: int) -> bool:
+        grd = self._repo.buscar_por_id(grd_id)
+        return bool(grd) and grd.get("status") == "rascunho"
+
+    def pode_excluir(self, grd_id: int) -> bool:
+        return self.pode_editar(grd_id)
+
+    # ------------------------------------------------------------------
+    # Recebimento por token (preparação — sem rota pública nesta etapa)
+    # ------------------------------------------------------------------
+
+    def gerar_token_recebimento(self, grd_id: int) -> ResultadoGrd:
+        """
+        Gera e salva um token único para recebimento por link.
+
+        Apenas para GRD 'emitida' ou 'enviada'. NÃO cria rota/página pública —
+        o token fica disponível para distribuição por qualquer canal. A rota
+        pública (FastAPI/Django) é um block futuro (ver ADR 0004).
+        """
+        grd = self._repo.buscar_por_id(grd_id)
+        if grd is None:
+            return ResultadoGrd(False, grd_id=grd_id, mensagem="GRD não encontrada.")
+        if grd.get("status") not in ("emitida", "enviada"):
+            return ResultadoGrd(
+                False, grd_id=grd_id,
+                mensagem="Token só pode ser gerado para GRD emitida ou enviada.",
+            )
+        import secrets
+        from datetime import datetime
+        token = grd.get("token_recebimento") or secrets.token_urlsafe(32)
+        self._repo.salvar_token(grd_id, token, datetime.now().isoformat(timespec="seconds"))
+        return ResultadoGrd(True, grd_id=grd_id, mensagem=token)
+
+    def buscar_por_token(self, token: str) -> dict | None:
+        """Busca de domínio por token — reutilizável por adapter futuro (FastAPI/Django)."""
+        return self._repo.buscar_por_token(token)
+
+    def registrar_recebimento_por_token(
+        self, token: str, recebido_por: str, recebido_cargo: str,
+        declaracao: Optional[str] = None, recebido_em: Optional[str] = None,
+    ) -> ResultadoGrd:
+        """
+        Registra o recebimento a partir do token (regra de domínio, sem HTTP).
+
+        Esta função existe para o futuro adapter público (FastAPI/Django) chamar
+        sem depender de Streamlit. Não há rota pública nesta etapa.
+        """
+        grd = self._repo.buscar_por_token(token)
+        if grd is None:
+            return ResultadoGrd(False, mensagem="Token inválido.")
+        return self.marcar_recebida(grd["id"], recebido_por, recebido_cargo, declaracao, recebido_em)
 
     # ------------------------------------------------------------------
     # Consulta
@@ -193,6 +313,10 @@ class GrdService:
 
     def listar_itens(self, grd_id: int) -> list[dict]:
         return self._repo.listar_itens(grd_id)
+
+    def listar_grds_por_revisao(self, revisao_ids) -> dict:
+        """{revisao_id: [GRDs vinculadas]} — usa snapshot da GRD (página Documento)."""
+        return self._repo.listar_por_revisao(revisao_ids)
 
     # ------------------------------------------------------------------
     # Exportação

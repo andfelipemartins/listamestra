@@ -134,27 +134,126 @@ class TestSnapshotECopias:
         assert it["qtd_a2"] == 0 and it["qtd_a3"] == 0
 
 
-class TestStatus:
-    def test_alterar_status(self, service, db_path, contrato_id):
-        r1 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1001")
-        res = service.criar_grd(contrato_id, {"numero_grd": "GRD-1"}, [_item(r1)])
-        service.alterar_status(res.grd_id, "enviada")
-        assert service.buscar_grd(res.grd_id)["status"] == "enviada"
+class TestCicloFormal:
+    """Transições unidirecionais e ações controladas."""
 
-    def test_status_invalido_falha(self, service, db_path, contrato_id):
+    def _grd(self, service, db_path, contrato_id, numero="GRD-1", status="rascunho"):
         r1 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1001")
-        res = service.criar_grd(contrato_id, {"numero_grd": "GRD-1"}, [_item(r1)])
-        assert not service.alterar_status(res.grd_id, "xpto").sucesso
+        return service.criar_grd(contrato_id, {"numero_grd": numero, "status": status}, [_item(r1, qtd_a1=4)]).grd_id
 
-    def test_cancelar_preserva_dados(self, service, db_path, contrato_id):
+    def test_transicoes_permitidas(self, service, db_path, contrato_id):
+        gid = self._grd(service, db_path, contrato_id)
+        assert service.emitir_grd(gid).sucesso          # rascunho → emitida
+        assert service.marcar_enviada(gid).sucesso       # emitida → enviada
+        assert service.marcar_recebida(gid, "João", "Engenheiro").sucesso  # enviada → recebida
+        assert service.buscar_grd(gid)["status"] == "recebida"
+
+    def test_rascunho_para_enviada_proibido(self, service, db_path, contrato_id):
+        gid = self._grd(service, db_path, contrato_id)
+        assert not service.marcar_enviada(gid).sucesso
+        assert not service.marcar_recebida(gid, "J", "E").sucesso
+
+    def test_recebida_imutavel(self, service, db_path, contrato_id):
+        gid = self._grd(service, db_path, contrato_id)
+        service.emitir_grd(gid); service.marcar_enviada(gid)
+        service.marcar_recebida(gid, "João", "Eng")
+        assert not service.marcar_enviada(gid).sucesso
+        assert not service.anular_grd(gid, "x").sucesso
+        # dados preservados
+        assert service.listar_itens(gid)[0]["qtd_a1"] == 4
+
+    def test_anulada_exige_motivo(self, service, db_path, contrato_id):
+        gid = self._grd(service, db_path, contrato_id)
+        service.emitir_grd(gid)
+        assert not service.anular_grd(gid, "").sucesso
+        assert not service.anular_grd(gid, "   ").sucesso
+        ok = service.anular_grd(gid, "documento substituído")
+        assert ok.sucesso
+        grd = service.buscar_grd(gid)
+        assert grd["status"] == "anulada" and grd["motivo_anulacao"] == "documento substituído"
+
+    def test_anulada_imutavel(self, service, db_path, contrato_id):
+        gid = self._grd(service, db_path, contrato_id)
+        service.emitir_grd(gid)
+        service.anular_grd(gid, "motivo")
+        assert not service.marcar_enviada(gid).sucesso
+
+    def test_rascunho_excluivel(self, service, db_path, contrato_id):
+        gid = self._grd(service, db_path, contrato_id)
+        assert service.pode_excluir(gid)
+        assert service.excluir_rascunho(gid).sucesso
+        assert service.buscar_grd(gid) is None
+
+    def test_emitida_nao_excluivel(self, service, db_path, contrato_id):
+        gid = self._grd(service, db_path, contrato_id)
+        service.emitir_grd(gid)
+        assert not service.pode_excluir(gid)
+        assert not service.excluir_rascunho(gid).sucesso
+        assert service.buscar_grd(gid) is not None
+
+    def test_recebida_exige_nome_e_cargo(self, service, db_path, contrato_id):
+        gid = self._grd(service, db_path, contrato_id)
+        service.emitir_grd(gid); service.marcar_enviada(gid)
+        assert not service.marcar_recebida(gid, "", "Eng").sucesso
+        assert not service.marcar_recebida(gid, "João", "").sucesso
+
+    def test_recebimento_nao_exige_email(self, service, db_path, contrato_id):
+        gid = self._grd(service, db_path, contrato_id)
+        service.emitir_grd(gid); service.marcar_enviada(gid)
+        # sem qualquer campo de e-mail — deve funcionar
+        res = service.marcar_recebida(gid, "João", "Engenheiro", declaracao="Recebi os documentos")
+        assert res.sucesso
+        grd = service.buscar_grd(gid)
+        assert grd["recebido_por"] == "João" and grd["recebido_cargo"] == "Engenheiro"
+        assert grd["declaracao_recebimento"] == "Recebi os documentos"
+
+
+class TestNumeroFormalReservado:
+    def test_numero_emitida_nao_reutilizavel(self, service, db_path, contrato_id):
         r1 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1001")
-        res = service.criar_grd(contrato_id, {"numero_grd": "GRD-1"}, [_item(r1, qtd_a1=4)])
-        service.cancelar_grd(res.grd_id)
-        grd = service.buscar_grd(res.grd_id)
-        assert grd["status"] == "cancelada"
-        # itens e cópias preservados
-        it = service.listar_itens(res.grd_id)[0]
-        assert it["qtd_a1"] == 4
+        r2 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1002")
+        gid = service.criar_grd(contrato_id, {"numero_grd": "GRD-7"}, [_item(r1)]).grd_id
+        service.emitir_grd(gid)
+        # outra GRD com mesmo número no contrato → bloqueada
+        assert not service.criar_grd(contrato_id, {"numero_grd": "GRD-7"}, [_item(r2)]).sucesso
+
+    def test_numero_anulada_nao_reutilizavel(self, service, db_path, contrato_id):
+        r1 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1001")
+        r2 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1002")
+        gid = service.criar_grd(contrato_id, {"numero_grd": "GRD-8"}, [_item(r1)]).grd_id
+        service.emitir_grd(gid); service.anular_grd(gid, "erro")
+        assert not service.criar_grd(contrato_id, {"numero_grd": "GRD-8"}, [_item(r2)]).sucesso
+
+    def test_numero_rascunho_excluido_reutilizavel(self, service, db_path, contrato_id):
+        r1 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1001")
+        r2 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1002")
+        gid = service.criar_grd(contrato_id, {"numero_grd": "GRD-9"}, [_item(r1)]).grd_id
+        service.excluir_rascunho(gid)
+        assert service.criar_grd(contrato_id, {"numero_grd": "GRD-9"}, [_item(r2)]).sucesso
+
+
+class TestToken:
+    def test_gerar_e_buscar_token(self, service, db_path, contrato_id):
+        r1 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1001")
+        gid = service.criar_grd(contrato_id, {"numero_grd": "GRD-1"}, [_item(r1)]).grd_id
+        service.emitir_grd(gid)
+        res = service.gerar_token_recebimento(gid)
+        assert res.sucesso and len(res.mensagem) > 20
+        assert service.buscar_por_token(res.mensagem)["id"] == gid
+
+    def test_token_so_para_emitida_ou_enviada(self, service, db_path, contrato_id):
+        r1 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1001")
+        gid = service.criar_grd(contrato_id, {"numero_grd": "GRD-1"}, [_item(r1)]).grd_id
+        assert not service.gerar_token_recebimento(gid).sucesso  # rascunho
+
+    def test_registrar_recebimento_por_token(self, service, db_path, contrato_id):
+        r1 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1001")
+        gid = service.criar_grd(contrato_id, {"numero_grd": "GRD-1"}, [_item(r1)]).grd_id
+        service.emitir_grd(gid); service.marcar_enviada(gid)
+        token = service.gerar_token_recebimento(gid).mensagem
+        res = service.registrar_recebimento_por_token(token, "Maria", "Arquiteta")
+        assert res.sucesso
+        assert service.buscar_grd(gid)["status"] == "recebida"
 
 
 class TestBuscaEExportData:
@@ -175,9 +274,16 @@ class TestBuscaEExportData:
     def test_filtro_por_status(self, service, db_path, contrato_id):
         r1 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1001")
         res = service.criar_grd(contrato_id, {"numero_grd": "GRD-1", "status": "emitida"}, [_item(r1)])
-        service.cancelar_grd(res.grd_id)
-        assert len(service.listar_grds(contrato_id, {"status": "cancelada"})) == 1
+        service.anular_grd(res.grd_id, "erro de emissão")
+        assert len(service.listar_grds(contrato_id, {"status": "anulada"})) == 1
         assert len(service.listar_grds(contrato_id, {"status": "emitida"})) == 0
+
+    def test_listar_grds_por_revisao(self, service, db_path, contrato_id):
+        r1 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1001")
+        res = service.criar_grd(contrato_id, {"numero_grd": "GRD-DOC"}, [_item(r1)])
+        por_rev = service.listar_grds_por_revisao([r1])
+        assert r1 in por_rev
+        assert por_rev[r1][0]["numero_grd"] == "GRD-DOC"
 
     def test_montar_dados_exportacao(self, service, db_path, contrato_id):
         r1 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1001")

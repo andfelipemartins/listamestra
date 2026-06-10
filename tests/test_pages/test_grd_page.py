@@ -64,12 +64,31 @@ def test_grd_page_tem_consulta_e_filtros():
     assert "grd_f_status" in source  # filtro por status
 
 
-def test_grd_page_tem_downloads_e_status():
+def test_grd_page_tem_downloads():
     source = _src()
     assert "download_button" in source
     assert "exportar_excel" in source and "exportar_pdf" in source
-    assert "alterar_status" in source
-    assert "cancelar_grd" in source
+
+
+def test_grd_page_acoes_controladas_por_status():
+    """Sem selectbox de status livre; ações nomeadas via service."""
+    source = _src()
+    assert 'st.selectbox(\n                        "Alterar status"' not in source
+    assert "Alterar status" not in source  # selectbox de status livre removido
+    for acao in ("emitir_grd", "marcar_enviada", "marcar_recebida", "anular_grd", "excluir_rascunho"):
+        assert acao in source, f"ação ausente: {acao}"
+
+
+def test_grd_page_prepara_token():
+    source = _src()
+    assert "gerar_token_recebimento" in source
+    # deixa claro que a página pública ainda não existe
+    assert "não implementad" in source.lower() or "block futuro" in source.lower()
+
+
+def test_grd_page_avisa_congelamento():
+    source = _src()
+    assert "imutável" in source.lower() or "congelad" in source.lower()
 
 
 def test_grd_page_no_menu_entre_cadastrar_e_pesquisar():

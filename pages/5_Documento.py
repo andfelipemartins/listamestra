@@ -20,12 +20,14 @@ from core.formatacao import fmt_inteiro, fmt_data, filtrar_documentos
 from core.repositories.documento_repository import DocumentoRepository
 from core.repositories.revisao_repository import RevisaoRepository
 from core.services.documento_service import DocumentoService
+from core.services.grd_service import GrdService
 from app.session import require_contrato, sidebar_contexto
 from core.auth.permissions import widget_seletor_perfil, require_permission
 
 _documento_repository = DocumentoRepository()
 _revisao_repository = RevisaoRepository()
 _service = DocumentoService(_documento_repository, _revisao_repository)
+_grd_service = GrdService()
 
 
 @st.cache_data(ttl=300)
@@ -34,23 +36,11 @@ def _listar_documentos_enriquecidos(contrato_id: int) -> list[dict]:
 
 
 def _carregar_grds(revisao_ids: list[int]) -> dict[int, list[dict]]:
-    if not revisao_ids:
-        return {}
-    placeholders = ",".join("?" for _ in revisao_ids)
-    with get_connection() as conn:
-        rows = conn.execute(
-            f"""
-            SELECT revisao_id, setor, numero_grd, data_envio
-            FROM grds
-            WHERE revisao_id IN ({placeholders})
-            ORDER BY setor
-            """,
-            revisao_ids,
-        ).fetchall()
-    result: dict[int, list[dict]] = {}
-    for r in rows:
-        result.setdefault(r["revisao_id"], []).append(dict(r))
-    return result
+    """GRDs (modelo operacional) vinculadas a cada revisão — via GrdService.
+
+    Usa o snapshot congelado da GRD; não recalcula a partir do documento.
+    """
+    return _grd_service.listar_grds_por_revisao(revisao_ids)
 
 
 def _carregar_arquivos(doc_id: int) -> list[dict]:
@@ -159,12 +149,35 @@ def _linha_do_tempo(revisoes: list[dict]):
 
             grds = grds_por_rev.get(rev["id"], [])
             if grds:
-                st.markdown("**GRDs:**")
+                st.markdown("**GRDs vinculadas:**")
                 for g in grds:
-                    setor = g["setor"].capitalize()
-                    num = g.get("numero_grd") or "—"
-                    data = g.get("data_envio") or "—"
-                    st.markdown(f"- {setor}: GRD {num} · Envio {data}")
+                    num = g.get("numero_grd") or "(sem número)"
+                    status = (g.get("status") or "—").upper()
+                    dest = g.get("destinatario") or g.get("setor") or "—"
+                    envio = fmt_data(g.get("data_envio")) if g.get("data_envio") else "—"
+                    linha_grd = f"- **{num}** · {status} · Destinatário: {dest} · Envio {envio}"
+                    if g.get("recebido_por"):
+                        rec_data = fmt_data(g.get("recebido_em") or g.get("data_recebimento"))
+                        linha_grd += (f" · Recebido por {g['recebido_por']}"
+                                      f" ({g.get('recebido_cargo') or '—'}) em {rec_data}")
+                    if g.get("motivo_anulacao"):
+                        linha_grd += f" · Anulação: {g['motivo_anulacao']}"
+                    st.markdown(linha_grd)
+                    bts = st.columns(2)
+                    with bts[0]:
+                        st.download_button(
+                            "⬇️ Excel", data=_grd_service.exportar_excel(g["id"]) or b"",
+                            file_name=f"GRD_{num.replace('/', '-')}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            key=f"doc_grd_xls_{g['id']}_{rev['id']}", use_container_width=True,
+                        )
+                    with bts[1]:
+                        st.download_button(
+                            "⬇️ PDF", data=_grd_service.exportar_pdf(g["id"]) or b"",
+                            file_name=f"GRD_{num.replace('/', '-')}.pdf",
+                            mime="application/pdf",
+                            key=f"doc_grd_pdf_{g['id']}_{rev['id']}", use_container_width=True,
+                        )
 
 
 def _arquivos(doc_id: int):
