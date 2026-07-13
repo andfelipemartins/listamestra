@@ -90,6 +90,30 @@ streamlit run main.py
 
 ---
 
+## Serviço de recebimento de GRD
+
+O Streamlit continua sendo o aplicativo interno. Para confirmar uma GRD enviada
+por link, rode também o adaptador FastAPI em outro terminal:
+
+```bash
+# O --no-access-log evita registrar o token presente na URL em texto claro.
+uvicorn api.main:app --port 8100 --no-access-log
+```
+
+Na página **Gerar GRD**, envie a remessa, gere o token e copie o link exibido.
+O destinatário pode abrir esse link em qualquer navegador, informar nome e cargo
+e confirmar o recebimento. O token expira, funciona uma única vez e a GRD passa
+para `recebida`.
+
+O endereço base do link pode ser configurado antes de iniciar o Streamlit:
+
+```powershell
+$env:SCLME_PUBLIC_BASE_URL = "http://localhost:8100"
+```
+
+Para demonstração, o adaptador respeita o mesmo banco escolhido por
+`SCLME_DB_MODE=demo`.
+
 ## Rodar os testes
 
 ```bash

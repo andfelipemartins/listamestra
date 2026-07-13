@@ -1,0 +1,53 @@
+<!--
+PURPOSE: Exibe o resumo da GRD e o formulario publico de confirmacao.
+INPUTS: grd, itens, token, erro e valores fornecidos pela rota FastAPI.
+OUTPUTS: Formulario HTML para registrar o recebimento no GrdService.
+DEPS: api/templates/base.html, Jinja2 autoescape.
+SEE: api/main.py, api/templates/recebimento_sucesso.html
+-->
+{% extends "base.html" %}
+{% block title %}Confirmação de Recebimento - SCLME{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Confirmação de Recebimento</h1>
+  <p class="muted">Confirme o recebimento da GRD {{ grd.numero_grd or "sem número" }}.</p>
+
+  {% if erro %}<p class="notice error" role="alert">{{ erro }}</p>{% endif %}
+
+  <h2>Resumo da remessa</h2>
+  <dl>
+    <dt>GRD</dt><dd>{{ grd.numero_grd or "-" }}</dd>
+    <dt>Obra</dt><dd>{{ grd.obra or "-" }}</dd>
+    <dt>Destinatário</dt><dd>{{ grd.destinatario or grd.setor or "-" }}</dd>
+    <dt>Data de envio</dt><dd>{{ grd.data_envio or "-" }}</dd>
+  </dl>
+
+  <h2>Documentos recebidos</h2>
+  <table>
+    <thead><tr><th>Código</th><th>Descrição</th><th>Rev.</th><th>Ver.</th></tr></thead>
+    <tbody>
+      {% for item in itens %}
+      <tr><td>{{ item.codigo or "-" }}</td><td>{{ item.titulo or "-" }}</td><td>{{ item.label_revisao or "-" }}</td><td>{{ item.versao or "-" }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <p class="notice warning">A confirmação é definitiva. Após o envio, a GRD ficará registrada como recebida e não poderá ser alterada.</p>
+
+  <form method="post" action="/grd/receber/{{ token }}">
+    <label for="recebido_por">Nome *</label>
+    <input id="recebido_por" name="recebido_por" value="{{ valores.recebido_por }}" autocomplete="name" required>
+
+    <label for="recebido_cargo">Cargo ou função *</label>
+    <input id="recebido_cargo" name="recebido_cargo" value="{{ valores.recebido_cargo }}" required>
+
+    <label for="recebido_em">Data de recebimento</label>
+    <input id="recebido_em" name="recebido_em" type="date" value="{{ valores.recebido_em }}">
+
+    <label for="declaracao">Declaração (opcional)</label>
+    <textarea id="declaracao" name="declaracao">{{ valores.declaracao }}</textarea>
+
+    <button type="submit">Confirmar recebimento</button>
+  </form>
+</section>
+{% endblock %}

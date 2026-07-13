@@ -1,0 +1,21 @@
+<!--
+PURPOSE: Confirma ao destinatario que uma GRD foi recebida com sucesso.
+INPUTS: numero_grd, recebido_por e recebido_em da rota FastAPI.
+OUTPUTS: Pagina final sem formulario nem token reutilizavel.
+DEPS: api/templates/base.html, Jinja2 autoescape.
+SEE: api/main.py, api/templates/recebimento_erro.html
+-->
+{% extends "base.html" %}
+{% block title %}Recebimento confirmado - SCLME{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Recebimento confirmado</h1>
+  <p class="notice success">Obrigado. A confirmação foi registrada com sucesso.</p>
+  <dl>
+    <dt>GRD</dt><dd>{{ numero_grd or "-" }}</dd>
+    <dt>Recebido por</dt><dd>{{ recebido_por }}</dd>
+    <dt>Data de recebimento</dt><dd>{{ recebido_em }}</dd>
+  </dl>
+  <p class="muted">Este link não pode mais ser utilizado.</p>
+</section>
+{% endblock %}

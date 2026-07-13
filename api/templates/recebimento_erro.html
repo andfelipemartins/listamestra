@@ -1,0 +1,16 @@
+<!--
+PURPOSE: Exibe uma recusa amigavel sem revelar dados da GRD associada ao token.
+INPUTS: Mensagem segura retornada pelo GrdService.
+OUTPUTS: Pagina HTML de erro sem resumo de remessa ou documentos.
+DEPS: api/templates/base.html, Jinja2 autoescape.
+SEE: api/main.py, cognitive_arch_V2/design/threat-model-grd-recebimento-publico.md
+-->
+{% extends "base.html" %}
+{% block title %}Link indisponível - SCLME{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Link indisponível</h1>
+  <p class="notice error" role="alert">{{ mensagem }}</p>
+  <p class="muted">Solicite uma nova orientação à equipe que enviou a remessa.</p>
+</section>
+{% endblock %}
