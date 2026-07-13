@@ -3,15 +3,15 @@ pages/6_GRD.py
 
 GRD (Guia de Remessa de Documentos) como entidade operacional.
 
-Duas Ã¡reas:
-- "Nova GRD": cabeÃ§alho Ãºnico (nÃºmero, data, destinatÃ¡rio, A/C, obra, status),
-  seleÃ§Ã£o de documentos com cÃ³pias por formato (A0â€“A4/Digital) e criaÃ§Ã£o em lote
+Duas áreas:
+- "Nova GRD": cabeçalho único (número, data, destinatário, A/C, obra, status),
+  seleção de documentos com cópias por formato (A0–A4/Digital) e criação em lote
   com snapshot congelado.
 - "Consultar GRDs": busca/filtros, abertura de GRD com itens, download Excel/PDF,
-  alteraÃ§Ã£o de status e cancelamento.
+  alteração de status e cancelamento.
 
-A pÃ¡gina apenas captura inputs, chama o GrdService e exibe/oferece downloads.
-Toda regra de negÃ³cio fica no service.
+A página apenas captura inputs, chama o GrdService e exibe/oferece downloads.
+Toda regra de negócio fica no service.
 """
 
 import os
@@ -31,7 +31,7 @@ from core.config import PUBLIC_BASE_URL
 from app.session import require_contrato, sidebar_contexto
 from core.auth.permissions import require_permission, widget_seletor_perfil
 
-st.set_page_config(page_title="GRD â€” SCLME", page_icon="ðŸ“¦", layout="wide")
+st.set_page_config(page_title="GRD — SCLME", page_icon="📦", layout="wide")
 
 widget_seletor_perfil()
 contrato = require_contrato()
@@ -40,7 +40,7 @@ require_permission("create_document")
 
 _service = GrdService()
 
-st.title("GRD â€” Guia de Remessa")
+st.title("GRD — Guia de Remessa")
 st.caption(f"Contrato: **{contrato['nome']}**")
 
 
@@ -80,8 +80,8 @@ def _bloco_token(g: dict) -> None:
         st.warning(_TOKEN_OBS)
         del st.session_state["grd_token_feedback"]
     elif g.get("token_hash") and not g.get("token_usado_em"):
-        criado = fmt_data(g.get("token_recebimento_criado_em")) if g.get("token_recebimento_criado_em") else "â€”"
-        expira = fmt_data(g.get("token_expira_em")) if g.get("token_expira_em") else "â€”"
+        criado = fmt_data(g.get("token_recebimento_criado_em")) if g.get("token_recebimento_criado_em") else "—"
+        expira = fmt_data(g.get("token_expira_em")) if g.get("token_expira_em") else "—"
         st.caption(
             f"Ha um token ativo gerado em {criado}, expira em {expira}. "
             "Renovar invalida o token atual."
@@ -120,10 +120,10 @@ def _bloco_recebimento(g: dict) -> None:
     with rc1:
         nome = st.text_input("Nome de quem recebeu *", key=f"grd_rnome_{g['id']}")
     with rc2:
-        cargo = st.text_input("Cargo / FunÃ§Ã£o *", key=f"grd_rcargo_{g['id']}")
+        cargo = st.text_input("Cargo / Função *", key=f"grd_rcargo_{g['id']}")
     data_rec = st.date_input("Data de recebimento", value=None,
                              key=f"grd_rdata_{g['id']}", format="DD/MM/YYYY")
-    decl = st.text_input("DeclaraÃ§Ã£o (opcional â€” e-mail NÃƒO Ã© obrigatÃ³rio)",
+    decl = st.text_input("Declaração (opcional — e-mail NÃO é obrigatório)",
                          key=f"grd_rdecl_{g['id']}")
     if st.button("Marcar como recebida", key=f"grd_rec_{g['id']}",
                  type="primary", use_container_width=True):
@@ -141,46 +141,46 @@ aba_nova, aba_consulta = st.tabs(["Nova GRD", "Consultar GRDs"])
 # Nova GRD
 # ===========================================================================
 with aba_nova:
-    st.subheader("CabeÃ§alho da GRD")
+    st.subheader("Cabeçalho da GRD")
     st.caption("Preenchido uma vez e aplicado a todos os documentos selecionados.")
 
     c1, c2, c3 = st.columns(3)
     with c1:
-        st.text_input("NÃºmero da GRD", key="grd_numero", placeholder="Ex: GRD-001/2026")
-        st.text_input("DestinatÃ¡rio", key="grd_destinatario", placeholder="Ex: METRÃ”-SP")
-        st.text_input("A/C", key="grd_ac", placeholder="aos cuidados deâ€¦")
+        st.text_input("Número da GRD", key="grd_numero", placeholder="Ex: GRD-001/2026")
+        st.text_input("Destinatário", key="grd_destinatario", placeholder="Ex: METRÔ-SP")
+        st.text_input("A/C", key="grd_ac", placeholder="aos cuidados de…")
     with c2:
         st.date_input("Data de envio", value=None, key="grd_data_envio", format="DD/MM/YYYY")
         st.text_input("Obra", key="grd_obra", placeholder="Ex: Linha 15")
-        st.text_input("Emitido por", key="grd_emitido_por", placeholder="responsÃ¡vel")
+        st.text_input("Emitido por", key="grd_emitido_por", placeholder="responsável")
     with c3:
-        st.text_input("Trecho", key="grd_trecho", placeholder="Ex: 25 â€” Ragueb Chohfi")
-        st.text_input("MÃ³dulo", key="grd_modulo", placeholder="opcional")
+        st.text_input("Trecho", key="grd_trecho", placeholder="Ex: 25 — Ragueb Chohfi")
+        st.text_input("Módulo", key="grd_modulo", placeholder="opcional")
         st.selectbox("Status inicial", options=["rascunho", "emitida"], key="grd_status")
 
-    st.text_input("ObservaÃ§Ãµes", key="grd_observacoes", placeholder="opcional")
+    st.text_input("Observações", key="grd_observacoes", placeholder="opcional")
 
     st.divider()
     st.subheader("Documentos a incluir")
-    st.caption("Marque os documentos e ajuste as cÃ³pias por formato (A0â€“A4 / Digital).")
+    st.caption("Marque os documentos e ajuste as cópias por formato (A0–A4 / Digital).")
 
     busca = st.text_input(
         "Filtrar documentos", key="grd_busca",
-        placeholder="cÃ³digo, tÃ­tulo, trecho, estrutura, statusâ€¦",
+        placeholder="código, título, trecho, estrutura, status…",
     )
     selecionaveis = _service.listar_documentos_selecionaveis(contrato["id"], busca)
 
     if not selecionaveis:
-        st.info("Nenhum documento com revisÃ£o disponÃ­vel para compor a GRD.")
+        st.info("Nenhum documento com revisão disponível para compor a GRD.")
     else:
         base = pd.DataFrame([
             {
                 "Incluir":   False,
-                "CÃ³digo":    d["codigo"],
-                "TÃ­tulo":    (d.get("titulo") or "")[:50],
-                "Trecho":    d.get("nome_trecho") or "â€”",
-                "RevisÃ£o":   f"{d.get('label_revisao') or 'â€”'}/v{d.get('versao') or 1}",
-                "Status":    d.get("status_atual") or "â€”",
+                "Código":    d["codigo"],
+                "Título":    (d.get("titulo") or "")[:50],
+                "Trecho":    d.get("nome_trecho") or "—",
+                "Revisão":   f"{d.get('label_revisao') or '—'}/v{d.get('versao') or 1}",
+                "Status":    d.get("status_atual") or "—",
                 "A0": 0, "A1": 0, "A2": 0, "A3": 0, "A4": 0, "Digital": 0,
             }
             for d in selecionaveis
@@ -193,10 +193,10 @@ with aba_nova:
             height=380,
             column_config={
                 "Incluir": st.column_config.CheckboxColumn("Incluir", width="small"),
-                "CÃ³digo":  st.column_config.TextColumn("CÃ³digo", disabled=True),
-                "TÃ­tulo":  st.column_config.TextColumn("TÃ­tulo", disabled=True),
+                "Código":  st.column_config.TextColumn("Código", disabled=True),
+                "Título":  st.column_config.TextColumn("Título", disabled=True),
                 "Trecho":  st.column_config.TextColumn("Trecho", disabled=True),
-                "RevisÃ£o": st.column_config.TextColumn("Rev.", disabled=True, width="small"),
+                "Revisão": st.column_config.TextColumn("Rev.", disabled=True, width="small"),
                 "Status":  st.column_config.TextColumn("Status", disabled=True, width="small"),
                 **{
                     f: st.column_config.NumberColumn(f, min_value=0, step=1, default=0, width="small")
@@ -243,14 +243,14 @@ with aba_consulta:
 
     f1, f2, f3 = st.columns(3)
     with f1:
-        filtro_numero = st.text_input("NÃºmero da GRD", key="grd_f_numero")
-        filtro_codigo = st.text_input("CÃ³digo de documento", key="grd_f_codigo")
+        filtro_numero = st.text_input("Número da GRD", key="grd_f_numero")
+        filtro_codigo = st.text_input("Código de documento", key="grd_f_codigo")
     with f2:
         filtro_status = st.selectbox("Status", options=["(todos)", *STATUS_GRD], key="grd_f_status")
-        filtro_dest = st.text_input("DestinatÃ¡rio / Setor", key="grd_f_dest")
+        filtro_dest = st.text_input("Destinatário / Setor", key="grd_f_dest")
     with f3:
         filtro_de = st.date_input("Envio de", value=None, key="grd_f_de", format="DD/MM/YYYY")
-        filtro_ate = st.date_input("Envio atÃ©", value=None, key="grd_f_ate", format="DD/MM/YYYY")
+        filtro_ate = st.date_input("Envio até", value=None, key="grd_f_ate", format="DD/MM/YYYY")
 
     filtros = {
         "numero": filtro_numero or None,
@@ -267,31 +267,31 @@ with aba_consulta:
     else:
         st.caption(f"{len(grds)} GRD(s) encontrada(s).")
         for g in grds:
-            numero = g.get("numero_grd") or "(sem nÃºmero)"
-            envio = fmt_data(g.get("data_envio")) if g.get("data_envio") else "â€”"
-            status = g.get("status") or "â€”"
-            marca = "ðŸš« " if status == "anulada" else "ðŸ“¦ "
-            titulo = f"{marca}{numero} â€” {status.upper()} Â· {g.get('total_itens', 0)} doc(s) Â· Envio {envio}"
+            numero = g.get("numero_grd") or "(sem número)"
+            envio = fmt_data(g.get("data_envio")) if g.get("data_envio") else "—"
+            status = g.get("status") or "—"
+            marca = "🚫 " if status == "anulada" else "📦 "
+            titulo = f"{marca}{numero} — {status.upper()} · {g.get('total_itens', 0)} doc(s) · Envio {envio}"
             with st.expander(titulo):
                 meta = []
                 for campo, rotulo in [
-                    ("destinatario", "DestinatÃ¡rio"), ("ac", "A/C"), ("obra", "Obra"),
+                    ("destinatario", "Destinatário"), ("ac", "A/C"), ("obra", "Obra"),
                     ("trecho", "Trecho"), ("emitido_por", "Emitido por"),
-                    ("recebido_por", "Recebido por"), ("observacoes", "ObservaÃ§Ãµes"),
+                    ("recebido_por", "Recebido por"), ("observacoes", "Observações"),
                 ]:
                     if g.get(campo):
                         meta.append(f"**{rotulo}:** {g[campo]}")
                 if meta:
-                    st.markdown(" Â· ".join(meta))
+                    st.markdown(" · ".join(meta))
 
                 itens = _service.listar_itens(g["id"])
                 if itens:
                     st.dataframe(
                         pd.DataFrame([
                             {
-                                "CÃ³digo": it["codigo"], "TÃ­tulo": (it.get("titulo") or "")[:50],
-                                "Rev.": f"{it.get('label_revisao') or 'â€”'}/v{it.get('versao') or 1}",
-                                "SituaÃ§Ã£o": it.get("situacao") or "â€”",
+                                "Código": it["codigo"], "Título": (it.get("titulo") or "")[:50],
+                                "Rev.": f"{it.get('label_revisao') or '—'}/v{it.get('versao') or 1}",
+                                "Situação": it.get("situacao") or "—",
                                 "A0": it.get("qtd_a0", 0), "A1": it.get("qtd_a1", 0),
                                 "A2": it.get("qtd_a2", 0), "A3": it.get("qtd_a3", 0),
                                 "A4": it.get("qtd_a4", 0), "Digital": it.get("qtd_digital", 0),
@@ -301,33 +301,33 @@ with aba_consulta:
                         use_container_width=True, hide_index=True,
                     )
 
-                # Aviso de congelamento (qualquer status != rascunho Ã© imutÃ¡vel nos itens)
+                # Aviso de congelamento (qualquer status != rascunho é imutável nos itens)
                 if status == "recebida":
-                    st.info("ðŸ”’ GRD recebida â€” somente leitura (imutÃ¡vel).")
+                    st.info("🔒 GRD recebida — somente leitura (imutável).")
                 elif status == "anulada":
-                    st.warning(f"ðŸš« GRD anulada â€” somente leitura. Motivo: {g.get('motivo_anulacao') or 'â€”'}")
+                    st.warning(f"🚫 GRD anulada — somente leitura. Motivo: {g.get('motivo_anulacao') or '—'}")
                 elif status != "rascunho":
-                    st.caption("ðŸ”’ Itens congelados â€” a GRD nÃ£o estÃ¡ mais em rascunho.")
+                    st.caption("🔒 Itens congelados — a GRD não está mais em rascunho.")
 
-                # Downloads (disponÃ­veis a partir de 'emitida')
+                # Downloads (disponíveis a partir de 'emitida')
                 if status != "rascunho":
                     dcol1, dcol2 = st.columns(2)
                     with dcol1:
                         st.download_button(
-                            "â¬‡ï¸ Excel", data=_service.exportar_excel(g["id"]) or b"",
+                            "⬇️ Excel", data=_service.exportar_excel(g["id"]) or b"",
                             file_name=f"GRD_{numero.replace('/', '-')}.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                             key=f"grd_xls_{g['id']}", use_container_width=True,
                         )
                     with dcol2:
                         st.download_button(
-                            "â¬‡ï¸ PDF", data=_service.exportar_pdf(g["id"]) or b"",
+                            "⬇️ PDF", data=_service.exportar_pdf(g["id"]) or b"",
                             file_name=f"GRD_{numero.replace('/', '-')}.pdf",
                             mime="application/pdf",
                             key=f"grd_pdf_{g['id']}", use_container_width=True,
                         )
 
-                # AÃ§Ãµes controladas por status (sem alteraÃ§Ã£o livre de status)
+                # Ações controladas por status (sem alteração livre de status)
                 if status == "rascunho":
                     a1, a2 = st.columns(2)
                     with a1:
