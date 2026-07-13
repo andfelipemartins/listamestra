@@ -224,6 +224,9 @@ _MIGRACOES = [
     ("grd_remessas", "anulada_em",                 "TEXT"),
     ("grd_remessas", "token_recebimento",          "TEXT"),
     ("grd_remessas", "token_recebimento_criado_em", "TEXT"),
+    ("grd_remessas", "token_hash",                 "TEXT"),
+    ("grd_remessas", "token_expira_em",            "TEXT"),
+    ("grd_remessas", "token_usado_em",             "TEXT"),
     ("grd_remessas", "recebido_em",                "TEXT"),
     ("grd_remessas", "recebido_cargo",             "TEXT"),
     ("grd_remessas", "declaracao_recebimento",     "TEXT"),
@@ -259,15 +262,20 @@ def _migrar_esquema(conn: sqlite3.Connection) -> None:
         WHERE numero_grd IS NOT NULL
         """
     )
-    # Busca de GRD por token de recebimento
+    # Busca de GRD por token de recebimento (legado em texto claro e hash atual)
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_grd_token ON grd_remessas(token_recebimento)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_grd_token_hash ON grd_remessas(token_hash)"
     )
     # Renomeia status legado 'cancelada' → 'anulada' (idempotente — block-002 v2)
     if "grd_remessas" in {r[0] for r in conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table'"
     )}:
         conn.execute("UPDATE grd_remessas SET status = 'anulada' WHERE status = 'cancelada'")
+        # Block-007: tokens em texto claro emitidos antes do hardening deixam de ser validos.
+        conn.execute("UPDATE grd_remessas SET token_recebimento = NULL WHERE token_recebimento IS NOT NULL")
 
 
 def _normalizar_labels(conn: sqlite3.Connection) -> None:

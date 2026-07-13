@@ -1,18 +1,22 @@
 """
 core/services/grd_service.py
 
-Regras de aplicação para a GRD como entidade operacional (Guia de Remessa).
+Regras de aplicaÃ§Ã£o para a GRD como entidade operacional (Guia de Remessa).
 
-Orquestra o GrdRepository: valida cabeçalho e número único por contrato, congela
-o snapshot dos itens no momento da criação, controla o status de ciclo
-(rascunho→emitida→enviada→recebida/cancelada), lista/filtra GRDs e prepara os
-dados para exportação Excel/PDF. Não depende de Streamlit.
+Orquestra o GrdRepository: valida cabeÃ§alho e nÃºmero Ãºnico por contrato, congela
+o snapshot dos itens no momento da criaÃ§Ã£o, controla o status de ciclo
+(rascunhoâ†’emitidaâ†’enviadaâ†’recebida/cancelada), lista/filtra GRDs e prepara os
+dados para exportaÃ§Ã£o Excel/PDF. NÃ£o depende de Streamlit.
 """
 
+import hashlib
+import secrets
 import sqlite3
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+from core.config import GRD_TOKEN_TTL_DIAS
 from core.engine.disciplinas import ESTRUTURA
 from core.engine.status import NOME_TRECHO, classificar_status
 from core.formatacao import disciplina_do_codigo, filtrar_documentos
@@ -23,14 +27,14 @@ from db.connection import get_connection
 STATUS_INICIAIS = ("rascunho", "emitida")
 _QTD_CAMPOS = ("qtd_a0", "qtd_a1", "qtd_a2", "qtd_a3", "qtd_a4", "qtd_digital")
 
-# Máquina de estados unidirecional da GRD (regra de domínio central,
-# reutilizável por qualquer adapter futuro — FastAPI/Django).
+# MÃ¡quina de estados unidirecional da GRD (regra de domÃ­nio central,
+# reutilizÃ¡vel por qualquer adapter futuro â€” FastAPI/Django).
 TRANSICOES: dict[str, set] = {
     "rascunho": {"emitida"},
     "emitida":  {"enviada", "anulada"},
     "enviada":  {"recebida", "anulada"},
-    "recebida": set(),   # imutável
-    "anulada":  set(),   # imutável
+    "recebida": set(),   # imutÃ¡vel
+    "anulada":  set(),   # imutÃ¡vel
 }
 
 
@@ -40,6 +44,7 @@ class ResultadoGrd:
     grd_id: Optional[int] = None
     total_itens: int = 0
     mensagem: str = ""
+    dados: Optional[dict] = None
 
 
 class GrdService:
@@ -50,8 +55,35 @@ class GrdService:
     def _connection_kwargs(self) -> dict:
         return {"db_path": self._db_path} if self._db_path else {}
 
+    @staticmethod
+    def _agora() -> datetime:
+        return datetime.now(timezone.utc)
+
+    @staticmethod
+    def _iso(dt: datetime) -> str:
+        return dt.astimezone(timezone.utc).isoformat(timespec="seconds")
+
+    @staticmethod
+    def _parse_iso(valor: Optional[str]) -> Optional[datetime]:
+        if not valor:
+            return None
+        texto = str(valor)
+        try:
+            if texto.endswith("Z"):
+                texto = texto[:-1] + "+00:00"
+            dt = datetime.fromisoformat(texto)
+        except ValueError:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+
+    @staticmethod
+    def _hash_token(token: str) -> str:
+        return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
     # ------------------------------------------------------------------
-    # Listagem de documentos elegíveis (tabela de seleção/preparação)
+    # Listagem de documentos elegÃ­veis (tabela de seleÃ§Ã£o/preparaÃ§Ã£o)
     # ------------------------------------------------------------------
 
     def listar_documentos_selecionaveis(
@@ -78,35 +110,35 @@ class GrdService:
         return doc
 
     # ------------------------------------------------------------------
-    # Validação
+    # ValidaÃ§Ã£o
     # ------------------------------------------------------------------
 
     def validar_cabecalho(self, contrato_id: int, cabecalho: dict) -> list[str]:
-        """Retorna lista de erros (vazia se válido)."""
+        """Retorna lista de erros (vazia se vÃ¡lido)."""
         erros: list[str] = []
         status = (cabecalho.get("status") or "rascunho")
         if status not in STATUS_INICIAIS:
-            erros.append(f"Status inicial inválido: {status!r} (use 'rascunho' ou 'emitida').")
+            erros.append(f"Status inicial invÃ¡lido: {status!r} (use 'rascunho' ou 'emitida').")
         numero = (cabecalho.get("numero_grd") or "").strip()
         if numero and self._repo.numero_existe(contrato_id, numero):
-            erros.append(f"Já existe uma GRD com o número '{numero}' neste contrato.")
+            erros.append(f"JÃ¡ existe uma GRD com o nÃºmero '{numero}' neste contrato.")
         return erros
 
     def numero_disponivel(self, contrato_id: int, numero_grd: str) -> bool:
         return not self._repo.numero_existe(contrato_id, numero_grd)
 
     # ------------------------------------------------------------------
-    # Criação com snapshot congelado
+    # CriaÃ§Ã£o com snapshot congelado
     # ------------------------------------------------------------------
 
     def criar_grd(self, contrato_id: int, cabecalho: dict, itens: list[dict]) -> ResultadoGrd:
         """
         Cria UMA GRD e vincula os itens selecionados, congelando o snapshot de
-        cada documento (código, título, revisão, versão, situação, data, trecho,
-        disciplina) e as quantidades de cópias por formato.
+        cada documento (cÃ³digo, tÃ­tulo, revisÃ£o, versÃ£o, situaÃ§Ã£o, data, trecho,
+        disciplina) e as quantidades de cÃ³pias por formato.
 
         `itens`: lista de dicts com `revisao_id` e qtd_a0..qtd_digital.
-        O snapshot é montado a partir do estado atual do documento no banco.
+        O snapshot Ã© montado a partir do estado atual do documento no banco.
         """
         itens = [it for it in (itens or []) if it.get("revisao_id") is not None]
         if not itens:
@@ -150,7 +182,7 @@ class GrdService:
         except sqlite3.IntegrityError:
             return ResultadoGrd(
                 False,
-                mensagem=f"Número de GRD duplicado no contrato: '{data['numero_grd']}'.",
+                mensagem=f"NÃºmero de GRD duplicado no contrato: '{data['numero_grd']}'.",
             )
 
         return ResultadoGrd(
@@ -188,41 +220,41 @@ class GrdService:
     def _transitar(self, grd_id: int, novo: str, extra: Optional[dict] = None) -> ResultadoGrd:
         grd = self._repo.buscar_por_id(grd_id)
         if grd is None:
-            return ResultadoGrd(False, grd_id=grd_id, mensagem="GRD não encontrada.")
+            return ResultadoGrd(False, grd_id=grd_id, mensagem="GRD nÃ£o encontrada.")
         atual = grd.get("status") or "rascunho"
         if not self.transicao_permitida(atual, novo):
             return ResultadoGrd(
                 False, grd_id=grd_id,
-                mensagem=f"Transição de status não permitida: '{atual}' → '{novo}'.",
+                mensagem=f"TransiÃ§Ã£o de status nÃ£o permitida: '{atual}' â†’ '{novo}'.",
             )
         self._repo.atualizar_status(grd_id, novo, extra)
-        return ResultadoGrd(True, grd_id=grd_id, mensagem=f"GRD agora está '{novo}'.")
+        return ResultadoGrd(True, grd_id=grd_id, mensagem=f"GRD agora estÃ¡ '{novo}'.")
 
     def emitir_grd(self, grd_id: int) -> ResultadoGrd:
-        """rascunho → emitida. Exige número formal (reservado para sempre)."""
+        """rascunho â†’ emitida. Exige nÃºmero formal (reservado para sempre)."""
         grd = self._repo.buscar_por_id(grd_id)
         if grd is None:
-            return ResultadoGrd(False, grd_id=grd_id, mensagem="GRD não encontrada.")
+            return ResultadoGrd(False, grd_id=grd_id, mensagem="GRD nÃ£o encontrada.")
         numero = (grd.get("numero_grd") or "").strip()
         if not numero:
-            return ResultadoGrd(False, grd_id=grd_id, mensagem="Informe o número da GRD antes de emitir.")
+            return ResultadoGrd(False, grd_id=grd_id, mensagem="Informe o nÃºmero da GRD antes de emitir.")
         if self._repo.numero_existe(grd["contrato_id"], numero, excluir_id=grd_id):
-            return ResultadoGrd(False, grd_id=grd_id, mensagem=f"Número '{numero}' já usado neste contrato.")
+            return ResultadoGrd(False, grd_id=grd_id, mensagem=f"NÃºmero '{numero}' jÃ¡ usado neste contrato.")
         return self._transitar(grd_id, "emitida")
 
     def marcar_enviada(self, grd_id: int) -> ResultadoGrd:
-        """emitida → enviada."""
+        """emitida â†’ enviada."""
         return self._transitar(grd_id, "enviada")
 
     def marcar_recebida(
         self, grd_id: int, recebido_por: str, recebido_cargo: str,
         declaracao: Optional[str] = None, recebido_em: Optional[str] = None,
     ) -> ResultadoGrd:
-        """enviada → recebida. Nome e cargo são obrigatórios. E-mail NÃO é exigido."""
+        """enviada â†’ recebida. Nome e cargo sÃ£o obrigatÃ³rios. E-mail NÃƒO Ã© exigido."""
         if not (recebido_por or "").strip() or not (recebido_cargo or "").strip():
             return ResultadoGrd(
                 False, grd_id=grd_id,
-                mensagem="Nome e cargo de quem recebeu são obrigatórios.",
+                mensagem="Nome e cargo de quem recebeu sÃ£o obrigatÃ³rios.",
             )
         from datetime import date
         quando = recebido_em or date.today().isoformat()
@@ -236,18 +268,18 @@ class GrdService:
         return self._transitar(grd_id, "recebida", extra)
 
     def anular_grd(self, grd_id: int, motivo: str) -> ResultadoGrd:
-        """emitida/enviada → anulada. Motivo obrigatório; não apaga dados."""
+        """emitida/enviada â†’ anulada. Motivo obrigatÃ³rio; nÃ£o apaga dados."""
         if not (motivo or "").strip():
-            return ResultadoGrd(False, grd_id=grd_id, mensagem="Motivo é obrigatório para anular a GRD.")
+            return ResultadoGrd(False, grd_id=grd_id, mensagem="Motivo Ã© obrigatÃ³rio para anular a GRD.")
         from datetime import datetime
         extra = {"motivo_anulacao": motivo.strip(), "anulada_em": datetime.now().isoformat(timespec="seconds")}
         return self._transitar(grd_id, "anulada", extra)
 
     def excluir_rascunho(self, grd_id: int) -> ResultadoGrd:
-        """Exclusão física — apenas GRD em rascunho. Libera o número para reuso."""
+        """ExclusÃ£o fÃ­sica â€” apenas GRD em rascunho. Libera o nÃºmero para reuso."""
         if self._repo.excluir_rascunho(grd_id):
-            return ResultadoGrd(True, grd_id=grd_id, mensagem="Rascunho de GRD excluído.")
-        return ResultadoGrd(False, grd_id=grd_id, mensagem="Só é possível excluir GRD em rascunho.")
+            return ResultadoGrd(True, grd_id=grd_id, mensagem="Rascunho de GRD excluÃ­do.")
+        return ResultadoGrd(False, grd_id=grd_id, mensagem="SÃ³ Ã© possÃ­vel excluir GRD em rascunho.")
 
     def pode_editar(self, grd_id: int) -> bool:
         grd = self._repo.buscar_por_id(grd_id)
@@ -257,49 +289,98 @@ class GrdService:
         return self.pode_editar(grd_id)
 
     # ------------------------------------------------------------------
-    # Recebimento por token (preparação — sem rota pública nesta etapa)
+    # Recebimento por token (preparaÃ§Ã£o â€” sem rota pÃºblica nesta etapa)
     # ------------------------------------------------------------------
 
     def gerar_token_recebimento(self, grd_id: int) -> ResultadoGrd:
         """
-        Gera e salva um token único para recebimento por link.
+        Gera e salva um token Ãºnico para recebimento por link.
 
-        Apenas para GRD 'emitida' ou 'enviada'. NÃO cria rota/página pública —
-        o token fica disponível para distribuição por qualquer canal. A rota
-        pública (FastAPI/Django) é um block futuro (ver ADR 0004).
+        Apenas para GRD 'emitida' ou 'enviada'. NÃƒO cria rota/pÃ¡gina pÃºblica â€”
+        o token fica disponÃ­vel para distribuiÃ§Ã£o por qualquer canal. A rota
+        pÃºblica (FastAPI/Django) Ã© um block futuro (ver ADR 0004).
         """
         grd = self._repo.buscar_por_id(grd_id)
         if grd is None:
-            return ResultadoGrd(False, grd_id=grd_id, mensagem="GRD não encontrada.")
+            return ResultadoGrd(False, grd_id=grd_id, mensagem="GRD nÃ£o encontrada.")
         if grd.get("status") not in ("emitida", "enviada"):
             return ResultadoGrd(
                 False, grd_id=grd_id,
-                mensagem="Token só pode ser gerado para GRD emitida ou enviada.",
+                mensagem="Token sÃ³ pode ser gerado para GRD emitida ou enviada.",
             )
-        import secrets
-        from datetime import datetime
-        token = grd.get("token_recebimento") or secrets.token_urlsafe(32)
-        self._repo.salvar_token(grd_id, token, datetime.now().isoformat(timespec="seconds"))
-        return ResultadoGrd(True, grd_id=grd_id, mensagem=token)
+        token = secrets.token_urlsafe(32)
+        agora = self._agora()
+        expira_em = agora + timedelta(days=GRD_TOKEN_TTL_DIAS)
+        self._repo.salvar_token(
+            grd_id,
+            self._hash_token(token),
+            self._iso(expira_em),
+            self._iso(agora),
+        )
+        return ResultadoGrd(
+            True,
+            grd_id=grd_id,
+            mensagem=token,
+            dados={"token": token, "token_expira_em": self._iso(expira_em)},
+        )
 
     def buscar_por_token(self, token: str) -> dict | None:
-        """Busca de domínio por token — reutilizável por adapter futuro (FastAPI/Django)."""
-        return self._repo.buscar_por_token(token)
+        """Busca de domÃ­nio por token â€” reutilizÃ¡vel por adapter futuro (FastAPI/Django)."""
+        if not (token or "").strip():
+            return None
+        return self._repo.buscar_por_token(self._hash_token(token.strip()))
+
+    def estado_token(self, token: str) -> dict:
+        """Estado do token para adapter publico futuro, sem depender de Streamlit."""
+        grd = self.buscar_por_token(token)
+        if grd is None:
+            return {"valido": False, "motivo": "Token invalido.", "grd": None}
+        if grd.get("token_usado_em"):
+            return {"valido": False, "motivo": "Este link ja foi utilizado.", "grd": grd}
+        expira_em = self._parse_iso(grd.get("token_expira_em"))
+        if expira_em is None or expira_em <= self._agora():
+            return {"valido": False, "motivo": "Este link expirou.", "grd": grd}
+        if grd.get("status") != "enviada":
+            return {
+                "valido": False,
+                "motivo": "O recebimento por token so e permitido para GRD enviada.",
+                "grd": grd,
+            }
+        return {"valido": True, "motivo": None, "grd": grd}
 
     def registrar_recebimento_por_token(
         self, token: str, recebido_por: str, recebido_cargo: str,
         declaracao: Optional[str] = None, recebido_em: Optional[str] = None,
     ) -> ResultadoGrd:
         """
-        Registra o recebimento a partir do token (regra de domínio, sem HTTP).
+        Registra o recebimento a partir do token (regra de domÃ­nio, sem HTTP).
 
-        Esta função existe para o futuro adapter público (FastAPI/Django) chamar
-        sem depender de Streamlit. Não há rota pública nesta etapa.
+        Esta funÃ§Ã£o existe para o futuro adapter pÃºblico (FastAPI/Django) chamar
+        sem depender de Streamlit. NÃ£o hÃ¡ rota pÃºblica nesta etapa.
         """
-        grd = self._repo.buscar_por_token(token)
-        if grd is None:
-            return ResultadoGrd(False, mensagem="Token inválido.")
-        return self.marcar_recebida(grd["id"], recebido_por, recebido_cargo, declaracao, recebido_em)
+        if not (recebido_por or "").strip() or not (recebido_cargo or "").strip():
+            return ResultadoGrd(False, mensagem="Nome e cargo de quem recebeu sao obrigatorios.")
+        estado = self.estado_token(token)
+        if not estado["valido"]:
+            grd = estado.get("grd") or {}
+            return ResultadoGrd(False, grd_id=grd.get("id"), mensagem=estado["motivo"])
+        grd = estado["grd"]
+        quando = recebido_em or self._agora().date().isoformat()
+        ok = self._repo.registrar_recebimento_por_token(
+            grd["id"],
+            recebido_por.strip(),
+            recebido_cargo.strip(),
+            (declaracao or "").strip() or None,
+            quando,
+            self._iso(self._agora()),
+        )
+        if not ok:
+            return ResultadoGrd(
+                False,
+                grd_id=grd["id"],
+                mensagem="Este link ja foi utilizado ou nao pode mais receber esta GRD.",
+            )
+        return ResultadoGrd(True, grd_id=grd["id"], mensagem="GRD agora esta 'recebida'.")
 
     # ------------------------------------------------------------------
     # Consulta
@@ -315,11 +396,11 @@ class GrdService:
         return self._repo.listar_itens(grd_id)
 
     def listar_grds_por_revisao(self, revisao_ids) -> dict:
-        """{revisao_id: [GRDs vinculadas]} — usa snapshot da GRD (página Documento)."""
+        """{revisao_id: [GRDs vinculadas]} â€” usa snapshot da GRD (pÃ¡gina Documento)."""
         return self._repo.listar_por_revisao(revisao_ids)
 
     # ------------------------------------------------------------------
-    # Exportação
+    # ExportaÃ§Ã£o
     # ------------------------------------------------------------------
 
     def montar_dados_exportacao(self, grd_id: int) -> Optional[dict]:

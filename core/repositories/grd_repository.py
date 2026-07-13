@@ -26,6 +26,7 @@ _CAMPOS_REMESSA_EDITAVEIS = (
     # ciclo formal + recebimento por token (block-002)
     "motivo_anulacao", "anulada_em", "recebido_em", "recebido_cargo",
     "declaracao_recebimento", "token_recebimento", "token_recebimento_criado_em",
+    "token_hash", "token_expira_em", "token_usado_em",
 )
 
 
@@ -196,6 +197,8 @@ class GrdRepository:
             SELECT g.id, g.numero_grd, g.data_envio, g.setor, g.trecho, g.modulo,
                    g.observacoes, g.status, g.destinatario, g.ac, g.obra,
                    g.emitido_por, g.recebido_por, g.data_recebimento, g.criado_em,
+                   g.token_hash, g.token_expira_em, g.token_usado_em,
+                   g.token_recebimento_criado_em,
                    (SELECT COUNT(*) FROM grd_itens i WHERE i.grd_id = g.id) AS total_itens
             FROM grd_remessas g
             WHERE g.contrato_id = ?
@@ -278,22 +281,64 @@ class GrdRepository:
     # Ciclo formal: token, recebimento, anulação, exclusão
     # ------------------------------------------------------------------
 
-    def salvar_token(self, grd_id: int, token: str, criado_em: str, conn=None) -> None:
+    def salvar_token(
+        self, grd_id: int, token_hash: str, expira_em: str, criado_em: str, conn=None
+    ) -> None:
         with self._connect(conn) as c:
             c.execute(
-                "UPDATE grd_remessas SET token_recebimento = ?, token_recebimento_criado_em = ? "
+                "UPDATE grd_remessas "
+                "SET token_hash = ?, token_expira_em = ?, token_usado_em = NULL, "
+                "token_recebimento = NULL, token_recebimento_criado_em = ? "
                 "WHERE id = ?",
-                (token, criado_em, grd_id),
+                (token_hash, expira_em, criado_em, grd_id),
             )
 
-    def buscar_por_token(self, token: str, conn=None) -> dict | None:
-        if not token:
+    def buscar_por_token(self, token_hash: str, conn=None) -> dict | None:
+        if not token_hash:
             return None
         with self._connect(conn) as c:
             row = c.execute(
-                "SELECT * FROM grd_remessas WHERE token_recebimento = ?", (token,)
+                "SELECT * FROM grd_remessas WHERE token_hash = ?", (token_hash,)
             ).fetchone()
         return dict(row) if row else None
+
+    def registrar_recebimento_por_token(
+        self,
+        grd_id: int,
+        recebido_por: str,
+        recebido_cargo: str,
+        declaracao: Optional[str],
+        recebido_em: str,
+        token_usado_em: str,
+        conn=None,
+    ) -> bool:
+        """Marca a GRD como recebida e consome o token na mesma transacao."""
+        with self._connect(conn) as c:
+            cur = c.execute(
+                """
+                UPDATE grd_remessas
+                SET status = 'recebida',
+                    recebido_por = ?,
+                    recebido_cargo = ?,
+                    declaracao_recebimento = ?,
+                    recebido_em = ?,
+                    data_recebimento = ?,
+                    token_usado_em = ?
+                WHERE id = ?
+                  AND status = 'enviada'
+                  AND token_usado_em IS NULL
+                """,
+                (
+                    recebido_por,
+                    recebido_cargo,
+                    declaracao,
+                    recebido_em,
+                    recebido_em,
+                    token_usado_em,
+                    grd_id,
+                ),
+            )
+            return bool(cur.rowcount)
 
     def excluir_rascunho(self, grd_id: int, conn=None) -> bool:
         """Remove fisicamente a GRD e seus itens — APENAS se estiver em rascunho.

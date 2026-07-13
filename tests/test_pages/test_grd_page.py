@@ -99,7 +99,9 @@ def test_grd_page_token_persistente_readonly():
     """Token exibido em campo somente-leitura, com observação de página pública."""
     source = _src()
     assert "disabled=True" in source
-    assert "página pública ainda não está implementada" in source
+    assert "pagina publica de recebimento ainda nao esta implementada" in source
+    assert "Gerar/renovar token de recebimento" in source
+    assert "/grd/receber/" in source
 
 
 def test_grd_page_token_nao_chamado_de_link():

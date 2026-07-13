@@ -6,6 +6,7 @@ Testes do GrdRepository — agregado GRD em lote (grd_remessas + grd_itens).
 
 import os
 import sys
+import hashlib
 
 import pytest
 
@@ -192,10 +193,19 @@ class TestSnapshotItem:
 class TestTokenExclusaoVinculo:
     def test_salvar_e_buscar_token(self, repo, contrato_id):
         gid = repo.criar_remessa({"contrato_id": contrato_id, "numero_grd": "GRD-1"})
-        repo.salvar_token(gid, "tok-abc-123", "2026-06-09T10:00:00")
-        achada = repo.buscar_por_token("tok-abc-123")
+        token_hash = hashlib.sha256("tok-abc-123".encode("utf-8")).hexdigest()
+        repo.salvar_token(
+            gid,
+            token_hash,
+            "2026-07-09T10:00:00+00:00",
+            "2026-06-09T10:00:00+00:00",
+        )
+        achada = repo.buscar_por_token(token_hash)
         assert achada and achada["id"] == gid
-        assert repo.buscar_por_token("inexistente") is None
+        assert achada["token_recebimento"] is None
+        assert achada["token_hash"] == token_hash
+        assert achada["token_expira_em"] == "2026-07-09T10:00:00+00:00"
+        assert repo.buscar_por_token(hashlib.sha256("inexistente".encode("utf-8")).hexdigest()) is None
 
     def test_excluir_rascunho(self, repo, contrato_id):
         gid = repo.criar_remessa({"contrato_id": contrato_id, "numero_grd": "GRD-1"})
