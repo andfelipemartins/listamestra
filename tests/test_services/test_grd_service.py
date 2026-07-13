@@ -1,8 +1,8 @@
-﻿"""
+"""
 tests/test_services/test_grd_service.py
 
-Testes do GrdService â€” GRD como entidade operacional (nÃºmero Ãºnico, snapshot,
-cÃ³pias, status, exportaÃ§Ã£o).
+Testes do GrdService — GRD como entidade operacional (número único, snapshot,
+cópias, status, exportação).
 """
 
 import os
@@ -93,7 +93,7 @@ class TestNumeroUnico:
         assert service.criar_grd(contrato_id, {"numero_grd": "GRD-9"}, [_item(r1)]).sucesso
         res2 = service.criar_grd(contrato_id, {"numero_grd": "GRD-9"}, [_item(r2)])
         assert not res2.sucesso
-        assert "grd-9" in res2.mensagem.lower() or "nÃºmero" in res2.mensagem.lower()
+        assert "grd-9" in res2.mensagem.lower() or "número" in res2.mensagem.lower()
 
     def test_mesmo_numero_em_contratos_diferentes_permitido(self, service, db_path):
         c1 = ContractRepository(db_path).criar_contrato("C1", "X")
@@ -108,10 +108,10 @@ class TestSnapshotECopias:
     def test_snapshot_congela_situacao(self, service, db_path, contrato_id):
         r1 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1001", situacao="APROVADO")
         res = service.criar_grd(contrato_id, {"numero_grd": "GRD-1"}, [_item(r1)])
-        # altera a revisÃ£o depois de criada a GRD
+        # altera a revisão depois de criada a GRD
         with get_connection(db_path) as conn:
             conn.execute("UPDATE revisoes SET situacao=?, label_revisao=? WHERE id=?",
-                         ("NÃƒO APROVADO", "1", r1))
+                         ("NÃO APROVADO", "1", r1))
         it = service.listar_itens(res.grd_id)[0]
         assert it["situacao"] == "APROVADO"      # congelado
         assert it["label_revisao"] == "0"         # congelado
@@ -135,7 +135,7 @@ class TestSnapshotECopias:
 
 
 class TestCicloFormal:
-    """TransiÃ§Ãµes unidirecionais e aÃ§Ãµes controladas."""
+    """Transições unidirecionais e ações controladas."""
 
     def _grd(self, service, db_path, contrato_id, numero="GRD-1", status="rascunho"):
         r1 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1001")
@@ -143,9 +143,9 @@ class TestCicloFormal:
 
     def test_transicoes_permitidas(self, service, db_path, contrato_id):
         gid = self._grd(service, db_path, contrato_id)
-        assert service.emitir_grd(gid).sucesso          # rascunho â†’ emitida
-        assert service.marcar_enviada(gid).sucesso       # emitida â†’ enviada
-        assert service.marcar_recebida(gid, "JoÃ£o", "Engenheiro").sucesso  # enviada â†’ recebida
+        assert service.emitir_grd(gid).sucesso          # rascunho → emitida
+        assert service.marcar_enviada(gid).sucesso       # emitida → enviada
+        assert service.marcar_recebida(gid, "João", "Engenheiro").sucesso  # enviada → recebida
         assert service.buscar_grd(gid)["status"] == "recebida"
 
     def test_rascunho_para_enviada_proibido(self, service, db_path, contrato_id):
@@ -156,7 +156,7 @@ class TestCicloFormal:
     def test_recebida_imutavel(self, service, db_path, contrato_id):
         gid = self._grd(service, db_path, contrato_id)
         service.emitir_grd(gid); service.marcar_enviada(gid)
-        service.marcar_recebida(gid, "JoÃ£o", "Eng")
+        service.marcar_recebida(gid, "João", "Eng")
         assert not service.marcar_enviada(gid).sucesso
         assert not service.anular_grd(gid, "x").sucesso
         # dados preservados
@@ -167,10 +167,10 @@ class TestCicloFormal:
         service.emitir_grd(gid)
         assert not service.anular_grd(gid, "").sucesso
         assert not service.anular_grd(gid, "   ").sucesso
-        ok = service.anular_grd(gid, "documento substituÃ­do")
+        ok = service.anular_grd(gid, "documento substituído")
         assert ok.sucesso
         grd = service.buscar_grd(gid)
-        assert grd["status"] == "anulada" and grd["motivo_anulacao"] == "documento substituÃ­do"
+        assert grd["status"] == "anulada" and grd["motivo_anulacao"] == "documento substituído"
 
     def test_anulada_imutavel(self, service, db_path, contrato_id):
         gid = self._grd(service, db_path, contrato_id)
@@ -195,16 +195,16 @@ class TestCicloFormal:
         gid = self._grd(service, db_path, contrato_id)
         service.emitir_grd(gid); service.marcar_enviada(gid)
         assert not service.marcar_recebida(gid, "", "Eng").sucesso
-        assert not service.marcar_recebida(gid, "JoÃ£o", "").sucesso
+        assert not service.marcar_recebida(gid, "João", "").sucesso
 
     def test_recebimento_nao_exige_email(self, service, db_path, contrato_id):
         gid = self._grd(service, db_path, contrato_id)
         service.emitir_grd(gid); service.marcar_enviada(gid)
-        # sem qualquer campo de e-mail â€” deve funcionar
-        res = service.marcar_recebida(gid, "JoÃ£o", "Engenheiro", declaracao="Recebi os documentos")
+        # sem qualquer campo de e-mail — deve funcionar
+        res = service.marcar_recebida(gid, "João", "Engenheiro", declaracao="Recebi os documentos")
         assert res.sucesso
         grd = service.buscar_grd(gid)
-        assert grd["recebido_por"] == "JoÃ£o" and grd["recebido_cargo"] == "Engenheiro"
+        assert grd["recebido_por"] == "João" and grd["recebido_cargo"] == "Engenheiro"
         assert grd["declaracao_recebimento"] == "Recebi os documentos"
 
 
@@ -214,7 +214,7 @@ class TestNumeroFormalReservado:
         r2 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1002")
         gid = service.criar_grd(contrato_id, {"numero_grd": "GRD-7"}, [_item(r1)]).grd_id
         service.emitir_grd(gid)
-        # outra GRD com mesmo nÃºmero no contrato â†’ bloqueada
+        # outra GRD com mesmo número no contrato → bloqueada
         assert not service.criar_grd(contrato_id, {"numero_grd": "GRD-7"}, [_item(r2)]).sucesso
 
     def test_numero_anulada_nao_reutilizavel(self, service, db_path, contrato_id):
@@ -250,7 +250,7 @@ class TestToken:
         r1 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1001")
         gid = service.criar_grd(contrato_id, {"numero_grd": "GRD-1"}, [_item(r1)]).grd_id
         service.emitir_grd(gid); service.marcar_enviada(gid)
-        service.marcar_recebida(gid, "JoÃ£o", "Eng")
+        service.marcar_recebida(gid, "João", "Eng")
         assert not service.gerar_token_recebimento(gid).sucesso
 
     def test_token_rejeitado_para_anulada(self, service, db_path, contrato_id):
@@ -344,7 +344,7 @@ class TestBuscaEExportData:
     def test_filtro_por_status(self, service, db_path, contrato_id):
         r1 = _doc_rev(db_path, contrato_id, "DE-15.25.00.00-6A1-1001")
         res = service.criar_grd(contrato_id, {"numero_grd": "GRD-1", "status": "emitida"}, [_item(r1)])
-        service.anular_grd(res.grd_id, "erro de emissÃ£o")
+        service.anular_grd(res.grd_id, "erro de emissão")
         assert len(service.listar_grds(contrato_id, {"status": "anulada"})) == 1
         assert len(service.listar_grds(contrato_id, {"status": "emitida"})) == 0
 
