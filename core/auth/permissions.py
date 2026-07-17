@@ -14,6 +14,7 @@ PERMISSOES = frozenset({
     "create_document",
     "export_data",
     "manage_contracts",
+    "manage_pendencias",
 })
 
 PERFIS: dict[str, dict] = {
@@ -30,6 +31,7 @@ PERFIS: dict[str, dict] = {
             "import_data",
             "create_document",
             "export_data",
+            "manage_pendencias",
         }),
     },
     "reader": {

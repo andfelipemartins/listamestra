@@ -152,6 +152,22 @@ CREATE TABLE IF NOT EXISTS inconsistencias (
 );
 
 -- ============================================================
+-- Dispensas de pendencias operacionais
+-- As pendencias sao calculadas; esta tabela registra apenas a decisao humana.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS pendencias_dispensas (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    contrato_id     INTEGER NOT NULL REFERENCES contratos(id),
+    tipo_pendencia  TEXT NOT NULL,
+    chave           TEXT NOT NULL,
+    acao            TEXT NOT NULL,
+    observacao      TEXT,
+    perfil          TEXT,
+    criado_em       TEXT DEFAULT (datetime('now')),
+    UNIQUE(contrato_id, tipo_pendencia, chave)
+);
+
+-- ============================================================
 -- GRDs (Guias de Remessa de Documentos)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS grds (
@@ -201,6 +217,8 @@ CREATE INDEX IF NOT EXISTS idx_grds_revisao         ON grds(revisao_id);
 CREATE INDEX IF NOT EXISTS idx_grd_remessas_contrato ON grd_remessas(contrato_id);
 CREATE INDEX IF NOT EXISTS idx_grd_itens_grd         ON grd_itens(grd_id);
 CREATE INDEX IF NOT EXISTS idx_grd_itens_revisao     ON grd_itens(revisao_id);
+CREATE INDEX IF NOT EXISTS idx_pendencias_dispensas_contrato
+    ON pendencias_dispensas(contrato_id);
 
 """
 

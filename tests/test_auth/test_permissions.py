@@ -72,6 +72,9 @@ class TestEditor:
     def test_editor_pode_ver_dashboard(self):
         assert can_perfil("view_dashboard", "editor") is True
 
+    def test_editor_pode_gerenciar_pendencias(self):
+        assert can_perfil("manage_pendencias", "editor") is True
+
 
 # ---------------------------------------------------------------------------
 # can_perfil — Leitor / Consulta (reader)
@@ -100,6 +103,9 @@ class TestLeitor:
     def test_reader_nao_pode_gerenciar_contratos(self):
         assert can_perfil("manage_contracts", "reader") is False
 
+    def test_reader_nao_pode_gerenciar_pendencias(self):
+        assert can_perfil("manage_pendencias", "reader") is False
+
 
 # ---------------------------------------------------------------------------
 # can_perfil — Visitante
@@ -121,6 +127,9 @@ class TestVisitante:
 
     def test_visitor_nao_pode_ver_comparacao(self):
         assert can_perfil("view_comparison", "visitor") is False
+
+    def test_visitor_nao_pode_gerenciar_pendencias(self):
+        assert can_perfil("manage_pendencias", "visitor") is False
 
 
 # ---------------------------------------------------------------------------
