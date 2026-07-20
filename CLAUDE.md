@@ -10,6 +10,17 @@ Substitui uma planilha Excel manual por uma aplicação Streamlit + SQLite rastr
 
 ---
 
+## Modelo de trabalho e regras permanentes
+
+- **Divisão de papéis:** Claude Code atua como analista/arquiteto/planejador/revisor e autor dos prompts de implementação; o **Codex é o implementador** (código, testes, commits); o **usuário é a autoridade final** sobre domínio, escopo, commits e push.
+- **Verificação antes de aceitar:** relatórios de implementação nunca são aceitos sem conferência no repositório real (git status/diff, grep, leitura dos arquivos, rodar a suíte).
+- **Governança em `cognitive_arch_V2/`:** memória de execução (fases, blocks, estado) local ao projeto e **ignorada pelo Git — nunca versionar/commitar** (idem `cognitive-arch/` v1, histórica). O status ao vivo de marcos/blocks vive em `docs/ROADMAP.md` + `cognitive_arch_V2` (STATE/NEXT/BLOCK_LOG), não nesta CLAUDE.md.
+- **Git:** commits só quando solicitado; **push só com autorização explícita**; mensagens em português; nunca versionar `db/sclme.db`, dados reais/confidenciais, ou as pastas de cognitive arch.
+- **Banco único:** o app usa sempre `db/sclme.db` — não há mais "modo demo" / `SCLME_DB_MODE` (criado e depois removido por decisão de produto).
+- **Camadas:** `core/` nunca importa Streamlit; regra de negócio em `engine`/`services`/`repositories`; páginas apenas capturam input, chamam services e exibem — **sem SQL em páginas**.
+
+---
+
 ## Como rodar
 
 ```bash
@@ -87,8 +98,11 @@ sclme/
 |--------|-----------------|
 | `core/parsers` | Interpretação e validação de códigos documentais; `codigo_builder` monta/desmonta |
 | `core/importers` | Leitura de fontes externas (Excel) |
-| `core/engine` | Regras de negócio (status, comparações, alertas) |
+| `core/engine` | Regras puras de domínio (status, ciclo documental, comparações, alertas, pendências) |
+| `core/services` | Casos de uso / orquestração (Cadastro, Documento, Dashboard, GRD, Pendências, Importação) |
+| `core/repositories` | Acesso a dados por agregado (Contrato, Documento, Revisão, Importação, GRD, Pendência) |
 | `core/auth` | Perfis e permissões (`can_perfil` pura + `can` via session_state) |
+| `api/` | Adapter público FastAPI (recebimento de GRD por token) — casca HTTP, sem regra de negócio |
 | `app/session` | Contrato ativo na sessão (`require_contrato`, `set_contrato_ativo`) |
 | `pages/` | Interface Streamlit — sem lógica de negócio; consome `core/` e `app/` |
 | `db/` | Acesso ao SQLite via `get_connection()` |
@@ -151,9 +165,11 @@ with get_connection() as conn:
 | `revisoes` | Histórico de revisões — inclui `emissao_inicial` e `data_circular` |
 | `documentos_previstos` | Escopo previsto (vindo do Índice de Documentos) |
 | `arquivos` | Arquivos físicos/digitais — `objeto` imutável por arquivo |
-| `grds` | GRDs por revisão e setor (Produção, Topografia, Qualidade) |
+| `grds` | GRDs legadas por revisão e setor (mantida por compatibilidade) |
+| `grd_remessas` / `grd_itens` | GRD em lote — cabeçalho + itens com snapshot congelado, cópias A0–A4/Digital, token de recebimento (modelo operacional atual) |
 | `importacoes` | Rastreabilidade de cada lote importado |
 | `inconsistencias` | Erros/alertas detectados durante importações |
+| `pendencias_dispensas` | Decisões humanas (resolvida/ignorada) sobre pendências calculadas ao vivo |
 
 **Campos notáveis:**
 - `documentos.disciplina` — código A1–Z2 da disciplina (chamado "ESTRUTURA" no Excel)
@@ -178,6 +194,8 @@ with get_connection() as conn:
 ---
 
 ## Roadmap
+
+> **Status ao vivo** dos marcos/blocks vive em `docs/ROADMAP.md` e em `cognitive_arch_V2` (STATE/NEXT/BLOCK_LOG). A tabela abaixo é visão de longo prazo, não status em tempo real.
 
 | Marco | Descrição | Status |
 |-------|-----------|--------|
@@ -282,7 +300,7 @@ Registrar todas as mudanças relevantes para rastreabilidade.
 ### Marco 20 — Preparação para Apresentação / Produto
 Preparar o projeto para ser mostrado profissionalmente.
 
-**Entregas:** README atualizado; changelog; modo demo com dados fictícios; prints das telas; instrução de instalação e uso; roteiro de apresentação; versão v0.1.0.
+**Entregas:** README atualizado; changelog; prints das telas; instrução de instalação e uso; roteiro de apresentação; versão v0.1.0. *(Nota: o "modo demo" foi tentado e removido por decisão de produto — não faz parte deste marco.)*
 
 ---
 
