@@ -7,17 +7,71 @@ codigo:
       rotulo: tipo documental
       padrao_regex: "[A-Z]{2,4}"
       valores:
+        AN: Análise de segurança
+        AS: Arquitetura de software
+        CE: Configuração de equipamento
+        CO: Concepção de canteiro
+        CQ: Croqui
+        CS: Concepção de sistemas
         DE: Desenho
-        MC: Memorial de Cálculo
-        MD: Memorial Descritivo
-        RT: Relatório Técnico
-        ID: Índice de Documentos
-        IC: Instrução de Serviço
-        PE: Procedimento Específico
-        MQ: Manual da Qualidade / Plano de Gestão
-        LM: Lista de Materiais
-        NS: Notas de Serviço
-        TC: Tabela de Coordenadas
+        DG: Diagrama
+        DS: Dossiê
+        DT: Diretrizes técnicas de projeto
+        DV: Dicionário de variáveis
+        EB: Plano de execução BIM
+        EE: Especificação de equipamento
+        EM: Especificação de material
+        EP: Especificação de processo
+        EQ: Esquema unifilar e elétrico
+        ER: Especificação de requisitos de sistema
+        ES: Especificação de serviço
+        ET: Especificação técnica
+        FT: Formulário de teste
+        GC: Roteiro de manutenção preventiva
+        GM: Plano de atividades de manutenção
+        GP: Planilha de atividades e tempos
+        GV: Atividades de manutenção preventiva
+        GZ: Parâmetros para programação
+        HR: Especificação de requisitos de hardware
+        IC: Instrução complementar
+        ID: Índice de documentos
+        IP: Instrução de projeto
+        IT: Instrução técnica
+        LC: Lista de cabos
+        LM: Lista de material
+        LS: Lista de peças sobressalentes
+        MB: Modelo BIM
+        MC: Memorial de cálculo
+        MD: Memorial descritivo e justificativo
+        MM: Manual de manutenção
+        MO: Manual de operação
+        MP: Manual de geração de software
+        MQ: Manual de programa de qualidade
+        MU: Manual do usuário
+        NS: Nota de serviço
+        OB: Projeto de objeto BIM
+        OR: Planilha para orçamento
+        PC: Procedimento de conservação
+        PE: Procedimento executivo
+        PF: Plano de inspeção e testes em fábrica
+        PG: Programas de computador
+        PI: Procedimento de inspeção
+        PL: Procedimento de teste de instalação
+        PM: Procedimento de treinamento
+        PN: Procedimento de montagem
+        PP: Projeto padrão
+        PQ: Plano de qualidade de software
+        PS: Procedimento de segurança do trabalho
+        PT: Procedimento de teste
+        PV: Procedimento de movimentação de cargas
+        RS: Relatório de serviços executados
+        RT: Relatório técnico
+        RZ: Diretrizes técnicas e operacionais
+        SM: Listagem de simulação
+        SR: Especificação de requisitos de software
+        TA: Tabela de altitudes
+        TC: Tabela de coordenadas
+        TR: Plano de treinamento
     - sep: "-"
     - nome: linha
       rotulo: linha

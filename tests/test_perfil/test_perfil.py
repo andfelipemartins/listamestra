@@ -44,6 +44,35 @@ def test_metro_interpreta_e_monta_codigo(metro):
     assert montar(metro, resultado.segmentos) == resultado.original.upper()
 
 
+@pytest.mark.parametrize(
+    ("sigla", "rotulo"),
+    [
+        ("DG", "Diagrama"),
+        ("EQ", "Esquema unifilar e elétrico"),
+        ("ET", "Especificação técnica"),
+        ("MM", "Manual de manutenção"),
+        ("MO", "Manual de operação"),
+        ("PF", "Plano de inspeção e testes em fábrica"),
+        ("PL", "Procedimento de teste de instalação"),
+        ("PN", "Procedimento de montagem"),
+    ],
+)
+def test_metro_interpreta_tipos_documentais_reais(metro, sigla, rotulo):
+    resultado = interpretar(metro, f"{sigla}-15.25.00.00-6A1-1001")
+
+    assert isinstance(resultado, CodigoInterpretado)
+    assert resultado.segmentos["tipo"] == sigla
+    assert resultado.significados["tipo"] == rotulo
+
+
+def test_metro_rejeita_tipo_documental_inexistente(metro):
+    resultado = interpretar(metro, "ZZ-15.25.00.00-6A1-1001")
+
+    assert isinstance(resultado, ErroCodigo)
+    assert resultado.segmento == "tipo"
+    assert "tipo documental" in resultado.mensagem
+
+
 def test_metro_interpreta_classe_e_subclasse_com_rotulo(metro):
     resultado = interpretar(metro, "DE-15.25.00.00-6P7-1513")
 
