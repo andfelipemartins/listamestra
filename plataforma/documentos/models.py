@@ -53,7 +53,6 @@ class CodigoDocumento(models.Model):
         related_name="codigos_documentais",
     )
     codigo = models.CharField("código", max_length=250)
-    principal = models.BooleanField("código principal", default=False)
     history = HistoricalRecords()
 
     class Meta:
@@ -66,9 +65,8 @@ class CodigoDocumento(models.Model):
                 name="codigo_perfil_codigo_unico",
             ),
             models.UniqueConstraint(
-                fields=("documento",),
-                condition=Q(principal=True),
-                name="codigo_principal_unico_documento",
+                fields=("documento", "perfil"),
+                name="codigo_documento_perfil_unico",
             ),
         ]
 
@@ -81,16 +79,6 @@ class CodigoDocumento(models.Model):
                 raise ValidationError(
                     {"perfil": "O perfil do código deve pertencer ao contrato do documento."}
                 )
-        if self.principal and self.documento_id:
-            outros_principais = CodigoDocumento.objects.filter(
-                documento_id=self.documento_id,
-                principal=True,
-            ).exclude(pk=self.pk)
-            if outros_principais.exists():
-                raise ValidationError(
-                    {"principal": "O documento já possui um código principal."}
-                )
-
     def __str__(self):
         return self.codigo
 

@@ -53,7 +53,7 @@ def test_perfil_vigente_escolhe_ultima_vigencia_e_ignora_inativos(contrato):
 
 
 @pytest.mark.django_db
-def test_documento_pode_ter_codigos_de_perfis_diferentes_e_um_principal(contrato, perfil):
+def test_documento_pode_ter_um_codigo_por_perfil(contrato, perfil):
     outro_perfil = PerfilContrato.objects.create(
         contrato=contrato,
         versao=2,
@@ -64,32 +64,22 @@ def test_documento_pode_ter_codigos_de_perfis_diferentes_e_um_principal(contrato
         documento=documento,
         perfil=perfil,
         codigo="PADRAO-A-001",
-        principal=True,
     )
-    segundo = CodigoDocumento(
+    CodigoDocumento.objects.create(
         documento=documento,
         perfil=outro_perfil,
         codigo="PADRAO-B-009",
-        principal=True,
     )
-
-    with pytest.raises(ValidationError, match="código principal"):
-        segundo.full_clean()
-
-    segundo.principal = False
-    segundo.full_clean()
-    segundo.save()
     assert documento.codigos.count() == 2
 
 
 @pytest.mark.django_db
-def test_constraint_rejeita_segundo_codigo_principal_no_banco(contrato, perfil):
+def test_constraint_rejeita_segundo_codigo_do_mesmo_perfil_no_documento(contrato, perfil):
     documento = Documento.objects.create(contrato=contrato, identificador_base="DOC-002")
     CodigoDocumento.objects.create(
         documento=documento,
         perfil=perfil,
         codigo="COD-1",
-        principal=True,
     )
 
     with pytest.raises(IntegrityError), transaction.atomic():
@@ -97,7 +87,6 @@ def test_constraint_rejeita_segundo_codigo_principal_no_banco(contrato, perfil):
             documento=documento,
             perfil=perfil,
             codigo="COD-2",
-            principal=True,
         )
 
 

@@ -1,0 +1,55 @@
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">Início</a>
+  &rsaquo; <a href="{% url 'admin:contratos_perfilcontrato_changelist' %}">Perfis do contrato</a>
+  &rsaquo; <a href="{{ change_url }}">{{ original }}</a>
+  &rsaquo; Testar códigos
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <p>Cole um código por linha. A validação usa a definição deste perfil e não grava alterações.</p>
+  <form method="post">
+    {% csrf_token %}
+    <div>
+      <label for="id_codigos"><strong>Códigos</strong></label>
+      <textarea id="id_codigos" name="codigos" rows="8" style="width: 100%;">{{ texto_codigos }}</textarea>
+    </div>
+    <div class="submit-row">
+      <input type="submit" value="Validar códigos" class="default">
+      <a class="button cancel-link" href="{{ change_url }}">Voltar ao perfil</a>
+    </div>
+  </form>
+
+  {% if resultados %}
+  <div class="module">
+    <h2>Resultados</h2>
+    {% for resultado in resultados %}
+      <section style="padding: 12px 10px; border-bottom: 1px solid var(--hairline-color, #ddd);">
+        <h3>Linha {{ resultado.linha }} — <code>{{ resultado.codigo }}</code></h3>
+        <p>
+          <strong>{% if resultado.valido %}Válido{% else %}Inválido{% endif %}</strong>
+          {% if resultado.segmento %} — caixa: {{ resultado.segmento }}{% endif %}
+          — {{ resultado.mensagem }}
+        </p>
+        {% if resultado.caixas %}
+          <table>
+            <thead><tr><th>Caixa</th><th>Rótulo</th><th>Valor</th><th>Significado</th></tr></thead>
+            <tbody>
+              {% for nome, rotulo, valor, significado in resultado.caixas %}
+                <tr><td>{{ nome }}</td><td>{{ rotulo }}</td><td><code>{{ valor }}</code></td><td>{{ significado|default:"—" }}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% endif %}
+      </section>
+    {% endfor %}
+  </div>
+  {% elif request.method == "POST" %}
+    <p>Nenhum código preenchido.</p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,8 +1,10 @@
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 from simple_history.models import HistoricalRecords
 
 from contas.models import Usuario
+from core.perfil import ErroPerfil, perfil_de_dict
 
 
 class Contrato(models.Model):
@@ -50,6 +52,13 @@ class PerfilContrato(models.Model):
 
     def __str__(self):
         return f"{self.contrato} — v{self.versao}"
+
+    def clean(self):
+        super().clean()
+        try:
+            perfil_de_dict(self.definicao)
+        except ErroPerfil as erro:
+            raise ValidationError({"definicao": str(erro)}) from erro
 
     @classmethod
     def perfil_vigente(cls, contrato, data):

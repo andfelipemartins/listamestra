@@ -35,8 +35,8 @@ class DocumentoAdmin(admin.ModelAdmin):
 
 @admin.register(CodigoDocumento)
 class CodigoDocumentoAdmin(admin.ModelAdmin):
-    list_display = ("codigo", "documento", "perfil", "principal")
-    list_filter = ("principal", "perfil__contrato")
+    list_display = ("codigo", "documento", "perfil")
+    list_filter = ("perfil__contrato",)
     search_fields = ("codigo", "documento__identificador_base", "documento__titulo")
 
 

@@ -343,3 +343,44 @@ Aprovado, Não Conforme, Inconsistente, Erro de Assinatura, Cancelado, Revisão 
   mercado já conhece.
 - Histograma × cronograma (onde deveríamos estar e onde estamos, pelas datas previstas no ID):
   fica para depois, com exemplos reais do dono. Ir passo a passo.
+
+## D-027 · Status principais da plataforma: a plataforma simplifica o PW, não copia
+
+*Origem: L1 · 2026-11-18*
+
+- A extração do PW é fonte de dado, e não um modelo a copiar. Os status que importam são
+  **A EMITIR** (está no ID e não foi emitido), **EM ANÁLISE**, **APROVADO** e **NÃO APROVADO**,
+  além de CANCELADO como fim de linha.
+- "Para Aprovação" e "Em coleta de Assinaturas" são trâmites internos do sistema do cliente. Para
+  o dono, o documento já está praticamente aprovado: na prática, isso autoriza levar a revisão
+  a campo enquanto corre o trâmite da revisão original (Rev 0). Esses estados contam como
+  **APROVADO**.
+- INCONSISTENTE e NÃO CONFORME existem porque o Metrô tem uma caixa **versão**: o documento nem
+  chega a ser avaliado e volta como nova versão da mesma revisão. Em geral, o NÃO CONFORME se
+  aplica a revisões originais, e o INCONSISTENTE a qualquer revisão, principalmente às iniciais.
+  Esses status só existem num perfil que tenha a caixa versão.
+- O agrupamento (estado do cliente → status da plataforma) é **configuração do perfil de
+  contrato**, e não código.
+
+## D-028 · Perfil de contrato = soma dos manuais do órgão, montada com ajuda da IA
+
+*Origem: L2 · 2026-11-18 · MAN-10-202 rev. 09 anexado (em `entrada/referencias/`)*
+
+- O Metrô tem manuais separados para obras civis (MAN-10-201) e para sistemas (MAN-10-202). Outros
+  órgãos podem juntar ou separar de outro jeito. O perfil de um contrato é a **união** das tabelas
+  dos manuais que valem para ele.
+- O que importa é o nome de cada caixa e o significado de cada valor. Exemplo: na caixa
+  "classe" do Metrô, o valor `P7` significa Iluminação (Tabela 4 do MAN-10-202). No Metrô, o rótulo
+  é da combinação classe + subclasse, e não das partes separadas.
+- Caminho desejado: o admin envia os PDFs dos manuais, a IA lê e propõe a configuração (caixas,
+  valores e rótulos, ciclo de revisão), e o admin revisa e aprova. Essa proposta vira o perfil do
+  contrato.
+
+## D-029 · Importador do PW: formato fixo e data da última extração
+
+*Origem: L3 e L4 · 2026-11-18*
+
+- A extração do PW é tirada sempre que for alimentar o painel. O mapeamento é fixo neste formato
+  de exportação, com aviso se uma coluna sumir, e o painel mostra a data da última extração.
+- L4: os códigos reais (sem títulos, datas ou arquivos) podem ser versionados como fixture de
+  teste.
