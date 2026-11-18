@@ -410,3 +410,35 @@ Aprovado, Não Conforme, Inconsistente, Erro de Assinatura, Cancelado, Revisão 
   e **44 estão no PW sem constar em nenhum dos três IDs**.
 - As abas auxiliares têm nomes de profissionais e empresas, ou seja, dados pessoais: não
   importar nem copiar.
+
+## D-032 · O previsto vem de IDs parciais e da extração do ID atual do PW
+
+*Origem: N1, N2 · 2026-11-18 · `entrada/ID PW.xlsx` (fora do Git)*
+
+- É comum emitir **IDs parciais**: surgem documentos novos, é feito um ID parcial, ele é aprovado
+  por e-mail e sobe para o PW. Por isso, o Excel do ID nem sempre está atualizado. Há também uma
+  **extração do ID atual** dentro do PW, com tudo o que o cliente já registrou.
+- A plataforma aceita as duas fontes: o Excel de atributos do ID e a extração do ID do PW. O
+  previsto é a união das fontes vigentes. Um documento que está no PW e fora de qualquer ID vira
+  pendência (ID desatualizado), e não erro.
+- A extração do ID do PW tem 821 documentos, contra 693 do PW de situação. Só 9 documentos com
+  situação ficam fora dela. Ela traz colunas de assinadores (nomes de pessoas), que **não são
+  importadas**.
+- Os 16 arquivos 15xx do PW são **RTs de ATO (classe A9)**, documentos reais emitidos há tempo e
+  que deveriam constar no ID. Eles não têm relação com a renumeração 1500 → 2000, que foi outra
+  decisão do cliente.
+- Uma ferramenta futura para montar ID parcial dentro da plataforma fica registrada como ideia.
+
+## D-033 · IA na plataforma: conversa aberta; servidor local quase descartado
+
+*Origem: N3, N4 · 2026-11-18*
+
+- O dono quer conversar antes de decidir e tende à opção B (modelo forte pela nuvem que a empresa
+  aceitar). Ele ainda vai verificar se a empresa tem contrato de nuvem ou só o Copilot.
+- Servidor local: quase descartado. A estrutura é grande (hardware, refrigeração) e só se
+  justificaria com um ganho muito alto. A máquina do dono (RTX 4060 Ti com 8 GB de VRAM e 32 GB de
+  RAM) não serve como teste representativo.
+- Visão do dono: o assistente **não** pode ser um "chatbot de banco" limitado. No futuro, precisa
+  ser algo mais elaborado. As funções listadas no estudo pareceram fracas.
+- Enquanto a decisão não sai, o produto segue sem IA embutida, com o fluxo de fora (Claude Code →
+  YAML → admin).

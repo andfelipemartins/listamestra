@@ -3,6 +3,8 @@
 from .modelo import (
     ErroPerfil,
     EstruturaCodigo,
+    Grupo,
+    PainelPerfil,
     PerfilContrato,
     Restricao,
     Segmento,
@@ -15,6 +17,8 @@ from .modelo import (
 __all__ = [
     "ErroPerfil",
     "EstruturaCodigo",
+    "Grupo",
+    "PainelPerfil",
     "PerfilContrato",
     "Restricao",
     "Segmento",

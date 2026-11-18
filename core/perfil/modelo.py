@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
 from types import MappingProxyType
@@ -12,6 +12,7 @@ import re
 from .ciclo import (
     CicloAnalise,
     RegraEmissao,
+    _normalizar_situacao,
     ciclo_analise_de_dict,
     regra_emissao_de_dict,
 )
@@ -77,6 +78,41 @@ class EstruturaCodigo:
 
 
 @dataclass(frozen=True)
+class Grupo:
+    id: str
+    rotulo: str
+    cor: str | None = None
+    estados: tuple[str, ...] = ()
+    sem_emissao: bool = False
+    conta_no_avanco: bool = True
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "estados", tuple(str(estado) for estado in self.estados))
+
+
+@dataclass(frozen=True)
+class PainelPerfil:
+    grupos: tuple[Grupo, ...]
+    ignorar: tuple[str, ...] = ()
+    avanco: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "grupos", tuple(self.grupos))
+        object.__setattr__(self, "ignorar", tuple(self.ignorar))
+        object.__setattr__(self, "avanco", tuple(self.avanco))
+
+
+def _painel_minimo() -> PainelPerfil:
+    return PainelPerfil(
+        grupos=(
+            Grupo(id="a_emitir", rotulo="A EMITIR", sem_emissao=True),
+            Grupo(id="em_analise", rotulo="EM ANÁLISE"),
+            Grupo(id="outros", rotulo="OUTROS"),
+        )
+    )
+
+
+@dataclass(frozen=True)
 class PerfilContrato:
     nome: str
     versao: str
@@ -84,6 +120,7 @@ class PerfilContrato:
     codigo: EstruturaCodigo
     emissao: RegraEmissao
     analise: CicloAnalise
+    painel: PainelPerfil = field(default_factory=_painel_minimo)
 
 
 def perfil_de_dict(dados: Mapping[str, Any]) -> PerfilContrato:
@@ -98,7 +135,8 @@ def perfil_de_dict(dados: Mapping[str, Any]) -> PerfilContrato:
         emissao = regra_emissao_de_dict(dados.get("emissao") or {})
         _validar_series(emissao)
         analise = ciclo_analise_de_dict(dados.get("analise") or {})
-        return PerfilContrato(nome, versao, vigencia, codigo, emissao, analise)
+        painel = _painel_de_dict(dados.get("painel"))
+        return PerfilContrato(nome, versao, vigencia, codigo, emissao, analise, painel)
     except ErroPerfil:
         raise
     except (KeyError, TypeError, ValueError, re.error) as erro:
@@ -122,6 +160,119 @@ def carregar_yaml(caminho: str | Path) -> PerfilContrato:
     except (OSError, yaml.YAMLError) as erro:
         raise ErroPerfil(f"Não foi possível carregar o YAML do perfil: {erro}") from erro
     return perfil_de_dict(dados)
+
+
+def _painel_de_dict(dados: Any) -> PainelPerfil:
+    if dados is None:
+        return _painel_minimo()
+    if not isinstance(dados, Mapping):
+        raise ErroPerfil("'painel' precisa ser um objeto.")
+
+    grupos_brutos = dados.get("grupos")
+    if not isinstance(grupos_brutos, (list, tuple)):
+        raise ErroPerfil("'painel.grupos' precisa ser uma lista.")
+
+    grupos: list[Grupo] = []
+    ids: set[str] = set()
+    estados: dict[str, str] = {}
+    for posicao, item in enumerate(grupos_brutos, start=1):
+        if not isinstance(item, Mapping):
+            raise ErroPerfil(f"Grupo {posicao} de 'painel.grupos' precisa ser um objeto.")
+        identificador = _texto_obrigatorio(item.get("id"), f"id do grupo {posicao}")
+        chave_id = identificador.casefold()
+        if chave_id in {"nao_mapeado", "ignorado"}:
+            raise ErroPerfil(f"O id '{identificador}' é reservado para uso interno do painel.")
+        if chave_id in ids:
+            raise ErroPerfil(f"Id de grupo repetido em 'painel.grupos': '{identificador}'.")
+        ids.add(chave_id)
+
+        rotulo = _texto_obrigatorio(item.get("rotulo"), f"rótulo do grupo '{identificador}'")
+        cor = item.get("cor")
+        if cor is not None and (not isinstance(cor, str) or not re.fullmatch(r"#[0-9A-Fa-f]{6}", cor)):
+            raise ErroPerfil(f"A cor do grupo '{identificador}' precisa estar no formato #RRGGBB.")
+
+        estados_brutos = item.get("estados", ())
+        if not isinstance(estados_brutos, (list, tuple)):
+            raise ErroPerfil(f"'estados' do grupo '{identificador}' precisa ser uma lista.")
+        estados_grupo = tuple(
+            _texto_obrigatorio(estado, f"estado do grupo '{identificador}'")
+            for estado in estados_brutos
+        )
+        sem_emissao = item.get("sem_emissao", False)
+        conta_no_avanco = item.get("conta_no_avanco", True)
+        if not isinstance(sem_emissao, bool):
+            raise ErroPerfil(f"'sem_emissao' do grupo '{identificador}' precisa ser booleano.")
+        if not isinstance(conta_no_avanco, bool):
+            raise ErroPerfil(f"'conta_no_avanco' do grupo '{identificador}' precisa ser booleano.")
+
+        for estado in estados_grupo:
+            chave_estado = _normalizar_situacao(estado)
+            grupo_anterior = estados.get(chave_estado)
+            if grupo_anterior is not None:
+                raise ErroPerfil(
+                    f"A situação '{estado}' aparece em mais de um grupo: "
+                    f"'{grupo_anterior}' e '{identificador}'."
+                )
+            estados[chave_estado] = identificador
+        grupos.append(
+            Grupo(
+                id=identificador,
+                rotulo=rotulo,
+                cor=cor,
+                estados=estados_grupo,
+                sem_emissao=sem_emissao,
+                conta_no_avanco=conta_no_avanco,
+            )
+        )
+
+    sem_emissao = [grupo for grupo in grupos if grupo.sem_emissao]
+    if not sem_emissao:
+        raise ErroPerfil("'painel.grupos' precisa ter ao menos um grupo com 'sem_emissao: true'.")
+    if len(sem_emissao) > 1:
+        raise ErroPerfil("'painel.grupos' não pode ter mais de um grupo com 'sem_emissao: true'.")
+
+    ignorar_bruto = dados.get("ignorar", ()) or ()
+    if not isinstance(ignorar_bruto, (list, tuple)):
+        raise ErroPerfil("'painel.ignorar' precisa ser uma lista de situações.")
+    ignorar = tuple(
+        _texto_obrigatorio(estado, "situação em 'painel.ignorar'")
+        for estado in ignorar_bruto
+    )
+    estados_ignorados: set[str] = set()
+    for estado in ignorar:
+        chave_estado = _normalizar_situacao(estado)
+        if chave_estado in estados:
+            raise ErroPerfil(
+                f"A situação '{estado}' está em 'painel.ignorar' e também no grupo "
+                f"'{estados[chave_estado]}'."
+            )
+        estados_ignorados.add(chave_estado)
+
+    avanco_bruto = dados.get("avanco", ()) or ()
+    if not isinstance(avanco_bruto, (list, tuple)):
+        raise ErroPerfil("'painel.avanco' precisa ser uma lista de ids de grupo.")
+    avanco = tuple(
+        _texto_obrigatorio(identificador, "id em 'painel.avanco'")
+        for identificador in avanco_bruto
+    )
+    grupos_por_id = {grupo.id.casefold(): grupo for grupo in grupos}
+    ids_avanco: set[str] = set()
+    for identificador in avanco:
+        chave_id = identificador.casefold()
+        grupo = grupos_por_id.get(chave_id)
+        if grupo is None:
+            raise ErroPerfil(
+                f"'painel.avanco' referencia o grupo inexistente '{identificador}'."
+            )
+        if chave_id in ids_avanco:
+            raise ErroPerfil(f"Id de grupo repetido em 'painel.avanco': '{identificador}'.")
+        if not grupo.conta_no_avanco:
+            raise ErroPerfil(
+                f"O grupo '{identificador}' está em 'painel.avanco', mas não conta no avanço."
+            )
+        ids_avanco.add(chave_id)
+
+    return PainelPerfil(grupos=tuple(grupos), ignorar=ignorar, avanco=avanco)
 
 
 def _estrutura_de_dict(dados: Any) -> EstruturaCodigo:

@@ -245,3 +245,30 @@ analise:
     APROVADO: emitir_original
     REABRIR: reabrir
     CANCELADO: fim_de_linha
+painel:
+  grupos: # A ordem desta lista é a ordem de exibição no painel.
+    - id: a_emitir
+      rotulo: A EMITIR
+      cor: "#9aa0a6"
+      sem_emissao: true
+    - id: em_analise
+      rotulo: EM ANÁLISE
+      # Em Desenvolvimento e Erro de Assinatura são estados internos anteriores à análise.
+      estados: ["Em Análise", "Em Desenvolvimento", "Erro de Assinatura"]
+    - id: aprovado
+      rotulo: APROVADO
+      # Os trâmites de aprovação e assinatura já contam como aprovado para o contrato.
+      estados: ["Aprovado", "Para Aprovação", "Em coleta de Assinaturas"]
+    - id: nao_aprovado
+      rotulo: NÃO APROVADO
+      estados: ["Não Aprovado"]
+    - id: inconsistente
+      rotulo: INCONSISTENTE
+      estados: ["Inconsistente", "Não Conforme"]
+    - id: cancelado
+      rotulo: CANCELADO
+      estados: ["Cancelado"]
+      conta_no_avanco: false
+  # Revisão Superada é somente histórica, nunca a situação vigente.
+  ignorar: ["Revisão Superada"]
+  avanco: [aprovado]

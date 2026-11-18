@@ -1,8 +1,70 @@
 # Estudo — IA dentro da plataforma: o que é, onde roda e qual caminho levar à empresa
 
-*Origem: resposta M4 do dono (2026-11-18). Status: rascunho para conversa. Os valores de
-hardware e custo são estimativas de ordem de grandeza e precisam ser conferidos antes de
-qualquer orçamento.*
+*Origem: resposta M4 do dono (2026-11-18). Revisado depois da N3/N4 (D-033). Status: rascunho para
+a conversa. Os valores de hardware e custo são estimativas de ordem de grandeza e precisam ser
+conferidos antes de qualquer orçamento. Os nomes de produtos e serviços de nuvem mudam com
+frequência: confirme com o TI o que existe no contrato da empresa.*
+
+## 0. Respostas diretas às suas dúvidas da N3
+
+**"A opção B seria uma API direta com o Copilot?"** Não. São coisas diferentes:
+
+- O **Copilot** é um *produto pronto* da Microsoft: o chat que vem no Windows, no Office e no
+  Teams. Ele é feito para qualquer pessoa e qualquer assunto. Não é pensado para outro programa
+  conversar com ele com instruções precisas, por isso ele "erra 11 de 10" nas tarefas de
+  engenharia. O problema não é só o modelo, é o produto genérico em volta.
+- A **opção B** é alugar o *modelo* (o "cérebro") pela nuvem que a empresa já usa, sem o produto
+  Copilot em volta. Na Microsoft, isso fica no serviço de IA do Azure (hoje chamado Azure AI
+  Foundry, que inclui o Azure OpenAI). Lá a empresa contrata modelos de ponta (da OpenAI e, mais
+  recentemente, também da Anthropic, ou seja, o Claude) e paga por uso. Na AWS, o equivalente é o
+  Bedrock. No Google, é o Vertex AI.
+- Então a resposta à sua pergunta "seria usar as LLMs deles?" é: **sim, usar modelos fortes
+  hospedados na nuvem deles**. Quem fala com o modelo é a *nossa plataforma*, com as nossas
+  instruções, o nosso perfil de contrato e o formato de resposta que nós exigimos. É por isso que o
+  resultado fica muito melhor que o Copilot, mesmo que o modelo seja parecido.
+- **Por que isso destrava na empresa:** se ela tem Microsoft 365 e Copilot, quase certamente
+  já tem uma conta Microsoft corporativa. Ligar o Azure nessa conta é uma decisão do TI, e os dados
+  ficam no contrato que eles já confiam. Talvez ainda não esteja ligado ("duvido muito", como você
+  disse), e é justamente isso que você vai descobrir.
+
+**O que perguntar ao TI (3 perguntas, por e-mail mesmo):**
+1. Nós temos assinatura do Azure, ou só Microsoft 365?
+2. Existe uma política sobre usar serviços de IA com documentos de clientes? Se sim, qual?
+3. Se um projeto interno precisar de IA, quem aprova ligar o Azure AI Foundry/Azure OpenAI?
+
+## 0.1 O assistente que vale a pena (não um chatbot de banco)
+
+Você tem razão: a primeira lista era tímida. Um "chatbot de banco" **espera você perguntar**. O
+assistente que faz diferença **trabalha sozinho e entrega o serviço pronto para você só
+conferir**. A diferença é a mesma entre um atendente e um estagiário muito bom. Exemplos no
+nosso domínio:
+
+- **Conciliação automática do PW:** você sobe a extração e o assistente já devolve "12
+  documentos mudaram de situação; 3 voltaram NÃO APROVADO, e aqui está o resumo do que o cliente
+  pediu em cada RV; 2 estão no PW e fora do ID; quer que eu monte o ID parcial?".
+- **Leitor de comentários (RV):** lê o PDF de comentários do cliente, quebra item por item, cria
+  uma pendência por comentário, sugere o responsável pela disciplina (caixa classe) e acompanha
+  até a próxima revisão fechar cada item.
+- **Conferência de emissão antes de mandar:** antes da GRD, abre cada PDF e confere o carimbo
+  contra o cadastro (código, revisão, título igual ao do ID, data). Pega o erro que geraria
+  INCONSISTENTE *antes* de o cliente ver.
+- **Montagem de ID parcial:** quando surgem documentos novos (D-032), propõe os códigos na
+  sequência certa pelo perfil, o título no padrão e a planilha no formato de atributos do PW, pronta
+  para subir.
+- **Relatório da semana pronto:** toda sexta, o texto e os números para a reunião (o que andou, o
+  que travou, o que está atrasado contra o cronograma do ID), no tom que a chefia gosta.
+- **Configuração de contrato novo:** recebe os manuais (como fiz com o MAN-10-202) e entrega o
+  perfil inteiro para o admin revisar. Isso transforma "semanas de configuração" em "uma tarde
+  de revisão", e é um argumento de venda forte.
+- **Perguntas livres com números de verdade:** "quanto da drenagem do trecho 25 está
+  aprovado?" respondido a partir do banco, e não do achismo do modelo.
+
+O princípio da seção 1 continua valendo para tudo isso: **a IA prepara, o humano confere e o motor
+grava**. Quanto mais o assistente faz sozinho, mais importante é que cada proposta dele seja
+fácil de revisar.
+
+Para escolher por onde começar, a pergunta P4 do painel pede as 3 tarefas que mais comem o
+seu tempo. O assistente começa por elas.
 
 ## 1. O que "integrar uma LLM" quer dizer aqui
 
@@ -84,7 +146,8 @@ A frequência é o que justifica ou não um servidor próprio. Só a configuraç
    já aprova) e a **C** como alternativa se a política proibir nuvem. O argumento de magnitude que
    você levantou é mais forte com uma demonstração do que com orçamento: mostrar o perfil Metrô
    montado a partir do PDF e a Lista Mestra rodando com dados reais.
-4. **Antes de orçar servidor:** medir. Rodar um modelo local de teste neste computador (se a GPU
+4. *(Pela N4, o servidor local está quase descartado e o teste na RTX 4060 Ti de 8 GB não seria
+   representativo. Este item fica só como referência.)* **Antes de orçar servidor:** medir. Rodar um modelo local de teste neste computador (se a GPU
    permitir) com as mesmas tarefas e comparar com o resultado do modelo forte. Com esse número, a
    conversa sobre investimento fica concreta.
 

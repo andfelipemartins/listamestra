@@ -127,3 +127,25 @@ analise:
     A_REVISAR: nova_revisao_preliminar
     APROVADO: emitir_original
     REABRIR: reabrir
+painel:
+  grupos: # A ordem desta lista é a ordem de exibição no painel.
+    - id: a_emitir
+      rotulo: A EMITIR
+      cor: "#9aa0a6"
+      sem_emissao: true
+    - id: em_analise
+      rotulo: EM ANÁLISE
+      # Entregue aguarda liberação; liberado já pode seguir pela análise do cliente.
+      estados: ["ENTREGUE", "LIBERADO PARA ANÁLISE"]
+    - id: aprovado
+      rotulo: APROVADO
+      estados: ["APROVADO COM RESSALVAS", "APROVADO", "ENTREGA FINAL"]
+    - id: nao_aprovado
+      rotulo: NÃO APROVADO
+      # Devolvido, a revisar e alternativa não adotada não liberam o documento para execução.
+      estados: ["DEVOLVIDO", "A REVISAR", "ALTERNATIVA NÃO ADOTADA"]
+    - id: cancelado
+      rotulo: CANCELADO
+      estados: ["CANCELADO"]
+      conta_no_avanco: false
+  avanco: [aprovado]
