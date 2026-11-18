@@ -150,6 +150,74 @@ def test_resumo_por_categoria(service, db_path, contrato_id):
     assert set(resumo) == {tipo.value for tipo in TipoPendencia}
 
 
+def test_resumo_respeita_trecho_disciplina_e_dispensadas(
+    service, db_path, contrato_id
+):
+    _documento_sem_titulo(
+        db_path, contrato_id, "DOC-F2", trecho="25", disciplina="F2"
+    )
+    _documento_sem_titulo(
+        db_path, contrato_id, "DOC-J2", trecho="23", disciplina="J2"
+    )
+    service.dispensar_pendencia(
+        contrato_id, "documento_sem_titulo", "DOC-F2", "ignorada"
+    )
+
+    resumo_ativo = service.resumo_por_categoria(
+        contrato_id, trecho="25", disciplina="F2"
+    )
+    resumo_com_dispensadas = service.resumo_por_categoria(
+        contrato_id,
+        incluir_dispensadas=True,
+        trecho="25",
+        disciplina="F2",
+    )
+
+    assert resumo_ativo["documento_sem_titulo"] == 0
+    assert resumo_com_dispensadas["documento_sem_titulo"] == 1
+    assert resumo_com_dispensadas["documento_sem_arquivo"] == 1
+    assert service.resumo_por_categoria(
+        contrato_id, trecho="23", disciplina="F2"
+    )["documento_sem_titulo"] == 0
+
+
+def test_painel_entrega_lista_resumo_e_opcoes_com_uma_deteccao(
+    service, db_path, contrato_id, monkeypatch
+):
+    _documento_sem_titulo(
+        db_path, contrato_id, "DOC-F2", trecho="25", disciplina="F2"
+    )
+    _documento_sem_titulo(
+        db_path, contrato_id, "DOC-J2", trecho="23", disciplina="J2"
+    )
+
+    import core.services.pendencias_service as service_module
+
+    detectar_original = service_module.detectar_pendencias
+    chamadas = []
+
+    def detectar_contando(*args, **kwargs):
+        chamadas.append((args, kwargs))
+        return detectar_original(*args, **kwargs)
+
+    monkeypatch.setattr(service_module, "detectar_pendencias", detectar_contando)
+    painel = service.painel(
+        contrato_id,
+        tipo=TipoPendencia.DOCUMENTO_SEM_TITULO,
+        trecho="25",
+        disciplina="F2",
+    )
+
+    assert len(chamadas) == 1
+    assert [item["codigo"] for item in painel["pendencias"]] == ["DOC-F2"]
+    assert painel["resumo"]["documento_sem_titulo"] == 1
+    assert painel["resumo"]["documento_sem_arquivo"] == 1
+    assert painel["opcoes_filtros"] == {
+        "trechos": ["23", "25"],
+        "disciplinas": ["F2", "J2"],
+    }
+
+
 def test_isolamento_por_contrato(service, db_path, contrato_id):
     outro = ContractRepository(db_path).criar_contrato("Outro")
     _documento_sem_titulo(db_path, contrato_id, "DOC-IGUAL")

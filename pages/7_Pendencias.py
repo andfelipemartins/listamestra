@@ -23,28 +23,85 @@ _rotulos = _service.rotulos_por_categoria()
 
 st.title("CENTRAL DE PENDÊNCIAS")
 st.caption(f"Contrato: **{contrato['nome']}**")
+st.caption(
+    "Verificações automáticas de consistência do contrato. O ideal é zero: "
+    "cada item indica um dado faltando ou divergente."
+)
 
 feedback = st.session_state.pop("_pendencias_feedback", None)
 if feedback:
     st.success(feedback)
 
-resumo = _service.resumo_por_categoria(contrato["id"])
+for _chave_estado, _valor_padrao in (
+    ("pendencias_filtro_tipo", ""),
+    ("pendencias_filtro_trecho", ""),
+    ("pendencias_filtro_disciplina", ""),
+    ("pendencias_incluir_dispensadas", False),
+):
+    st.session_state.setdefault(_chave_estado, _valor_padrao)
+
+_tipo_atual = st.session_state["pendencias_filtro_tipo"] or None
+_trecho_atual = st.session_state["pendencias_filtro_trecho"] or None
+_disciplina_atual = st.session_state["pendencias_filtro_disciplina"] or None
+_incluir_atual = st.session_state["pendencias_incluir_dispensadas"]
+_painel = _service.painel(
+    contrato["id"],
+    incluir_dispensadas=_incluir_atual,
+    tipo=_tipo_atual,
+    trecho=_trecho_atual,
+    disciplina=_disciplina_atual,
+)
+_resumo = _painel["resumo"]
+_opcoes = _painel["opcoes_filtros"]
+_pendencias = _painel["pendencias"]
+
+if (
+    _tipo_atual is not None and _tipo_atual not in _rotulos
+    or _trecho_atual is not None and _trecho_atual not in _opcoes["trechos"]
+    or _disciplina_atual is not None
+    and _disciplina_atual not in _opcoes["disciplinas"]
+):
+    st.session_state["pendencias_filtro_tipo"] = (
+        _tipo_atual if _tipo_atual in _rotulos else ""
+    )
+    st.session_state["pendencias_filtro_trecho"] = (
+        _trecho_atual if _trecho_atual in _opcoes["trechos"] else ""
+    )
+    st.session_state["pendencias_filtro_disciplina"] = (
+        _disciplina_atual
+        if _disciplina_atual in _opcoes["disciplinas"]
+        else ""
+    )
+    st.rerun()
+
 st.subheader("Resumo por categoria")
 _colunas_resumo = 4
-for _inicio in range(0, len(_rotulos), _colunas_resumo):
-    _grupo = list(_rotulos.items())[_inicio : _inicio + _colunas_resumo]
+_categorias = list(_rotulos.items())
+for _inicio in range(0, len(_categorias), _colunas_resumo):
+    _grupo = _categorias[_inicio : _inicio + _colunas_resumo]
     for _coluna, (_tipo, _rotulo) in zip(st.columns(_colunas_resumo), _grupo):
         with _coluna:
             with st.container(border=True):
-                _total = resumo.get(_tipo, 0)
+                _total = _resumo.get(_tipo, 0)
                 if _total:
                     st.metric(_rotulo, _total)
+                    if st.button("Ver", key=f"pendencias_ver_{_tipo}"):
+                        st.session_state["pendencias_filtro_tipo"] = _tipo
+                        st.rerun()
                 else:
                     st.caption(_rotulo)
                     st.caption("0 pendências")
+                if _tipo_atual == _tipo:
+                    st.caption("Filtro selecionado")
 
-_opcoes = _service.opcoes_filtros(contrato["id"])
 st.subheader("Filtros")
+if st.button("Limpar filtros", key="pendencias_limpar_filtros"):
+    st.session_state["pendencias_filtro_tipo"] = ""
+    st.session_state["pendencias_filtro_trecho"] = ""
+    st.session_state["pendencias_filtro_disciplina"] = ""
+    st.session_state["pendencias_incluir_dispensadas"] = False
+    st.rerun()
+
 _filtro_tipo, _filtro_trecho, _filtro_disciplina, _filtro_dispensadas = st.columns(4)
 with _filtro_tipo:
     _tipo_selecionado = st.selectbox(
@@ -74,25 +131,22 @@ with _filtro_dispensadas:
         key="pendencias_incluir_dispensadas",
     )
 
-_pendencias = _service.listar_pendencias(
-    contrato["id"],
-    incluir_dispensadas=_incluir_dispensadas,
-    tipo=_tipo_selecionado or None,
-    trecho=_trecho_selecionado or None,
-    disciplina=_disciplina_selecionada or None,
-)
 _por_categoria = {tipo: [] for tipo in _rotulos}
 for _pendencia in _pendencias:
     _por_categoria[_pendencia["tipo"]].append(_pendencia)
 
 st.subheader("Pendências")
+st.caption(f"{len(_pendencias)} pendências exibidas")
 if not _pendencias:
     st.info("Nenhuma pendência corresponde aos filtros selecionados.")
 
 for _tipo, _itens in _por_categoria.items():
     if not _itens:
         continue
-    with st.expander(f"{_rotulos[_tipo]} ({len(_itens)})"):
+    with st.expander(
+        f"{_rotulos[_tipo]} ({len(_itens)})",
+        expanded=bool(_tipo_selecionado) or len(_itens) <= 10,
+    ):
         for _indice, _item in enumerate(_itens):
             _chave_widget = f"{_item['tipo']}_{_item['chave']}_{_indice}"
             with st.container(border=True):

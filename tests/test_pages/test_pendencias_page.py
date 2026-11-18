@@ -18,12 +18,27 @@ def test_pendencias_page_importavel_por_ast():
 def test_pendencias_page_usa_service_e_cabecalho_padrao():
     source = _src()
     assert "PendenciasService" in source
-    assert "resumo_por_categoria" in source
-    assert "listar_pendencias" in source
+    assert ".painel(" in source
+    assert "resumo_por_categoria(" not in source
+    assert "listar_pendencias(" not in source
+    assert "opcoes_filtros(" not in source
     assert "require_contrato()" in source
     assert 'require_permission("view_dashboard")' in source
     assert "widget_seletor_perfil()" in source
     assert "sidebar_contexto()" in source
+
+
+def test_pendencias_page_chama_painel_em_uma_unica_consulta():
+    tree = ast.parse(_src(), filename=str(_PAGINA))
+    chamadas_service = [
+        node.func.attr
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr
+        in {"painel", "resumo_por_categoria", "listar_pendencias", "opcoes_filtros"}
+    ]
+    assert chamadas_service == ["painel"]
 
 
 def test_pendencias_page_nao_usa_sql_direto():
@@ -73,6 +88,12 @@ def test_pendencias_page_tem_filtros_e_acoes():
         "Mostrar dispensadas",
         "Trecho",
         "Disciplina",
+        "Limpar filtros",
+        "pendencias_filtro_tipo",
+        "Filtro selecionado",
+        "pendências exibidas",
+        "Verificações automáticas de consistência do contrato",
+        "expanded=bool(_tipo_selecionado) or len(_itens) <= 10",
         "Resolvida",
         "Ignorar",
         "Reativar",

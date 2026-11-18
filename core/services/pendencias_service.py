@@ -51,36 +51,15 @@ class PendenciasService:
             dias_analise=dias_analise,
             dias_estagnacao=dias_estagnacao,
         )
-        dispensas = {
-            (row["tipo_pendencia"], row["chave"]): row
-            for row in self._repository.listar_por_contrato(contrato_id)
-        }
-        tipo_filtro = _tipo_valor(tipo) if tipo is not None else None
-
-        resultado = []
-        for pendencia in detectadas:
-            if tipo_filtro and pendencia.tipo.value != tipo_filtro:
-                continue
-            if trecho is not None and pendencia.trecho != trecho:
-                continue
-            if disciplina is not None and pendencia.disciplina != disciplina:
-                continue
-
-            dispensa = dispensas.get((pendencia.tipo.value, pendencia.chave))
-            if dispensa and not incluir_dispensadas:
-                continue
-
-            item = self._serializar(pendencia)
-            item.update({
-                "dispensada": dispensa is not None,
-                "dispensa_id": dispensa["id"] if dispensa else None,
-                "acao_dispensa": dispensa["acao"] if dispensa else None,
-                "observacao_dispensa": dispensa["observacao"] if dispensa else None,
-                "perfil_dispensa": dispensa["perfil"] if dispensa else None,
-                "dispensada_em": dispensa["criado_em"] if dispensa else None,
-            })
-            resultado.append(item)
-        return resultado
+        dispensas = self._dispensas_por_chave(contrato_id)
+        itens = self._enriquecer(detectadas, dispensas)
+        return self._filtrar(
+            itens,
+            incluir_dispensadas=incluir_dispensadas,
+            tipo=tipo,
+            trecho=trecho,
+            disciplina=disciplina,
+        )
 
     def dispensar_pendencia(
         self,
@@ -121,16 +100,64 @@ class PendenciasService:
         incluir_dispensadas: bool = False,
         dias_analise: int = 30,
         dias_estagnacao: int = 60,
+        trecho: Optional[str] = None,
+        disciplina: Optional[str] = None,
     ) -> dict[str, int]:
         resumo = {tipo.value: 0 for tipo in TipoPendencia}
         for item in self.listar_pendencias(
             contrato_id,
             incluir_dispensadas=incluir_dispensadas,
+            trecho=trecho,
+            disciplina=disciplina,
             dias_analise=dias_analise,
             dias_estagnacao=dias_estagnacao,
         ):
             resumo[item["tipo"]] += 1
         return resumo
+
+    def painel(
+        self,
+        contrato_id: int,
+        incluir_dispensadas: bool = False,
+        tipo: TipoPendencia | str | None = None,
+        trecho: Optional[str] = None,
+        disciplina: Optional[str] = None,
+        dias_analise: int = 30,
+        dias_estagnacao: int = 60,
+    ) -> dict:
+        """Monta lista, resumo e opções de filtro a partir de uma única detecção."""
+        detectadas = detectar_pendencias(
+            contrato_id,
+            db_path=self._db_path,
+            dias_analise=dias_analise,
+            dias_estagnacao=dias_estagnacao,
+        )
+        itens = self._enriquecer(detectadas, self._dispensas_por_chave(contrato_id))
+        resumo = {tipo_item.value: 0 for tipo_item in TipoPendencia}
+        for item in self._filtrar(
+            itens,
+            incluir_dispensadas=incluir_dispensadas,
+            trecho=trecho,
+            disciplina=disciplina,
+        ):
+            resumo[item["tipo"]] += 1
+
+        return {
+            "pendencias": self._filtrar(
+                itens,
+                incluir_dispensadas=incluir_dispensadas,
+                tipo=tipo,
+                trecho=trecho,
+                disciplina=disciplina,
+            ),
+            "resumo": resumo,
+            "opcoes_filtros": {
+                "trechos": sorted({item["trecho"] for item in itens if item["trecho"]}),
+                "disciplinas": sorted(
+                    {item["disciplina"] for item in itens if item["disciplina"]}
+                ),
+            },
+        }
 
     @staticmethod
     def rotulos_por_categoria() -> dict[str, str]:
@@ -145,6 +172,46 @@ class PendenciasService:
             "trechos": sorted({item["trecho"] for item in pendencias if item["trecho"]}),
             "disciplinas": sorted({item["disciplina"] for item in pendencias if item["disciplina"]}),
         }
+
+    def _dispensas_por_chave(self, contrato_id: int) -> dict[tuple[str, str], dict]:
+        return {
+            (row["tipo_pendencia"], row["chave"]): row
+            for row in self._repository.listar_por_contrato(contrato_id)
+        }
+
+    def _enriquecer(self, detectadas: list[Pendencia], dispensas: dict) -> list[dict]:
+        itens = []
+        for pendencia in detectadas:
+            dispensa = dispensas.get((pendencia.tipo.value, pendencia.chave))
+            item = self._serializar(pendencia)
+            item.update({
+                "dispensada": dispensa is not None,
+                "dispensa_id": dispensa["id"] if dispensa else None,
+                "acao_dispensa": dispensa["acao"] if dispensa else None,
+                "observacao_dispensa": dispensa["observacao"] if dispensa else None,
+                "perfil_dispensa": dispensa["perfil"] if dispensa else None,
+                "dispensada_em": dispensa["criado_em"] if dispensa else None,
+            })
+            itens.append(item)
+        return itens
+
+    @staticmethod
+    def _filtrar(
+        itens: list[dict],
+        incluir_dispensadas: bool = False,
+        tipo: TipoPendencia | str | None = None,
+        trecho: Optional[str] = None,
+        disciplina: Optional[str] = None,
+    ) -> list[dict]:
+        tipo_filtro = _tipo_valor(tipo) if tipo is not None else None
+        return [
+            item
+            for item in itens
+            if (incluir_dispensadas or not item["dispensada"])
+            and (tipo_filtro is None or item["tipo"] == tipo_filtro)
+            and (trecho is None or item["trecho"] == trecho)
+            and (disciplina is None or item["disciplina"] == disciplina)
+        ]
 
     @staticmethod
     def _serializar(pendencia: Pendencia) -> dict:
