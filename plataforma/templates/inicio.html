@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Início{% endblock %}
+{% block content %}
+  <div class="page-heading">
+    <div><span class="eyebrow">VISÃO GERAL</span><h1>Bem-vindo, {{ user.get_full_name|default:user.username }}</h1><p>Este é o espaço de trabalho da Lista Mestra de Projetos Executivos.</p></div>
+  </div>
+  <section class="cards" aria-label="Resumo da plataforma">
+    <article class="summary-card"><span class="card-icon blue">▤</span><span class="card-label">Documentos</span><strong>—</strong><small>Área em preparação</small></article>
+    <article class="summary-card"><span class="card-icon amber">◇</span><span class="card-label">Pendências</span><strong>—</strong><small>Área em preparação</small></article>
+    <article class="summary-card"><span class="card-icon green">▧</span><span class="card-label">GRDs</span><strong>—</strong><small>Área em preparação</small></article>
+  </section>
+  <section class="welcome-panel"><div class="welcome-symbol">LM</div><div><h2>Plataforma em construção</h2><p>O acesso e a estrutura inicial estão prontos. As áreas de controle documental serão adicionadas nas próximas etapas.</p></div></section>
+{% endblock %}

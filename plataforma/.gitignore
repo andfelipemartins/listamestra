@@ -1,0 +1,4 @@
+dev.sqlite3
+staticfiles/
+pytest-cache-files-*/
+.pytest_cache/

@@ -1,0 +1,26 @@
+{% load static %}
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Acessar · Lista Mestra</title>
+  <link rel="stylesheet" href="{% static 'css/plataforma.css' %}">
+</head>
+<body class="login-page">
+  <main class="login-card">
+    <a class="brand login-brand" href="{% url 'login' %}"><span class="brand-mark">LM</span><span>Lista Mestra <small>Plataforma da equipe</small></span></a>
+    <div class="login-intro"><span class="eyebrow">LINHA 15 · METRÔ DE SÃO PAULO</span><h1>Acesse sua conta</h1><p>Entre para continuar no espaço de trabalho.</p></div>
+    {% if form.errors %}<div class="form-error" role="alert">Usuário ou senha incorretos. Confira seus dados e tente novamente.</div>{% endif %}
+    {% if next and user.is_authenticated %}<div class="form-error" role="alert">Sua conta não tem acesso a esta página.</div>{% endif %}
+    <form method="post" class="login-form">{% csrf_token %}
+      <input type="hidden" name="next" value="{{ next }}">
+      <label for="id_username">Usuário</label>
+      <input id="id_username" name="username" type="text" autocomplete="username" required autofocus>
+      <label for="id_password">Senha</label>
+      <input id="id_password" name="password" type="password" autocomplete="current-password" required>
+      <button class="button button-primary login-submit" type="submit">Entrar</button>
+    </form>
+  </main>
+</body>
+</html>
