@@ -98,7 +98,7 @@ def test_edicao_do_perfil_exibe_caixas_e_botao_de_teste(client, django_user_mode
     assert "tipo documental" in response.content.decode()
     assert "sequencial" in response.content.decode()
     assert "Testar códigos" in response.content.decode()
-    assert "DE-15.19.00.00-0A0-0000" in response.content.decode()
+    assert "DE-15.19.00.00-0A1-0000" in response.content.decode()
 
 
 @pytest.mark.django_db
@@ -109,7 +109,7 @@ def test_edicao_do_perfil_exibe_caixas_e_botao_de_teste(client, django_user_mode
             "metro.yaml",
             "DE-15.25.00.00-6B7-1501",
             "DE-15.25.00.00-6X7-1501",
-            "classe",
+            "classe e subclasse",
         ),
         (
             "spobras.yaml",

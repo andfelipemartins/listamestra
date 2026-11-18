@@ -384,3 +384,29 @@ Aprovado, Não Conforme, Inconsistente, Erro de Assinatura, Cancelado, Revisão 
   de exportação, com aviso se uma coluna sumir, e o painel mostra a data da última extração.
 - L4: os códigos reais (sem títulos, datas ou arquivos) podem ser versionados como fixture de
   teste.
+
+## D-030 · Próximo Marco: dados reais + painel da chefia; INCONSISTENTE como grupo
+
+*Origem: M1, M3 · 2026-11-18*
+
+- Depois da Fundação Django, o próximo Marco importa o ID e a extração do PW da Linha 15 e monta
+  o painel da chefia.
+- Grupos do painel no perfil Metrô: A EMITIR, EM ANÁLISE, APROVADO, NÃO APROVADO e
+  **INCONSISTENTE**. O grupo INCONSISTENTE junta Inconsistente e Não Conforme, porque a definição
+  de inconsistente já é bem estabelecida na gestão da Linha 15. A regra continua sendo do perfil.
+
+## D-031 · O ID vem do Excel de atributos do PW, e um contrato tem vários IDs
+
+*Origem: M2 · 2026-11-18 · três IDs em `entrada/` (fora do Git)*
+
+- Os três IDs (`ID-15.25.00.00-6A9-1001`, `-1002` e `-1501`) têm o mesmo formato: na aba
+  `Planilha1`, as partes do código em colunas separadas, o título, o código completo (`Name`), o
+  número do contrato e a marca `[Excluído]`. Eles somam **981 documentos previstos**.
+- Um contrato tem **vários IDs**, cada um com seu escopo (civil, sistemas, SPTrans…). O previsto
+  é a união dos IDs vigentes.
+- O ID `-1501` renumerou o sequencial para a faixa 2000 (por exemplo, `ID-15.25.00.00-6A9-2001`)
+  por ordem do cliente.
+- Cruzamento com a extração do PW: 658 previstos já estão no PW, **323 ainda não foram emitidos**
+  e **44 estão no PW sem constar em nenhum dos três IDs**.
+- As abas auxiliares têm nomes de profissionais e empresas, ou seja, dados pessoais: não
+  importar nem copiar.

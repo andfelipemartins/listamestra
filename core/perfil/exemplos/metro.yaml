@@ -1,5 +1,5 @@
 nome: Metrô SP — Linha 15
-versao: "MAN-10-201 rev. 04 + MAN-10-207 rev. 00"
+versao: "MAN-10-201 rev. 04 + MAN-10-202 rev. 09"
 vigencia_inicio: 2026-11-18
 codigo:
   segmentos:
@@ -59,38 +59,176 @@ codigo:
         L: Documentos com Finalidade de Logística
         A: Documentos com Finalidade Técnica das Áreas Administrativas
     - nome: classe
-      rotulo: classe
-      padrao_regex: "[A-Z]"
+      rotulo: classe e subclasse
+      padrao_regex: '[A-Z][0-9]'
       valores:
-        A: Geral
-        B: Arquitetura
-        C: Serviços Iniciais
-        D: Interferências
-        E: Desapropriações
-        F: Sistema Viário
-        G: Movimento de Terra
-        H: Sistemas de Contenção
-        I: Infraestrutura e Monitoramento
-        J: Concreto
-        K: Estruturas Metálicas
-        L: Outras Estruturas
-        M: Impermeabilização
-        N: Reurbanização
-        P: Instalações Elétricas
-        S: Instalações Hidráulicas ou de Gás
-        U: Via Permanente
-        V: Planejamento de Transporte
-        W: Serviços de Investigações Geotécnicas
-        Y: Serviços de Investigações Ambientais
-        Z: Geral de Instalações
-    - nome: subclasse
-      rotulo: subclasse
-      padrao_regex: "\\d"
+        A1: "Método construtivo"
+        A2: "Situação geral"
+        A3: "Ocupação de espaços"
+        A4: "Implantação geral"
+        A6: "Infraestrutura administrativa"
+        A8: "Planta chave"
+        A9: "Diversos"
+        B1: "Arquitetura conceitual"
+        B2: "Arquitetura: concepção"
+        B3: "Arquitetura: acabamento"
+        B4: "Comunicação visual: conceito"
+        B5: "Comunicação visual: projeto"
+        B6: "Desenho industrial"
+        B7: "Luminotécnica"
+        B8: "Áreas comerciais"
+        B9: "Diversos"
+        C1: "Cadastro planialtimétrico"
+        C2: "Locação básica (em desuso)"
+        C3: "Sondagens e geotecnia"
+        C4: "Canteiro de obras"
+        C5: "Perfis (em desuso)"
+        C6: "Triangulação e georreferência"
+        C7: "Rede de poligonais"
+        C8: "Referência de nível"
+        C9: "Diversos e base cartográfica"
+        D1: "Cadastro de utilidades"
+        D2: "Remanejamento de interferências"
+        D3: "Sustentação de redes"
+        D4: "Cadastro da obra executada"
+        D8: "Remanejamento de ferrovias"
+        D9: "Diversos"
+        E1: "Áreas para decreto"
+        E2: "Cadastro de quadra"
+        E3: "Cadastro de imóvel"
+        E4: "Vistoria cautelar"
+        E5: "As built e unificação de áreas"
+        E6: "Regularização de áreas"
+        E7: "Vistoria de indenização"
+        E8: "Regularização de IPTU"
+        E9: "Diversos"
+        F1: "Projeto funcional viário e tráfego"
+        F2: "Geometria viária horizontal"
+        F3: "Geometria viária vertical: perfis"
+        F4: "Pavimentação"
+        F5: "Geometria viária vertical: seções"
+        F6: "Sinalização viária e desvios"
+        F7: "Transporte coletivo"
+        F9: "Diversos"
+        G1: "Jazidas, armazéns e bota-fora"
+        G2: "Escavação aberta não escorada"
+        G3: "Escavação subterrânea: túneis"
+        G4: "Escavação subterrânea: poços"
+        G5: "Desmonte de rocha"
+        G6: "Terraplenagem"
+        G9: "Diversos"
+        H1: "Contenção: projeto"
+        H2: "Contenção: detalhes"
+        H5: "Suporte primário: cambotas"
+        H9: "Diversos"
+        I1: "Fundações profundas"
+        I2: "Controle de água subterrânea"
+        I3: "Condicionamento de maciço"
+        I4: "Reforço de fundações"
+        I5: "Drenagem superficial"
+        I6: "Infraestrutura de via"
+        I7: "Instrumentação"
+        I8: "Drenagem da infraestrutura de via"
+        I9: "Diversos"
+        J1: "Estruturas de vias elevadas"
+        J2: "Formas"
+        J3: "Armação"
+        J4: "Propriedades físicas do concreto"
+        J5: "Pré-moldados e anéis"
+        J6: "Furos e embutidos"
+        J7: "Juntas"
+        J9: "Diversos"
+        K1: "Estruturas metálicas"
+        K2: "Anéis metálicos para túneis (em desuso)"
+        K3: "Coberturas metálicas"
+        K4: "Estruturas metálicas provisórias"
+        K5: "Grelhas metálicas"
+        K9: "Diversos"
+        L1: "Estruturas para armazenagem"
+        L9: "Diversos"
+        M1: "Impermeabilização"
+        M9: "Diversos"
+        N1: "Reurbanização: geométrico"
+        N2: "Reurbanização: benfeitorias"
+        N3: "Reurbanização: paisagismo"
+        N4: "Reurbanização: estudos ambientais"
+        N5: "Empreendimentos associados"
+        N6: "Inserção urbana"
+        N9: "Diversos"
+        P0: "Arranjo físico geral"
+        P1: "Subestação primária"
+        P2: "Subestação retificadora"
+        P3: "Subestação auxiliar"
+        P4: "Rede de cabos"
+        P5: "Terceiro trilho"
+        P6: "Baixa tensão"
+        P7: "Iluminação"
+        P8: "Fontes de emergência"
+        P9: "Barra chata"
+        Q1: "Via principal e estações"
+        Q3: "Pátio ou centro de controle"
+        Q6: "Empreendimentos associados"
+        Q7: "Instalação a bordo"
+        R9: "Uso administrativo interno"
+        S0: "Sistemas auxiliares"
+        S1: "Ventilação"
+        S2: "Escadas rolantes"
+        S3: "Arrecadação de passageiros (não utilizado)"
+        S4: "Ar-condicionado"
+        S5: "Instalações hidráulicas ou de gás"
+        S6: "Detecção, alarme e extinção de incêndio"
+        S7: "Segurança contra incêndio"
+        S8: "Ar comprimido"
+        S9: "Geral de sistemas auxiliares"
+        U1: "Geometria: planta e perfil"
+        U2: "Perfil longitudinal"
+        U3: "Informações e restrição de velocidade"
+        U4: "Instalação da via"
+        U5: "Detalhamento de componentes da via"
+        U6: "AMVs e componentes"
+        U7: "Instalação de AMV"
+        U8: "Gabarito de passagem dos trens"
+        U9: "Diversos de via permanente"
+        V1: "Zoneamento de tráfego"
+        V2: "Caracterização urbana"
+        V3: "Rede de transporte"
+        V4: "Pesquisas de transporte"
+        V5: "Traçado de linhas"
+        V6: "Transporte coletivo atual"
+        V7: "Transporte coletivo proposto"
+        V8: "Demanda e carregamento"
+        V9: "Diversos"
+        W1: "Sondagem a trado ou poço"
+        W2: "Sondagem a percussão"
+        W3: "Sondagem rotativa ou mista"
+        W4: "Penetração contínua (em desuso)"
+        W5: "Ensaio de palheta (em desuso)"
+        W6: "Piezômetro ou nível d'água"
+        W8: "Televisamento de sondagens"
+        W9: "Investigações geotécnicas"
+        Y1: "Impacto ambiental"
+        Y2: "Ruído e vibração"
+        Y3: "Vegetação"
+        Y4: "Arqueologia e patrimônio histórico"
+        Y5: "Áreas contaminadas"
+        Y6: "Qualidade do ar"
+        Y7: "Licenças e pareceres"
+        Y8: "Acompanhamento de licenças"
+        Y9: "Diversos"
+        Z0: "Geral de instalações"
+        Z1: "Bandejamento para cabos"
+        Z2: "Malha de terra"
+        Z3: "Interface SOT/SSO/STD"
+        Z4: "Bilheteria e SSO"
+        Z5: "Sistema PSD"
+        Z6: "Elevadores"
+        Z7: "Esteira rolante"
+        Z9: "Diversos"
     - sep: "-"
     - nome: sequencial
       rotulo: sequencial
       padrao_regex: "\\d{4}"
-  segmentos_identidade: [tipo, linha, trecho, subtrecho, unidade, etapa, classe, subclasse, sequencial]
+  segmentos_identidade: [tipo, linha, trecho, subtrecho, unidade, etapa, classe, sequencial]
   revisao_no_codigo: false
 emissao:
   revisao:

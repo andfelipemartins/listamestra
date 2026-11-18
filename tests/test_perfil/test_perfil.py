@@ -35,13 +35,29 @@ def test_metro_interpreta_e_monta_codigo(metro):
     assert resultado.segmentos["tipo"] == "DE"
     assert resultado.segmentos["trecho"] == "25"
     assert resultado.segmentos["etapa"] == "6"
-    assert resultado.segmentos["classe"] == "A"
-    assert resultado.segmentos["subclasse"] == "1"
+    assert resultado.segmentos["classe"] == "A1"
     assert resultado.segmentos["sequencial"] == "1001"
     assert resultado.revisao is None
     assert resultado.identificador_base == "DE-15.25.00.00-6A1-1001"
     assert resultado.significados["tipo"] == "Desenho"
+    assert resultado.significados["classe"] == "Método construtivo"
     assert montar(metro, resultado.segmentos) == resultado.original.upper()
+
+
+def test_metro_interpreta_classe_e_subclasse_com_rotulo(metro):
+    resultado = interpretar(metro, "DE-15.25.00.00-6P7-1513")
+
+    assert isinstance(resultado, CodigoInterpretado)
+    assert resultado.segmentos["classe"] == "P7"
+    assert resultado.significados["classe"] == "Iluminação"
+
+
+def test_metro_rejeita_classe_que_nao_consta_nas_tabelas(metro):
+    resultado = interpretar(metro, "DE-15.25.00.00-6X1-1513")
+
+    assert isinstance(resultado, ErroCodigo)
+    assert resultado.segmento == "classe"
+    assert "classe e subclasse" in resultado.mensagem
 
 
 def test_codigo_metro_invalido_aponta_segmento(metro):
@@ -141,13 +157,13 @@ def test_restricao_entre_segmentos():
                 "segmentos": [
                     {"nome": "tipo", "rotulo": "tipo", "padrao_regex": "[A-Z]{2}"},
                     {"sep": "-"},
-                    {"nome": "subclasse", "rotulo": "subclasse", "padrao_regex": "\\d"},
+                    {"nome": "classe", "rotulo": "classe", "padrao_regex": "\\d"},
                 ],
                 "restricoes": [
                     {
                         "se_segmento": "tipo",
                         "igual_a": "DE",
-                        "entao_segmento": "subclasse",
+                        "entao_segmento": "classe",
                         "em": ["1"],
                     }
                 ],
@@ -163,8 +179,8 @@ def test_restricao_entre_segmentos():
 
     assert isinstance(valido, CodigoInterpretado)
     assert isinstance(invalido, ErroCodigo)
-    assert invalido.segmento == "subclasse"
-    assert "subclasse deve estar" in invalido.mensagem
+    assert invalido.segmento == "classe"
+    assert "classe deve estar" in invalido.mensagem
 
 
 def test_series_fechadas_e_transbordos():
