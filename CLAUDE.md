@@ -18,7 +18,7 @@ Substitui uma planilha Excel manual por uma aplicação Streamlit + SQLite rastr
 - **Git:** commits só quando solicitado; **push só com autorização explícita**; mensagens em português; nunca versionar `db/sclme.db`, dados reais/confidenciais, ou as pastas de cognitive arch.
 - **Banco único:** o app usa sempre `db/sclme.db` — não há mais "modo demo" / `SCLME_DB_MODE` (criado e depois removido por decisão de produto).
 - **Camadas:** `core/` nunca importa Streamlit; regra de negócio em `engine`/`services`/`repositories`; páginas apenas capturam input, chamam services e exibem — **sem SQL em páginas**.
-
+- **Esteira, worktrees e agentes (decisão D-012):** o checkout principal é C:\Sistema de Controle Lista Mestra. Vários agentes Codex podem rodar em paralelo quando mexem em arquivos diferentes. Se houver risco de colisão, cada um trabalha numa worktree própria (`../sclme-wt-<block>`, branch `wt/<block>`), que o Claude integra depois. As regras operacionais estão em `cognitive_arch_V2/control-room/ESTEIRA.md`. Antes de implementar, confirmar diretório, branch e git status.
 ---
 
 ## Como rodar
