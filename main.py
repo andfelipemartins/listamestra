@@ -111,6 +111,7 @@ pg = st.navigation(
         st.Page("pages/4_CadastroManual.py", title="CADASTRAR DOCUMENTO", icon=":material/edit_document:"),
         st.Page("pages/6_GRD.py", title="GERAR GRD", icon=":material/inventory_2:"),
         st.Page("pages/5_Documento.py", title="PESQUISAR DOCUMENTO", icon=":material/search:"),
+        st.Page("pages/7_Pendencias.py", title="PENDÊNCIAS", icon=":material/assignment_late:"),
     ]
 )
 pg.run()

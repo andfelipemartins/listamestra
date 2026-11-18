@@ -101,6 +101,35 @@ def test_reativar_faz_pendencia_voltar(service, db_path, contrato_id):
     assert len(_listar_sem_titulo(service, contrato_id)) == 1
 
 
+def test_fluxo_dispensar_exibir_e_reativar(service, db_path, contrato_id):
+    _documento_sem_titulo(db_path, contrato_id)
+    dispensa_id = service.dispensar_pendencia(
+        contrato_id,
+        "documento_sem_titulo",
+        "DOC-001",
+        "ignorada",
+        observacao="Aguardando confirmação do responsável.",
+        perfil="editor",
+    )
+
+    assert _listar_sem_titulo(service, contrato_id) == []
+    dispensada = _listar_sem_titulo(
+        service,
+        contrato_id,
+        incluir_dispensadas=True,
+    )[0]
+    assert dispensada["dispensa_id"] == dispensa_id
+    assert dispensada["acao_dispensa"] == "ignorada"
+    assert dispensada["observacao_dispensa"] == "Aguardando confirmação do responsável."
+    assert dispensada["perfil_dispensa"] == "editor"
+    assert dispensada["dispensada_em"]
+
+    assert service.reativar_pendencia(contrato_id, dispensa_id) is True
+    reativada = _listar_sem_titulo(service, contrato_id)
+    assert len(reativada) == 1
+    assert reativada[0]["dispensada"] is False
+
+
 def test_dispensar_duas_vezes_nao_duplica(service, db_path, contrato_id):
     _documento_sem_titulo(db_path, contrato_id)
     primeiro = service.dispensar_pendencia(
@@ -146,6 +175,26 @@ def test_filtros_de_trecho_e_disciplina(service, db_path, contrato_id):
         disciplina="F2",
     )
     assert [item["codigo"] for item in itens] == ["DOC-F2"]
+
+
+def test_rotulos_cobrem_todas_as_categorias(service):
+    rotulos = service.rotulos_por_categoria()
+    assert set(rotulos) == {tipo.value for tipo in TipoPendencia}
+    assert all(rotulo.strip() for rotulo in rotulos.values())
+
+
+def test_opcoes_filtros_retorna_trechos_e_disciplinas(service, db_path, contrato_id):
+    _documento_sem_titulo(
+        db_path, contrato_id, "DOC-F2", trecho="25", disciplina="F2"
+    )
+    _documento_sem_titulo(
+        db_path, contrato_id, "DOC-J2", trecho="23", disciplina="J2"
+    )
+
+    assert service.opcoes_filtros(contrato_id) == {
+        "trechos": ["23", "25"],
+        "disciplinas": ["F2", "J2"],
+    }
 
 
 @pytest.mark.parametrize(

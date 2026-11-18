@@ -11,6 +11,21 @@ from core.engine.pendencias import Pendencia, TipoPendencia, detectar_pendencias
 from core.repositories.pendencia_repository import ACOES_DISPENSA, PendenciaRepository
 
 
+_ROTULOS_CATEGORIA = {
+    TipoPendencia.PREVISTO_SEM_INICIO.value: "Previsto sem movimentação",
+    TipoPendencia.PREVISTO_ESTAGNADO.value: "Previsto sem aprovação",
+    TipoPendencia.LISTA_SEM_ID.value: "Documento da Lista fora do ID",
+    TipoPendencia.ARQUIVO_SEM_DOCUMENTO.value: "Arquivo sem documento vinculado",
+    TipoPendencia.DOCUMENTO_SEM_ARQUIVO.value: "Documento sem arquivo",
+    TipoPendencia.CODIGO_INVALIDO.value: "Código inválido",
+    TipoPendencia.REVISAO_SEM_DATA.value: "Revisão sem data de emissão",
+    TipoPendencia.DOCUMENTO_SEM_TITULO.value: "Documento sem objeto ou título",
+    TipoPendencia.DIVERGENCIA_TITULO.value: "Divergência entre títulos do ID e da Lista",
+    TipoPendencia.EMITIDO_SEM_ANALISE.value: "Documento emitido sem análise",
+    TipoPendencia.ANALISE_ATRASADA.value: "Análise atrasada",
+}
+
+
 def _tipo_valor(tipo) -> str:
     return str(getattr(tipo, "value", tipo))
 
@@ -116,6 +131,20 @@ class PendenciasService:
         ):
             resumo[item["tipo"]] += 1
         return resumo
+
+    @staticmethod
+    def rotulos_por_categoria() -> dict[str, str]:
+        return dict(_ROTULOS_CATEGORIA)
+
+    def opcoes_filtros(self, contrato_id: int) -> dict[str, list[str]]:
+        pendencias = self.listar_pendencias(
+            contrato_id,
+            incluir_dispensadas=True,
+        )
+        return {
+            "trechos": sorted({item["trecho"] for item in pendencias if item["trecho"]}),
+            "disciplinas": sorted({item["disciplina"] for item in pendencias if item["disciplina"]}),
+        }
 
     @staticmethod
     def _serializar(pendencia: Pendencia) -> dict:

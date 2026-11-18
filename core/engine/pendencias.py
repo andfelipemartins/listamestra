@@ -61,7 +61,7 @@ def _previstos_sem_inicio(
             chave=str(row["codigo"]),
             codigo=row["codigo"],
             titulo=row.get("titulo"),
-            mensagem="Previsto no ID sem revisao iniciada",
+            mensagem="Previsto no ID sem revisão iniciada",
         )
         for row in rows
     ]
@@ -106,7 +106,7 @@ def _previstos_estagnados(
                     titulo=row["titulo"],
                     trecho=row["trecho"],
                     disciplina=row["disciplina"],
-                    mensagem=f"Previsto sem aprovacao ha {dias} dias",
+                    mensagem=f"Previsto sem aprovação há {dias} dias",
                     dias=int(dias),
                     documento_id=int(row["documento_id"]),
                 )
@@ -138,7 +138,7 @@ def _lista_sem_id(contrato_id: int, conn) -> list[Pendencia]:
             titulo=row["titulo"],
             trecho=row["trecho"],
             disciplina=row["disciplina"],
-            mensagem="Documento da Lista sem correspondencia ativa no ID",
+            mensagem="Documento da Lista sem correspondência ativa no ID",
             documento_id=int(row["documento_id"]),
         )
         for row in rows
@@ -210,7 +210,7 @@ def _codigos_invalidos(contrato_id: int, conn) -> list[Pendencia]:
             tipo=TipoPendencia.CODIGO_INVALIDO,
             chave=str(row["documento_codigo"] or row["id"]),
             codigo=row["documento_codigo"],
-            mensagem=row["descricao"] or "Codigo invalido detectado na importacao",
+            mensagem=row["descricao"] or "Código inválido detectado na importação",
         )
         for row in rows
     ]
@@ -237,7 +237,7 @@ def _revisoes_sem_data(contrato_id: int, conn) -> list[Pendencia]:
             titulo=row["titulo"],
             trecho=row["trecho"],
             disciplina=row["disciplina"],
-            mensagem="Ultima revisao sem data de emissao",
+            mensagem="Última revisão sem data de emissão",
             documento_id=int(row["documento_id"]),
         )
         for row in rows
@@ -262,7 +262,7 @@ def _documentos_sem_titulo(contrato_id: int, conn) -> list[Pendencia]:
             titulo=row["titulo"],
             trecho=row["trecho"],
             disciplina=row["disciplina"],
-            mensagem="Documento sem titulo ou objeto",
+            mensagem="Documento sem título ou objeto",
             documento_id=int(row["documento_id"]),
         )
         for row in rows
@@ -299,8 +299,8 @@ def _divergencias_titulo(contrato_id: int, conn) -> list[Pendencia]:
             trecho=row["trecho"],
             disciplina=row["disciplina"],
             mensagem=(
-                f"Titulo do ID: {row['titulo_id']} | "
-                f"Titulo da Lista: {row['titulo_lista']}"
+                f"Título do ID: {row['titulo_id']} | "
+                f"Título da Lista: {row['titulo_lista']}"
             ),
             documento_id=int(row["documento_id"]),
         )
@@ -330,7 +330,7 @@ def _emitidos_sem_analise(contrato_id: int, conn) -> list[Pendencia]:
             titulo=row["titulo"],
             trecho=row["trecho"],
             disciplina=row["disciplina"],
-            mensagem="Ultima revisao emitida sem data de analise",
+            mensagem="Última revisão emitida sem data de análise",
             documento_id=int(row["documento_id"]),
         )
         for row in rows
