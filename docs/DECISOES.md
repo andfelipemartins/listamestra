@@ -245,3 +245,11 @@ depende do estudo `docs/estudos/G4-armazenamento-de-arquivos.md`.
   seguinte é "Revisão 1", "Revisão 2"…, em ordem de data.
 - Isso precisa caber no perfil de contrato configurável (D-008) como uma **máquina de
   estados de revisão** configurável, e não como código fixo.
+
+## D-019 · Backup remoto da Cognitive Arch
+
+*Origem: I1 · 2026-11-18*
+
+A memória da esteira (`cognitive_arch_V2/`) tem um repositório privado próprio no GitHub
+(`sclme-cognitive-arch`), com push automático a cada fechamento de Block. O código do produto
+continua com push só pelo dono (D-012).
