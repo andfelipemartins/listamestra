@@ -1,0 +1,79 @@
+<section class="page-heading painel-heading">
+  <div><span class="eyebrow">ACOMPANHAMENTO EXECUTIVO</span><h1>{{ contrato.nome }}</h1><p>{{ contrato.codigo_interno }} · {{ contrato.cliente }}</p></div>
+  <div class="painel-total"><span>Documentos previstos em conta</span><strong>{{ total_documentos_previstos }}</strong><small>{{ total_documentos_id }} no ID{% if quantidade_filtros_ativos %} com os filtros{% endif %}</small></div>
+</section>
+
+<details class="painel-filtros" {% if quantidade_filtros_ativos %}open{% endif %}>
+  <summary>Filtros{% if quantidade_filtros_ativos %} · {{ quantidade_filtros_ativos }} ativos{% endif %}</summary>
+  <form id="filtros-painel" class="painel-filtros-form" method="get" action="{% url 'painel' contrato.pk %}"
+        hx-get="{% url 'painel' contrato.pk %}" hx-trigger="change, submit" hx-target="#painel-dados" hx-swap="innerHTML" hx-push-url="true">
+    <div class="painel-filtros-grade">
+      {% for filtro in filtros %}
+      <label class="painel-filtro">{{ filtro.rotulo }}
+        <select name="{{ filtro.nome }}" multiple size="4" aria-label="Filtrar por {{ filtro.rotulo }}">
+          {% for opcao in filtro.opcoes %}<option value="{{ opcao.valor }}" {% if opcao.selecionado %}selected{% endif %}>{{ opcao.rotulo }}</option>{% endfor %}
+        </select>
+      </label>
+      {% endfor %}
+      <label class="painel-seletor">Agrupar barras por
+        <select name="por" aria-label="Selecionar caixa do perfil">
+          {% for caixa in caixas %}<option value="{{ caixa.nome }}" {% if caixa.nome == por %}selected{% endif %}>{{ caixa.rotulo }}</option>{% endfor %}
+        </select>
+      </label>
+    </div>
+    <div class="painel-filtros-acoes">
+      <button class="button button-primary" type="submit">Aplicar filtros</button>
+      <a class="button button-quiet" href="{% url 'painel' contrato.pk %}?por={{ por|urlencode }}" hx-get="{% url 'painel' contrato.pk %}?por={{ por|urlencode }}" hx-target="#painel-dados" hx-swap="innerHTML" hx-push-url="true">Limpar filtros</a>
+    </div>
+  </form>
+</details>
+
+{% if filtros_ativos %}
+<p class="painel-filtros-resumo"><strong>Filtros ativos:</strong> {% for filtro in filtros_ativos %}{% if not forloop.first %}<span aria-hidden="true"> · </span>{% endif %}{{ filtro.rotulo }}: {{ filtro.valores|join:", " }}{% endfor %}</p>
+{% endif %}
+
+<section class="painel-grupos" aria-label="Situação dos documentos previstos em conta">
+  {% for item in grupo_cards %}
+  <article class="painel-grupo-card" style="--grupo-cor: {{ item.grupo.cor|default:'#64748b' }}">
+    <span class="painel-grupo-label">{{ item.grupo.rotulo }}</span>
+    <strong>{{ item.quantidade }}</strong>
+    <span class="painel-grupo-percentual">{{ item.percentual|floatformat:1 }}% do previsto em conta</span>
+  </article>
+  {% endfor %}
+</section>
+
+{% if fora_do_painel %}
+<div class="painel-contadores-fora" aria-label="Grupos fora do painel">
+  {% for item in fora_do_painel %}<span><strong>{{ item.grupo.rotulo|title }}s: {{ item.quantidade }}</strong>, fora do painel</span>{% endfor %}
+</div>
+{% endif %}
+
+<section class="painel-avanco panel" aria-label="Avanço do contrato">
+  <div class="painel-avanco-topo"><div><span class="eyebrow">AVANÇO</span><h2>{{ percentual_avanco|floatformat:1 }}%</h2></div><span>com base no critério do perfil vigente</span></div>
+  <div class="painel-progresso" role="progressbar" aria-label="Percentual de avanço" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ percentual_avanco|floatformat:0 }}"><span style="width: {{ percentual_avanco }}%"></span></div>
+</section>
+
+<div class="painel-destaques">
+  <section class="panel painel-chart-panel">
+    <div class="panel-heading"><div><h2>Distribuição por situação</h2><p>Documentos da união dos IDs vigentes{% if quantidade_filtros_ativos %}, conforme filtros{% endif %}</p></div></div>
+    <div class="painel-pizza-wrap"><canvas id="grafico-pizza" aria-label="Gráfico de pizza com documentos por situação"></canvas></div>
+  </section>
+  <section class="panel painel-fora-id"><span class="eyebrow">ESCOPO</span><strong>{{ fora_do_id }}</strong><h2>Fora do ID</h2><p>Documentos com emissão que não constam em nenhum ID vigente{% if quantidade_filtros_ativos %}, conforme filtros aplicáveis{% endif %}.</p></section>
+</div>
+
+<section class="panel painel-recorte-panel">
+  <div class="panel-heading painel-recorte-heading"><div><h2>Avanço por recorte</h2><p>Distribuição das situações pelas caixas do perfil</p></div></div>
+  <div id="painel-recortes">{% include "painel/_recortes.html" %}</div>
+</section>
+
+{% if estados_nao_mapeados %}
+<section class="notice painel-nao-mapeado" role="status">
+  <strong>{{ estados_nao_mapeados|length }} estados do PW não mapeados</strong>
+  <p>O administrador pode ajustar o mapeamento no perfil do contrato.</p>
+  <ul>{% for estado in estados_nao_mapeados %}<li>{% if estado.situacao %}{{ estado.situacao }}{% else %}(estado vazio){% endif %} <span>{{ estado.contagem }} documento{{ estado.contagem|pluralize:"s" }}</span></li>{% endfor %}</ul>
+</section>
+{% endif %}
+
+<footer class="painel-fontes">Dados do PW de: <strong>{% if ultima_situacao_pw %}{{ ultima_situacao_pw|date:"d/m/Y" }}{% else %}sem importação{% endif %}</strong><span aria-hidden="true">·</span>Última importação de ID: <strong>{% if ultima_importacao_id %}{{ ultima_importacao_id|date:"d/m/Y" }}{% else %}sem importação{% endif %}</strong></footer>
+
+{{ grafico_pizza|json_script:"dados-grafico-pizza" }}

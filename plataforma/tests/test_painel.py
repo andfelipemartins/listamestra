@@ -1,5 +1,7 @@
 from datetime import date, timedelta
 from pathlib import Path
+import json
+import re
 
 import pytest
 import yaml
@@ -57,17 +59,34 @@ def _indice(contrato, codigo, *, fonte=IndiceDocumentos.Fonte.EXCEL_ID, revisao=
     )
 
 
-def _documento(contrato, indice, sequencial, classe="P7", situacao=None, *, data=None):
+def _documento(
+    contrato,
+    indice,
+    sequencial,
+    classe="P7",
+    situacao=None,
+    *,
+    tipo="DE",
+    trecho="25",
+    etapa="6",
+    data=None,
+):
     data = data or timezone.localdate() - timedelta(days=10)
     identificador = f"DOC-{sequencial}"
     documento = Documento.objects.create(
         contrato=contrato,
         identificador_base=identificador,
-        tipo="DE",
-        trecho="25",
+        tipo=tipo,
+        trecho=trecho,
         disciplina=classe,
         titulo=f"Documento {sequencial}",
-        atributos={"tipo": "DE", "trecho": "25", "classe": classe, "sequencial": str(sequencial)},
+        atributos={
+            "tipo": tipo,
+            "trecho": trecho,
+            "etapa": etapa,
+            "classe": classe,
+            "sequencial": str(sequencial),
+        },
     )
     ItemPrevisto.objects.create(indice=indice, documento=documento, titulo=documento.titulo)
     if situacao is not None:
@@ -190,6 +209,120 @@ def test_servico_usa_analise_mais_recente_da_emissao_mais_recente(contrato, perf
 
     assert resumo.contagens["nao_aprovado"] == 1
     assert resumo.contagens["aprovado"] == 0
+
+
+@pytest.mark.django_db
+def test_cancelado_fica_fora_da_conta_dos_graficos_e_cartoes(contrato, perfil_modelo, client, django_user_model):
+    usuario = django_user_model.objects.create_user(username="chefia-cancelados", password="senha")
+    Participacao.objects.create(usuario=usuario, contrato=contrato, papel="chefia")
+    indice = _indice(contrato, "ID-CANCELADOS")
+    _documento(contrato, indice, 3001)
+    _documento(contrato, indice, 3002, situacao="Aprovado")
+    _documento(contrato, indice, 3003, situacao="Cancelado")
+    client.force_login(usuario)
+
+    dados = carregar_painel(contrato)
+    resposta = client.get(reverse("painel", args=(contrato.pk,)))
+    html = resposta.content.decode()
+    pizza = json.loads(re.search(r'<script id="dados-grafico-pizza" type="application/json">(.*?)</script>', html).group(1))
+    barras = json.loads(re.search(r'<script id="dados-grafico-recortes" type="application/json">(.*?)</script>', html).group(1))
+
+    assert dados["resumo"].total_previsto == 2
+    assert dados["total_documentos_previstos"] == 2
+    assert dados["total_documentos_id"] == 3
+    assert dados["resumo"].percentual_avanco == pytest.approx(50)
+    assert [(item["grupo"].rotulo, item["quantidade"]) for item in dados["fora_do_painel"]] == [("CANCELADO", 1)]
+    assert "CANCELADO" not in pizza["labels"]
+    assert "CANCELADO" not in [dataset["label"] for dataset in barras["datasets"]]
+    assert "Cancelados: 1" in html
+    assert "CANCELADO" not in [item["grupo"].rotulo for item in resposta.context["grupo_cards"]]
+    assert {item["percentual"] for item in resposta.context["grupo_cards"] if item["quantidade"]} == {50.0}
+
+
+@pytest.mark.django_db
+def test_filtros_combinam_ou_na_mesma_caixa_e_e_entre_caixas(contrato, perfil_modelo):
+    indice = _indice(contrato, "ID-FILTROS")
+    _documento(contrato, indice, 4001, tipo="DE", trecho="25", classe="P7", etapa="6")
+    _documento(contrato, indice, 4002, tipo="DE", trecho="23", classe="A1", etapa="5")
+    _documento(contrato, indice, 4003, tipo="MC", trecho="25", classe="P7", etapa="5")
+    _documento(contrato, indice, 4004, tipo="MC", trecho="23", classe="A1", etapa="6")
+
+    simples = carregar_painel(contrato, filtros={"tipo": "MC"})
+    multiplo = carregar_painel(contrato, filtros={"tipo": ["DE", "MC"]})
+    combinado = carregar_painel(contrato, filtros={"tipo": "DE", "trecho": "23"})
+
+    assert simples["total_documentos_previstos"] == 2
+    assert multiplo["total_documentos_previstos"] == 4
+    assert combinado["total_documentos_previstos"] == 1
+    tipo = next(filtro for filtro in multiplo["filtros"] if filtro["nome"] == "tipo")
+    assert {opcao["rotulo"] for opcao in tipo["opcoes"] if opcao["valor"] in {"DE", "MC"}} == {
+        "DE – Desenho",
+        "MC – Memorial de cálculo",
+    }
+
+
+@pytest.mark.django_db
+def test_filtro_combina_com_recorte_de_barras(contrato, perfil_modelo):
+    indice = _indice(contrato, "ID-FILTRO-RECORTE")
+    _documento(contrato, indice, 5001, tipo="MC", trecho="25")
+    _documento(contrato, indice, 5002, tipo="MC", trecho="23")
+    _documento(contrato, indice, 5003, tipo="DE", trecho="25")
+
+    dados = carregar_painel(contrato, por="trecho", filtros={"tipo": "MC"})
+
+    assert dados["por"] == "trecho"
+    assert {item["rotulo"]: item["total"] for item in dados["recortes"]} == {
+        "São Mateus": 1,
+        "Ragueb Chohfi": 1,
+    }
+
+
+@pytest.mark.django_db
+def test_filtro_htmx_atualiza_tela_inteira_e_preserva_valores_na_querystring(
+    client, contrato, perfil_modelo, django_user_model
+):
+    usuario = django_user_model.objects.create_user(username="ana-filtros", password="senha")
+    Participacao.objects.create(usuario=usuario, contrato=contrato, papel="chefia")
+    indice = _indice(contrato, "ID-HTMX-FILTROS")
+    _documento(contrato, indice, 6001, tipo="DE", trecho="25")
+    _documento(contrato, indice, 6002, tipo="MC", trecho="25")
+    _documento(contrato, indice, 6003, tipo="MC", trecho="23")
+    client.force_login(usuario)
+
+    resposta = client.get(
+        reverse("painel", args=(contrato.pk,)),
+        {"tipo": ["MC"], "trecho": ["25"]},
+        HTTP_HX_REQUEST="true",
+    )
+    html = resposta.content.decode()
+
+    assert resposta.status_code == 200
+    assert "Filtros ativos:" in html
+    assert "tipo documental: MC – Memorial de cálculo" in html
+    assert "trecho: 25 – Ragueb Chohfi" in html
+    assert "Documentos previstos em conta" in html
+    assert "Distribuição por situação" in html
+    assert "dados-grafico-pizza" in html
+    assert "dados-grafico-recortes" in html
+    assert "Fora do ID" in html
+    assert 'hx-push-url="true"' in html
+    assert "<html" not in html
+
+
+@pytest.mark.django_db
+def test_valor_de_filtro_invalido_e_ignorado(contrato, perfil_modelo):
+    indice = _indice(contrato, "ID-FILTRO-INVALIDO")
+    _documento(contrato, indice, 7001, tipo="DE", trecho="25")
+    _documento(contrato, indice, 7002, tipo="MC", trecho="23")
+
+    sem_filtro = carregar_painel(contrato)
+    com_valor_invalido = carregar_painel(
+        contrato,
+        filtros={"tipo": "TIPO-QUE-NAO-EXISTE", "caixa-desconhecida": "valor"},
+    )
+
+    assert com_valor_invalido["total_documentos_previstos"] == sem_filtro["total_documentos_previstos"] == 2
+    assert com_valor_invalido["filtros_ativos"] == []
 
 
 @pytest.mark.django_db

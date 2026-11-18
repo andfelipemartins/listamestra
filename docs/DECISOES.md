@@ -442,3 +442,44 @@ Aprovado, Não Conforme, Inconsistente, Erro de Assinatura, Cancelado, Revisão 
   ser algo mais elaborado. As funções listadas no estudo pareceram fracas.
 - Enquanto a decisão não sai, o produto segue sem IA embutida, com o fluxo de fora (Claude Code →
   YAML → admin).
+
+## D-034 · Painel da chefia: cancelado fora, filtros como tabela dinâmica, A7 aceita
+
+*Origem: O1, P1, P2, P3, P5, P6 · 2026-11-18 (registrado pela checagem agendada das 12:56Z)*
+
+- **O1:** o Marco Fundação Django foi aprovado sem ajustes.
+- **P2:** cancelado é "pré-histórico": não entra na pizza, nos gráficos nem no avanço, do mesmo
+  jeito que o dono tira os cancelados na tabela dinâmica do Excel. Inconsistente e Não Conforme
+  continuam contando, porque exigem ação. A pizza mostra o total de documentos dividido em
+  A EMITIR, APROVADO, EM ANÁLISE etc., e as barras mostram o mesmo por recorte (trecho, por
+  exemplo). Sem filtro, aparece a visão geral do contrato para a reunião e para a gerência.
+- O dono deixou em aberto como o "procedimento específico" (aprovação em até três revisões, meta
+  de 80%) apareceria no painel: por documento, por disciplina? Ele pediu uma proposta.
+- **P3:** o painel precisa de todo tipo de filtro, como uma tabela dinâmica do Excel: trecho, tipo
+  (só DEs, MCs, RTs…), classe e o contrato inteiro sem filtro. Alguns recortes podem vir prontos,
+  mas sem limitar o usuário.
+- **P1:** 'Erro de Assinatura' e 'Em Desenvolvimento' saem de EM ANÁLISE e passam a ser **erro**.
+  Erro de assinatura exige refazer, trocar o arquivo ou pedir que o cliente corrija. Em
+  Desenvolvimento costuma ser emissão esquecida ou arquivo errado deixado no PW, que não pode ser
+  apagado. Se veio na extração, o painel acusa, e a pessoa pondera: ignora, corrige ou pede a
+  correção. O dono perguntou se isso fica simples. Proposta do Claude: os dois entram no grupo
+  INCONSISTENTE, que já é o grupo do "precisa arrumar" (ver pergunta Q2).
+- **P5:** no perfil SPObras, 'ALTERNATIVA NÃO ADOTADA' vai para o grupo CANCELADO.
+- **P6:** a classe A7 existe, mesmo fora do MAN-10-201. Provavelmente é de qualidade (relatório
+  mensal de qualidade). A responsável na empresa é da área de qualidade, e no Metrô também. O dono
+  vai verificar se há um MAN específico. Enquanto isso, a A7 deve ser incorporada, porque a
+  plataforma atende todos os setores da engenharia, qualidade incluída.
+
+## D-035 · IA na plataforma: um chat dentro do gerenciador, com o contexto dos contratos
+
+*Origem: M4, P4 · 2026-11-18 · complementa a D-033*
+
+- **M4:** o dono não sabe ainda se a IA rodaria online ou offline. Ele cogitou um modelo menor
+  num servidor do escritório, mas pediu para discutirmos as formas de integrar um LLM ao sistema.
+  Na empresa, a ferramenta imposta é o Copilot, que ele avalia mal.
+- **P4:** o que ele quer é um **chat dentro do gerenciador**, com a força do melhor modelo que a
+  empresa tiver, onde ele possa jogar um PDF, perguntar por um documento ou pelo que diz um
+  contrato, e que leia os projetos plotados do AutoCAD em PDF. O chat deve estar ligado às pastas
+  do SharePoint e às informações do sistema, sem inventar coisas fora dele.
+- Pergunta do dono que precisa de resposta: é possível ter essa força num chat fechado no sistema?
+- Continua valendo a D-033: sem IA embutida até a conversa acontecer.

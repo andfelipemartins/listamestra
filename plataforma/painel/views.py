@@ -34,7 +34,7 @@ class PainelRecorteView(View):
         if not acesso:
             return render(request, "painel/pin.html", {"contrato": contrato, "erro": erro})
         try:
-            contexto = _contexto_painel(contrato, request.GET.get("por"))
+            contexto = _contexto_painel(contrato, request.GET.get("por"), request.GET)
         except PainelIndisponivel as erro:
             return render(request, "painel/indisponivel.html", {"contrato": contrato, "erro": erro})
         return render(request, "painel/_recortes.html", contexto)
@@ -85,16 +85,17 @@ def _verificar_acesso(request, contrato, verificar_pin=False):
 
 def _render_painel(request, contrato):
     try:
-        contexto = _contexto_painel(contrato, request.GET.get("por"))
+        contexto = _contexto_painel(contrato, request.GET.get("por"), request.GET)
     except PainelIndisponivel as erro:
         return render(request, "painel/indisponivel.html", {"contrato": contrato, "erro": erro})
-    response = render(request, "painel/index.html", contexto)
+    template = "painel/_conteudo.html" if request.headers.get("HX-Request") == "true" else "painel/index.html"
+    response = render(request, template, contexto)
     response["Cache-Control"] = "private, no-store"
     return response
 
 
-def _contexto_painel(contrato, por):
-    dados = carregar_painel(contrato, por)
+def _contexto_painel(contrato, por, filtros=None):
+    dados = carregar_painel(contrato, por, filtros)
     resumo = dados["resumo"]
     total = dados["total_documentos_previstos"]
     grupo_cards = [
@@ -104,8 +105,13 @@ def _contexto_painel(contrato, por):
             "percentual": round(100 * resumo.contagens.get(grupo.id, 0) / total, 1) if total else 0,
         }
         for grupo in dados["perfil"].painel.grupos
+        if grupo.conta_no_avanco
     ]
-    chart_groups = list(resumo.grupos)
+    chart_groups = [
+        grupo
+        for grupo in resumo.grupos
+        if grupo.id == "nao_mapeado" or grupo.conta_no_avanco
+    ]
     for indice, grupo in enumerate(chart_groups):
         if not grupo.cor:
             chart_groups[indice] = type(grupo)(

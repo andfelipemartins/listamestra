@@ -1,10 +1,11 @@
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from django.db.models import F, Prefetch
 from django.utils import timezone
 
 from core.perfil import ErroPerfil, perfil_de_dict
-from core.perfil.painel import resumir
+from core.perfil.painel import classificar, resumir
 from contratos.models import PerfilContrato
 from documentos.models import Analise, Documento, Emissao
 from importacoes.models import ImportacaoID, ImportacaoSituacao, ItemPrevisto
@@ -20,8 +21,8 @@ class DocumentoPainel:
     situacao: str | None
 
 
-def carregar_painel(contrato, por=None):
-    """Monta os dados do painel e dos recortes, sem depender da camada de apresentação."""
+def carregar_painel(contrato, por=None, filtros=None):
+    """Monta o resumo e os recortes do painel conforme o perfil vigente."""
     perfil_modelo = PerfilContrato.perfil_vigente(contrato, timezone.localdate())
     if perfil_modelo is None:
         raise PainelIndisponivel("Este contrato ainda não tem um perfil vigente.")
@@ -50,20 +51,48 @@ def carregar_painel(contrato, por=None):
     previstos = {}
     for item in itens:
         previstos.setdefault(item.documento_id, item.documento)
-    documentos_painel = [
+    todos_documentos = [
         DocumentoPainel(documento, _situacao_atual(documento))
         for documento in previstos.values()
     ]
-    situacoes = [item.situacao for item in documentos_painel]
-    resumo = resumir(perfil, situacoes)
 
+    filtros_disponiveis = _filtros_disponiveis(perfil.codigo.campos, todos_documentos)
+    filtros_selecionados = _normalizar_filtros(filtros, filtros_disponiveis)
+    for filtro in filtros_disponiveis:
+        valores_selecionados = filtros_selecionados.get(filtro["nome"], set())
+        for opcao in filtro["opcoes"]:
+            opcao["selecionado"] = opcao["valor"] in valores_selecionados
+    filtros_ativos = _resumir_filtros(filtros_disponiveis, filtros_selecionados)
+    documentos_filtrados = [
+        item for item in todos_documentos if _corresponde_filtros(item.documento, filtros_selecionados)
+    ]
+
+    grupos_fora_painel = {
+        grupo.id: grupo for grupo in perfil.painel.grupos if not grupo.conta_no_avanco
+    }
+    contagens_fora_painel = {identificador: 0 for identificador in grupos_fora_painel}
+    documentos_em_conta = []
+    for item in documentos_filtrados:
+        grupo = classificar(perfil, item.situacao)
+        if grupo.id in grupos_fora_painel:
+            contagens_fora_painel[grupo.id] += 1
+        else:
+            documentos_em_conta.append(item)
+
+    resumo = resumir(perfil, (item.situacao for item in documentos_em_conta))
     ids_previstos = set(previstos)
-    fora_do_id = (
+    documentos_fora_id = (
         Documento.objects.filter(contrato=contrato, emissoes__isnull=False)
         .exclude(pk__in=ids_previstos)
         .distinct()
-        .count()
     )
+    if filtros_selecionados:
+        fora_do_id = sum(
+            _corresponde_filtros(documento, filtros_selecionados)
+            for documento in documentos_fora_id
+        )
+    else:
+        fora_do_id = documentos_fora_id.count()
 
     caixas = perfil.codigo.campos
     if not caixas:
@@ -73,7 +102,7 @@ def carregar_painel(contrato, por=None):
     definicao_caixa = next(caixa for caixa in caixas if caixa.nome == caixa_selecionada)
 
     por_valor = {}
-    for item in documentos_painel:
+    for item in documentos_em_conta:
         bruto = _valor_caixa(item.documento, caixa_selecionada)
         valor = bruto or "(sem informação)"
         registro = por_valor.setdefault(
@@ -87,7 +116,11 @@ def carregar_painel(contrato, por=None):
         registro["situacoes"].append(item.situacao)
 
     recortes = []
-    grupos_recorte = (*perfil.painel.grupos, resumo.grupos[-1])
+    grupos_recorte = tuple(
+        grupo
+        for grupo in resumo.grupos
+        if grupo.id == "nao_mapeado" or grupo.conta_no_avanco
+    )
     for registro in sorted(por_valor.values(), key=lambda linha: linha["rotulo"].casefold()):
         subtotal = resumir(perfil, registro["situacoes"])
         recortes.append(
@@ -114,7 +147,13 @@ def carregar_painel(contrato, por=None):
         "contrato": contrato,
         "perfil": perfil,
         "resumo": resumo,
-        "total_documentos_previstos": len(documentos_painel),
+        "total_documentos_previstos": resumo.total_previsto,
+        "total_documentos_id": len(documentos_filtrados),
+        "fora_do_painel": [
+            {"grupo": grupos_fora_painel[identificador], "quantidade": quantidade}
+            for identificador, quantidade in contagens_fora_painel.items()
+            if quantidade
+        ],
         "fora_do_id": fora_do_id,
         "ultima_situacao_pw": ultima_situacao.data_extracao if ultima_situacao else None,
         "ultima_importacao_id": timezone.localtime(ultima_importacao_id.importado_em).date()
@@ -123,9 +162,73 @@ def carregar_painel(contrato, por=None):
         "caixas": caixas,
         "por": caixa_selecionada,
         "rotulo_caixa": definicao_caixa.rotulo,
+        "filtros": filtros_disponiveis,
+        "filtros_ativos": filtros_ativos,
+        "quantidade_filtros_ativos": sum(len(item["valores"]) for item in filtros_ativos),
         "recortes": recortes,
         "grupos_recorte": grupos_recorte,
     }
+
+
+def _filtros_disponiveis(caixas, documentos):
+    filtros = []
+    for caixa in caixas:
+        valores_cadastrados = caixa.valores or {}
+        if not valores_cadastrados:
+            continue
+        valores_presentes = {
+            _valor_caixa(item.documento, caixa.nome)
+            for item in documentos
+            if _valor_caixa(item.documento, caixa.nome) in valores_cadastrados
+        }
+        opcoes = [
+            {
+                "valor": valor,
+                "rotulo": f"{valor} – {rotulo}" if rotulo and rotulo != valor else valor,
+            }
+            for valor, rotulo in valores_cadastrados.items()
+            if str(valor) in valores_presentes
+        ]
+        if opcoes:
+            filtros.append({"nome": caixa.nome, "rotulo": caixa.rotulo, "opcoes": opcoes})
+    return filtros
+
+
+def _normalizar_filtros(filtros, filtros_disponiveis):
+    selecionados = {}
+    for filtro in filtros_disponiveis:
+        if hasattr(filtros, "getlist"):
+            solicitados = filtros.getlist(filtro["nome"])
+        elif isinstance(filtros, Mapping):
+            solicitados = filtros.get(filtro["nome"], [])
+        else:
+            solicitados = []
+        if isinstance(solicitados, str):
+            solicitados = [solicitados]
+        permitidos = {opcao["valor"] for opcao in filtro["opcoes"]}
+        valores = {str(valor) for valor in solicitados if str(valor) in permitidos}
+        if valores:
+            selecionados[filtro["nome"]] = valores
+    return selecionados
+
+
+def _resumir_filtros(filtros_disponiveis, selecionados):
+    ativos = []
+    for filtro in filtros_disponiveis:
+        valores = selecionados.get(filtro["nome"], set())
+        if not valores:
+            continue
+        rotulos = [
+            opcao["rotulo"] for opcao in filtro["opcoes"] if opcao["valor"] in valores
+        ]
+        ativos.append({"rotulo": filtro["rotulo"], "valores": rotulos})
+    return ativos
+
+
+def _corresponde_filtros(documento, filtros):
+    return all(
+        _valor_caixa(documento, nome) in valores for nome, valores in filtros.items()
+    )
 
 
 def _situacao_atual(documento):
