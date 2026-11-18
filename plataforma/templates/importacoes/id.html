@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}Importar ID{% endblock %}
+
+{% block content %}
+<section class="page-heading">
+  <div>
+    <span class="eyebrow">Importações</span>
+    <h1>Importar Índice de Documentos</h1>
+    <p>O formato é identificado pelos cabeçalhos. A prévia interpreta os códigos pelo perfil vigente do contrato.</p>
+  </div>
+</section>
+
+{% if messages %}
+  {% for message in messages %}<p class="notice notice-{{ message.tags }}">{{ message }}</p>{% endfor %}
+{% endif %}
+
+<section class="panel">
+  <h2>Arquivo e contrato</h2>
+  <form method="post" enctype="multipart/form-data" hx-post="{% url 'importar_id' %}" hx-target="#resultado-previa" hx-swap="innerHTML" hx-encoding="multipart/form-data">
+    {% csrf_token %}
+    <input type="hidden" name="acao" value="prever">
+    {{ form.as_p }}
+    <button class="button button-primary" type="submit">Gerar prévia</button>
+  </form>
+</section>
+
+<div id="resultado-previa">
+  {% include "importacoes/_resultado.html" %}
+</div>
+
+{% if indices %}
+<section class="panel">
+  <h2>Índices recentes</h2>
+  <div class="table-wrap">
+    <table><thead><tr><th>Contrato</th><th>Fonte</th><th>ID</th><th>Revisão</th><th>Importado em</th><th>Vigente</th></tr></thead>
+      <tbody>{% for indice in indices %}<tr><td>{{ indice.contrato.nome }}</td><td>{{ indice.get_fonte_display }}</td><td>{{ indice.codigo }}</td><td>{{ indice.revisao }}</td><td>{{ indice.importado_em }}</td><td>{% if indice.vigente %}Sim{% else %}Não{% endif %}</td></tr>{% endfor %}</tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

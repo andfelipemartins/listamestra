@@ -4,6 +4,7 @@ from django.contrib.auth import views as auth_views
 from django.urls import path
 
 from contas.views import InicioView
+from importacoes.views import ImportarIDView
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -17,5 +18,6 @@ urlpatterns = [
         login_required(auth_views.LogoutView.as_view()),
         name="logout",
     ),
+    path("importacoes/id/", ImportarIDView.as_view(), name="importar_id"),
     path("", InicioView.as_view(), name="inicio"),
 ]

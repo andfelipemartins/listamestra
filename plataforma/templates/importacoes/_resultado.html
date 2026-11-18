@@ -1,0 +1,42 @@
+{% if erro %}<p class="notice notice-error">{{ erro }}</p>{% endif %}
+{% if form.errors %}<div class="notice notice-error">{{ form.errors }}</div>{% endif %}
+{% if previa %}
+<section class="panel">
+  <div class="panel-heading">
+    <div><h2>Prévia: {{ previa.arquivo_nome }}</h2><p>Formato detectado: {{ previa.formato }} · ID {{ previa.codigo_indice }} · revisão {{ previa.revisao }}</p></div>
+  </div>
+  <div class="metric-grid">
+    {% for categoria, total in contagens %}
+    <article class="metric-card"><span>{{ categoria }}</span><strong>{{ total }}</strong></article>
+    {% endfor %}
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Linha</th><th>Categoria</th><th>Código</th><th>Título</th><th>Excluído</th><th>Caixa / detalhe</th></tr></thead>
+      <tbody>
+      {% for linha in previa.linhas %}
+        <tr>
+          <td>{{ linha.numero_linha }}</td>
+          <td>{{ linha.categoria_display }}</td>
+          <td>{{ linha.codigo }}</td>
+          <td>{{ linha.titulo }}</td>
+          <td>{% if linha.excluido %}Sim{% else %}Não{% endif %}</td>
+          <td>{% if linha.caixa_falhou %}<strong>{{ linha.caixa_falhou }}</strong>: {% endif %}{{ linha.mensagem }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="6">Nenhuma linha de documento encontrada.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if previa.contagens.codigos_invalidos or previa.contagens.linhas_ilegiveis %}
+    <p class="notice notice-error">Corrija os códigos inválidos e as linhas ilegíveis antes de confirmar.</p>
+  {% else %}
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="acao" value="confirmar">
+      <button class="button button-primary" type="submit">Confirmar importação</button>
+    </form>
+  {% endif %}
+</section>
+{% endif %}

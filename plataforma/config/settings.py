@@ -96,6 +96,7 @@ INSTALLED_APPS = [
     "contas.apps.ContasConfig",
     "contratos.apps.ContratosConfig",
     "documentos.apps.DocumentosConfig",
+    "importacoes.apps.ImportacoesConfig",
 ]
 
 MIDDLEWARE = [
