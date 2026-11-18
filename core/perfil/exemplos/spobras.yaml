@@ -1,0 +1,129 @@
+nome: SPObras
+versao: MP-SQ-SP-00-9R-001 rev. L
+vigencia_inicio: 2024-01-08
+codigo:
+  segmentos:
+    - nome: classificacao
+      rotulo: classificação
+      padrao_regex: "[A-Z]{2}"
+      valores:
+        ET: Especificação técnica
+        FO: Formulário Padrão
+        IP: Instrução de projeto
+        MP: Manual de padronização
+        NT: Nota técnica
+        PG: Plano Geral de Trabalho
+        PN: Planejamento ou plano
+        PP: Projeto padrão
+        PO: Procedimento Padrão
+        AB: As built
+        AE: Planta aeronáutica
+        CB: Planta Corpo de Bombeiros
+        CC: Caderneta de campo
+        CD: Cadastro individual de propriedades
+        DA: Documento para aprovação externa
+        DE: Desenho
+        DS: Planta DESAP
+        EM: Especificação de materiais e equipamentos
+        ES: Especificação de serviços
+        FP: Folha Padrão
+        FT: Foto de levantamento aerofotogramétrico
+        IC: Instrução complementar
+        ID: Índice de documentos
+        LM: Lista de materiais e equipamentos
+        LI: Lista mestra de documentos
+        LO: Livro de registro de obras
+        MB: Modelo BIM
+        MC: Memorial de cálculo
+        MD: Memorial descritivo
+        NS: Nota de serviço
+        NV: Nuvem de pontos
+        PL: Planilha de quantidades e serviços
+        RA: Relatório de análise
+        RC: Relatório de conflitos
+        RT: Relatório técnico
+        SL: Planta licenciamento
+        SP: Formato SP Obras
+        TC: Documentos de terceiros
+        TR: Termo de referência
+    - sep: "-"
+    - nome: programa
+      rotulo: programa/empreendimento
+      padrao_regex: "[A-Z0-9]{2}"
+    - sep: "-"
+    - nome: trecho
+      rotulo: trecho
+      padrao_regex: "[A-Z0-9]{2}"
+    - sep: "-"
+    - nome: subtrecho
+      rotulo: subtrecho
+      padrao_regex: "[A-Z0-9]{2}"
+    - sep: "-"
+    - nome: estagio
+      rotulo: estágio
+      padrao_regex: "\\d"
+      valores:
+        "0": Serviços Preliminares
+        "1": Estudo Preliminar
+        "2": Estudos de Viabilidade
+        "3": Estudo Funcional / Anteprojeto
+        "4": Projeto Básico
+        "5": Projeto Executivo (Detalhado)
+        "6": As Built
+        "7": Controle de Qualidade
+        "8": Serviços Complementares / Instruções de Serviços
+        "9": Manuais / Normas
+    - nome: classe
+      rotulo: classe de projeto
+      padrao_regex: "[A-Z]"
+      valores:
+        A: Arquitetura
+        B: Serviços Iniciais, Serviços, Estudos Gerais, Estudos, Análises Diversas, Gestão de Contratos e Administração
+        C: Estruturas de Concreto
+        D: Desapropriação e Cadastro
+        E: Sistemas Elétricos
+        F: Geometria
+        G: Geologia e Geotecnia
+        H: Hidrologia e Drenagem
+        I: Interferência e Cadastro
+        J: Compatibilização
+        K: Métodos Construtivos
+        L: Paisagismo
+        M: Estruturas Metálicas e de Madeira
+        N: Meio Ambiente
+        O: Comunicação Visual
+        P: Pavimentação
+        Q: Terraplenagem
+        R: Sistema de Gestão da Qualidade
+        S: Sinalização e Desvio de Tráfego
+        T: Topografia e Aerofotogrametria
+        U: Urbanismo / Uso e Ocupação do Solo
+        V: Vala Técnica, Projeto Aerodinâmico
+        W: Conservação / Manutenção
+        X: Impermeabilização
+        Y: Instalações
+        Z: Sistemas Mecânicos, Climatização, Exaustão
+    - sep: "-"
+    - nome: sequencial
+      rotulo: sequencial
+      padrao_regex: "\\d{3}"
+    - sep: "-"
+    - nome: revisao
+      rotulo: revisão
+      padrao_regex: "(?:[A-Z]|\\d+)"
+  revisao_no_codigo: true
+  segmento_revisao: revisao
+  segmentos_identidade: [classificacao, programa, trecho, subtrecho, estagio, classe, sequencial]
+emissao:
+  revisao:
+    preliminar: {serie: letras, inicio: A, continua_apos_aprovacao: true}
+    original: {serie: numerica, inicio: 1}
+    reabertura: {serie: letras, inicio: A, continua_apos_aprovacao: true}
+  versao: null
+analise:
+  inicial: EM_ANALISE
+  transicoes:
+    NAO_APROVADO: nova_revisao_preliminar
+    A_REVISAR: nova_revisao_preliminar
+    APROVADO: emitir_original
+    REABRIR: reabrir

@@ -123,7 +123,7 @@ Exemplo: `DE-15.25.00.00-6A1-1001`
 | SUBTRECHO | 00 | 2 dígitos |
 | UNIDADE | 00 | 2 dígitos |
 | ETAPA | 6 | 1 dígito |
-| CLASSE | A | 1 letra maiúscula (A–I) |
+| CLASSE | A | 1 letra maiúscula (tabela do MAN-10-201; códigos reais usam além de A–I, ex.: J, N, P) |
 | SUBCLASSE | 1 | 1–2 dígitos |
 | SEQUENCIAL | 1001 | 4 dígitos |
 

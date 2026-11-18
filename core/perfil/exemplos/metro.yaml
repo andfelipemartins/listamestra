@@ -1,0 +1,109 @@
+nome: Metrô SP — Linha 15
+versao: "MAN-10-201 rev. 04 + MAN-10-207 rev. 00"
+vigencia_inicio: 2026-11-18
+codigo:
+  segmentos:
+    - nome: tipo
+      rotulo: tipo documental
+      padrao_regex: "[A-Z]{2,4}"
+      valores:
+        DE: Desenho
+        MC: Memorial de Cálculo
+        MD: Memorial Descritivo
+        RT: Relatório Técnico
+        ID: Índice de Documentos
+        IC: Instrução de Serviço
+        PE: Procedimento Específico
+        MQ: Manual da Qualidade / Plano de Gestão
+        LM: Lista de Materiais
+        NS: Notas de Serviço
+        TC: Tabela de Coordenadas
+    - sep: "-"
+    - nome: linha
+      rotulo: linha
+      padrao_regex: "\\d{2}"
+      valores:
+        "15": Linha 15
+    - sep: "."
+    - nome: trecho
+      rotulo: trecho
+      padrao_regex: "\\d{2}"
+      valores:
+        "19": Oratório
+        "23": São Mateus
+        "25": Ragueb Chohfi
+        "00": Geral / Linha
+    - sep: "."
+    - nome: subtrecho
+      rotulo: subtrecho
+      padrao_regex: "\\d{2}"
+    - sep: "."
+    - nome: unidade
+      rotulo: unidade
+      padrao_regex: "\\d{2}"
+    - sep: "-"
+    - nome: etapa
+      rotulo: etapa
+      padrao_regex: "[0-9LA]"
+      valores:
+        "0": Projeto Funcional / Anteprojeto / Diretrizes Técnicas – Metrô
+        "1": Estudos Preliminares – Metrô
+        "2": Estudos Preliminares – Contratadas
+        "3": Projeto Básico – Metrô
+        "4": Projeto Básico – Contratadas
+        "5": Projeto Executivo – Metrô
+        "6": Projeto Executivo – Contratadas
+        "7": Documentos com Finalidade de Manutenção
+        "8": Projeto Funcional / Anteprojeto – Contratadas
+        "9": Documentos com Finalidade de Operação
+        L: Documentos com Finalidade de Logística
+        A: Documentos com Finalidade Técnica das Áreas Administrativas
+    - nome: classe
+      rotulo: classe
+      padrao_regex: "[A-Z]"
+      valores:
+        A: Geral
+        B: Arquitetura
+        C: Serviços Iniciais
+        D: Interferências
+        E: Desapropriações
+        F: Sistema Viário
+        G: Movimento de Terra
+        H: Sistemas de Contenção
+        I: Infraestrutura e Monitoramento
+        J: Concreto
+        K: Estruturas Metálicas
+        L: Outras Estruturas
+        M: Impermeabilização
+        N: Reurbanização
+        P: Instalações Elétricas
+        S: Instalações Hidráulicas ou de Gás
+        U: Via Permanente
+        V: Planejamento de Transporte
+        W: Serviços de Investigações Geotécnicas
+        Y: Serviços de Investigações Ambientais
+        Z: Geral de Instalações
+    - nome: subclasse
+      rotulo: subclasse
+      padrao_regex: "\\d"
+    - sep: "-"
+    - nome: sequencial
+      rotulo: sequencial
+      padrao_regex: "\\d{4}"
+  segmentos_identidade: [tipo, linha, trecho, subtrecho, unidade, etapa, classe, subclasse, sequencial]
+  revisao_no_codigo: false
+emissao:
+  revisao:
+    preliminar: {serie: numerica, inicio: 1}
+    original: {serie: zero_depois_letras, proibidas: [O]}
+    reabertura: {serie: letra_mais_numero, inicio: A, proibidas: [O]}
+  versao: {serie: numerica, inicio: 1}
+analise:
+  inicial: EM_ANALISE
+  transicoes:
+    NAO_CONFORME: nova_versao
+    INCONSISTENTE: {acao: nova_versao, bloqueia_medicao: true}
+    NAO_APROVADO: nova_revisao_preliminar
+    APROVADO: emitir_original
+    REABRIR: reabrir
+    CANCELADO: fim_de_linha

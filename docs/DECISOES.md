@@ -253,3 +253,93 @@ depende do estudo `docs/estudos/G4-armazenamento-de-arquivos.md`.
 A memória da esteira (`cognitive_arch_V2/`) tem um repositório privado próprio no GitHub
 (`sclme-cognitive-arch`), com push automático a cada fechamento de Block. O código do produto
 continua com push só pelo dono (D-012).
+
+## D-020 · Stack: Django + PostgreSQL + HTMX, migração por etapas
+
+*Origem: I3 · 2026-11-18 · aprova a ADR 0005*
+
+A plataforma da equipe passa a ser construída em Django + PostgreSQL + HTMX, no diretório
+`plataforma/`. O Streamlit continua funcionando até a paridade. As regras puras de `core/`
+(motores de status, pendências e perfil de contrato) são reaproveitadas. O próximo Marco é a
+**Fundação Django**. A Lista Mestra definitiva e o perfil configurável já nascem nela.
+
+## D-021 · Marco 11 aprovado com ajustes; papel da Central de Pendências
+
+*Origem: J1 · 2026-11-18*
+
+- Ajuste pedido: o filtro por tipo "não faz nada". A causa era que os cards de resumo ignoravam
+  os filtros e a lista ficava em seções fechadas. A correção é o block-013.
+- Esclarecimento: a Central de Pendências **não é** o painel "olho de Deus" (esse é o painel de
+  acompanhamento com PIN, D-015). Ela é o **controle de consistência interno** de quem opera a
+  ferramenta: o motor automático detecta sozinho o que está faltando ou divergente, e o ideal é
+  zero. O dono espera que a plataforma recalcule tudo assim que um dado entra, como o botão
+  "atualizar" do macro, só que automático.
+
+## D-022 · A planilha com macro é referência, não modelo
+
+*Origem: I2 · 2026-11-18 · planilha em `entrada/`, módulos .bas anexados*
+
+A planilha `Lista Mestra de Projetos Executivos - Macro.xlsm` mostra o tipo de informação
+documental (colunas e abas) que o dono quer, mas **não deve ser copiada**. Ela tem gambiarras
+que a plataforma precisa eliminar. Exemplo: é preciso deixar uma linha de revisão "prevista"
+para um documento reprovado antes de a revisão chegar, só para o macro funcionar. Na
+plataforma, a próxima revisão esperada é deduzida pelo ciclo de análise do perfil, sem linha
+fictícia.
+
+## D-023 · Correspondência de códigos entre perfis (Metrô × SPObras)
+
+*Origem: I4 · 2026-11-18 · tabela de equivalência colada pelo dono*
+
+O mesmo documento pode ter um código em cada padrão. Exemplo:
+`DE-15.25.00.00-6B7-1501` (Metrô, sem revisão no código; a emissão inicial é Rev 1) equivale a
+`DE-CC-EE-WW-5E-001-A` (SPObras, com a revisão A no código).
+
+A tabela mostra que a correspondência **não sai de uma fórmula**:
+- a classe/subclasse do Metrô vira outra classe na SPObras (B7 e P7 → E, C1 → T, D1 e D2 → I,
+  F6 → S, G6 → Q, J1 a J3 → C, N3 → L…);
+- o sequencial é renumerado por classe da SPObras (D2-1501 vira I-021);
+- alguns tipos mudam (TC → CC).
+
+> **Revista pela D-024.** A conclusão original era guardar a correspondência como dado (um
+> documento com códigos de mais de um perfil). O dono recusou: a tabela serviu só para estudo.
+
+## D-024 · O perfil são "caixas" com nome; nada de correspondência entre órgãos
+
+*Origem: K1 · 2026-11-18*
+
+- Analogia do dono: o código é uma fila de **caixas** (lacunas). No início do contrato, o admin
+  diz quantas caixas existem, o que é cada uma (tipo, local, classe, sequencial, **revisão**…) e os
+  valores válidos. O motor (quem carrega as caixas) é sempre o mesmo e funciona para qualquer
+  conteúdo e qualquer número de caixas. Quando sobe uma revisão, o motor sabe pela configuração
+  qual caixa mudar e como (regra do manual daquele contrato).
+- **Não guardar correspondência de códigos entre órgãos/perfis.** Metrô × SPObras foi material
+  de aprendizado para desenhar o motor, e não é um recurso.
+- Caso real que motivou a tabela: no contrato com o Metrô, os projetos vão para a SPObras
+  executar. O Metrô quer o nome do `.dwg` no código Metrô (para o PW), e o PDF sai com o
+  carimbo e o código da SPObras. Por enquanto isso fica fora da plataforma.
+- Consequência: o modelo `CodigoDocumento` com vários códigos por documento (block-015) é
+  simplificado para um código por documento no perfil do contrato.
+
+## D-025 · Resultado da análise vem do relatório exportado do PW
+
+*Origem: K2 · 2026-11-18 · extração em `entrada/data.xlsx` (fora do Git)*
+
+O resultado da análise do cliente é importado do relatório exportado do ProjectWise, com
+prévia antes de gravar. Isso adianta o Marco 15. A extração tem 19 colunas, entre elas as
+partes do código separadas, revisão, versão, `Current State Name`, datas de emissão e resposta, título,
+nome do arquivo e o **Histórico do Workflow** (todas as passagens com data, como
+`(1.1) Em Análise`), com o qual dá para remontar a linha do tempo inteira. Estados vistos:
+Em Desenvolvimento, Em Análise, Para Aprovação, Em coleta de Assinaturas, Aprovado, Não
+Aprovado, Não Conforme, Inconsistente, Erro de Assinatura, Cancelado, Revisão Superada.
+
+## D-026 · Painel da chefia: começar pelo status, com o vocabulário do PW
+
+*Origem: K3 · 2026-11-18*
+
+- Primeira versão: o escopo (o que precisa ser emitido, ou seja, o ID) contrastado com quantos
+  foram emitidos, quantos estão em análise, não aprovados e aprovados. Gráfico de pizza e de
+  barras de progressão.
+- Usar **os nomes do PW/Metrô** ("Não Aprovado", e não "Reprovado"), porque é o padrão que o
+  mercado já conhece.
+- Histograma × cronograma (onde deveríamos estar e onde estamos, pelas datas previstas no ID):
+  fica para depois, com exemplos reais do dono. Ir passo a passo.
