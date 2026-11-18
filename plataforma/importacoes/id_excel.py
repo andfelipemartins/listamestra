@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import date
+from dataclasses import dataclass, replace
+from datetime import date, datetime
 from pathlib import Path
 from typing import BinaryIO, Iterable
 import re
@@ -81,6 +81,7 @@ class LinhaPrevia:
     campo_falhou: str = ""
     caixa_falhou: str = ""
     mensagem: str = ""
+    dados_linha: dict | None = None
 
     @property
     def categoria_display(self):
@@ -166,17 +167,21 @@ def gerar_previa_id(
             }
             if all(_vazio(valor) for valor in dados.values()):
                 continue
-            linhas.append(
-                _classificar_linha(
-                    numero_linha=numero_linha,
-                    dados=dados,
-                    formato=formato,
-                    indices=indices,
-                    perfil=perfil,
-                    existentes=existentes,
-                    formato_id=formato_id,
-                )
+            linha = _classificar_linha(
+                numero_linha=numero_linha,
+                dados=dados,
+                formato=formato,
+                indices=indices,
+                perfil=perfil,
+                existentes=existentes,
+                formato_id=formato_id,
             )
+            dados_linha = {
+                nome: _valor_json(dados[_normalizar_cabecalho(nome)])
+                for nome in campos_relevantes
+                if _normalizar_cabecalho(nome) in indices
+            }
+            linhas.append(replace(linha, dados_linha=dados_linha))
             item = linhas[-1]
             if item.identificador_base:
                 existentes.setdefault(item.identificador_base, item.titulo)
@@ -208,6 +213,60 @@ def gerar_previa_id(
         raise ErroFormatoID(f"Não foi possível ler o arquivo Excel: {erro}") from erro
     finally:
         workbook.close()
+
+
+def gerar_previa_linhas_recusadas(
+    inconsistencias,
+    *,
+    contrato_id: int,
+    perfil_id: int,
+    perfil: PerfilContrato,
+    documentos_existentes: Iterable[tuple[str, str]] = (),
+) -> PreviaID:
+    """Reinterpreta linhas persistidas sem abrir novamente o arquivo de origem."""
+    inconsistencias = list(inconsistencias)
+    if not inconsistencias:
+        raise ErroFormatoID("Esta importação não tem linhas recusadas para reprocessar.")
+    importacao = inconsistencias[0].importacao_id
+    if importacao is None or any(item.importacao_id_id != importacao.pk for item in inconsistencias):
+        raise ErroFormatoID("As linhas precisam pertencer à mesma importação de ID.")
+    indice = importacao.indice
+    formato_id = indice.fonte
+    if formato_id not in FORMATOS_ID:
+        raise ErroFormatoID("A fonte da importação não corresponde a um formato conhecido de ID.")
+
+    existentes = {identificador: titulo for identificador, titulo in documentos_existentes}
+    linhas = []
+    for inconsistencia in inconsistencias:
+        dados_linha = inconsistencia.dados_linha or {}
+        dados = {
+            _normalizar_cabecalho(nome): valor
+            for nome, valor in dados_linha.items()
+        }
+        indices = {nome: posicao for posicao, nome in enumerate(dados)}
+        linha = _classificar_linha(
+            numero_linha=inconsistencia.numero_linha,
+            dados=dados,
+            formato=FORMATOS_ID[formato_id],
+            indices=indices,
+            perfil=perfil,
+            existentes=existentes,
+            formato_id=formato_id,
+        )
+        linhas.append(replace(linha, dados_linha=dados_linha))
+        if linha.identificador_base:
+            existentes.setdefault(linha.identificador_base, linha.titulo)
+
+    return PreviaID(
+        contrato_id=contrato_id,
+        perfil_id=perfil_id,
+        fonte=indice.fonte,
+        codigo_indice=indice.codigo,
+        revisao=indice.revisao,
+        arquivo_nome=indice.arquivo_nome,
+        formato=formato_id,
+        linhas=tuple(linhas),
+    )
 
 
 def _detectar_formato(workbook):
@@ -390,6 +449,14 @@ def _valor_coluna(valores, indices, cabecalho):
     indice = indices.get(_normalizar_cabecalho(cabecalho))
     celula = valores.get(indice) if indice is not None else None
     return celula.value if celula is not None else None
+
+
+def _valor_json(valor):
+    if isinstance(valor, (date, datetime)):
+        return valor.isoformat()
+    if valor is None or isinstance(valor, (str, int, float, bool)):
+        return valor
+    return str(valor)
 
 
 def _intervalos_contiguos(colunas):

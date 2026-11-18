@@ -1,17 +1,19 @@
 from datetime import date, datetime
 from io import BytesIO
 from pathlib import Path
+from copy import deepcopy
 
 import pytest
 import yaml
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
+from django.utils import timezone
 from openpyxl import Workbook
 
 from core.perfil import perfil_de_dict
-from contratos.models import Contrato, PerfilContrato
-from documentos.models import Documento
-from importacoes.id_excel import FORMATOS_ID, gerar_previa_id
+from contratos.models import Contrato, Participacao, PerfilContrato
+from documentos.models import CodigoDocumento, Documento
+from importacoes.id_excel import FORMATOS_ID, gerar_previa_id, gerar_previa_linhas_recusadas
 from importacoes.models import InconsistenciaImportacao, ImportacaoID, IndiceDocumentos, ItemPrevisto
 from importacoes.services import aplicar_previa, previstos_vigentes
 
@@ -246,6 +248,163 @@ def test_importa_linhas_validas_e_registra_invalidas_sem_bloquear(contrato, perf
     assert inconsistencia.numero_linha == 3
     assert inconsistencia.codigo_lido == "DE-15.25.00.00-6A1-10X2"
     assert inconsistencia.caixa_falhou == "sequencial"
+    assert any(valor == previa.linhas[1].titulo for valor in inconsistencia.dados_linha.values())
+    assert not any("Assinador" in nome for nome in inconsistencia.dados_linha)
+    assert "DADO PESSOAL SINTÃ‰TICO" not in str(inconsistencia.dados_linha)
+
+
+@pytest.mark.django_db
+def test_recusas_ficam_agrupadas_por_caixa_e_valor_e_exigem_acesso(contrato, perfil_modelo, client, django_user_model):
+    previa = previa_para(
+        criar_excel_id(
+            [
+                {"titulo": "Documento A7 um", "classe": "A7", "sequencial": "1001", "codigo": "DE-15.25.00.00-6A7-1001"},
+                {"titulo": "Documento A7 dois", "classe": "A7", "sequencial": "1002", "codigo": "DE-15.25.00.00-6A7-1002"},
+                {"titulo": "", "sequencial": "1003", "codigo": "DE-15.25.00.00-6A1-1003"},
+            ]
+        ),
+        contrato,
+        perfil_modelo,
+        codigo="ID-RECUSAS",
+    )
+    indice = aplicar_previa(previa, contrato=contrato, perfil_modelo=perfil_modelo)
+    administrador = django_user_model.objects.create_superuser(
+        username="admin-recusadas",
+        email="admin-recusadas@example.com",
+        password="senha-segura",
+    )
+    client.force_login(administrador)
+
+    resposta = client.get(reverse("linhas_recusadas", args=(contrato.pk,)))
+
+    assert resposta.status_code == 200
+    html = resposta.content.decode()
+    assert "classe e subclasse = A7 — 2 linhas" in html
+    assert "Linha ilegível — 1 linha" in html
+    assert "ID-RECUSAS" in html
+    assert "importada em" in html
+
+    sem_acesso = django_user_model.objects.create_user(username="sem-acesso", password="senha")
+    Participacao.objects.create(usuario=sem_acesso, contrato=contrato, papel="equipe")
+    client.force_login(sem_acesso)
+    assert client.get(reverse("linhas_recusadas", args=(contrato.pk,))).status_code == 403
+
+    admin_contrato = django_user_model.objects.create_user(username="admin-contrato", password="senha")
+    Participacao.objects.create(usuario=admin_contrato, contrato=contrato, papel="admin")
+    client.force_login(admin_contrato)
+    assert client.get(reverse("linhas_recusadas", args=(contrato.pk,))).status_code == 200
+
+
+@pytest.mark.django_db
+def test_reprocessa_com_perfil_vigente_e_permanece_idempotente(contrato, perfil_modelo):
+    previa_inicial = previa_para(
+        criar_excel_id(
+            [{"titulo": "Documento A7 recuperado", "classe": "A7", "sequencial": "1001", "codigo": "DE-15.25.00.00-6A7-1001"}]
+        ),
+        contrato,
+        perfil_modelo,
+        codigo="ID-REPROCESSAR",
+    )
+    indice = aplicar_previa(previa_inicial, contrato=contrato, perfil_modelo=perfil_modelo)
+    importacao = ImportacaoID.objects.get(indice=indice)
+    inconsistencia = InconsistenciaImportacao.objects.get(importacao_id=importacao)
+
+    definicao_v2 = deepcopy(perfil_modelo.definicao)
+    campo_classe = next(
+        campo
+        for campo in definicao_v2["codigo"]["segmentos"]
+        if campo.get("nome") == "classe"
+    )
+    campo_classe["valores"]["A7"] = "Classe cadastrada para reprocessamento"
+    perfil_v2 = PerfilContrato.objects.create(
+        contrato=contrato,
+        versao=2,
+        vigencia_inicio=timezone.localdate(),
+        definicao=definicao_v2,
+    )
+    previa_reprocessada = gerar_previa_linhas_recusadas(
+        [inconsistencia],
+        contrato_id=contrato.pk,
+        perfil_id=perfil_v2.pk,
+        perfil=perfil_de_dict(perfil_v2.definicao),
+        documentos_existentes=[],
+    )
+    assert previa_reprocessada.linhas_validas == 1
+    assert previa_reprocessada.linhas_fora == 0
+
+    aplicar_previa(
+        previa_reprocessada,
+        contrato=contrato,
+        perfil_modelo=perfil_v2,
+        inconsistencias_existentes=[inconsistencia],
+    )
+    inconsistencia.refresh_from_db()
+    primeira_resolucao = inconsistencia.resolvida_em
+    aplicar_previa(
+        previa_reprocessada,
+        contrato=contrato,
+        perfil_modelo=perfil_v2,
+        inconsistencias_existentes=[inconsistencia],
+    )
+
+    assert primeira_resolucao is not None
+    inconsistencia.refresh_from_db()
+    assert inconsistencia.resolvida_em == primeira_resolucao
+    assert ImportacaoID.objects.count() == 1
+    assert IndiceDocumentos.objects.get(pk=indice.pk).pk == indice.pk
+    assert ItemPrevisto.objects.filter(indice=indice).count() == 1
+    documento = Documento.objects.get(contrato=contrato)
+    assert documento.titulo == "Documento A7 recuperado"
+    assert CodigoDocumento.objects.get(documento=documento, perfil=perfil_v2).codigo == "DE-15.25.00.00-6A7-1001"
+
+
+@pytest.mark.django_db
+def test_tela_previsualiza_e_confirma_reprocessamento(client, contrato, perfil_modelo, django_user_model):
+    previa_inicial = previa_para(
+        criar_excel_id(
+            [{"titulo": "Documento A7 da tela", "classe": "A7", "sequencial": "1001", "codigo": "DE-15.25.00.00-6A7-1001"}]
+        ),
+        contrato,
+        perfil_modelo,
+        codigo="ID-TELA-RECUSADAS",
+    )
+    indice = aplicar_previa(previa_inicial, contrato=contrato, perfil_modelo=perfil_modelo)
+    importacao = ImportacaoID.objects.get(indice=indice)
+    incidencia = InconsistenciaImportacao.objects.get(importacao_id=importacao)
+    definicao_v2 = deepcopy(perfil_modelo.definicao)
+    campo_classe = next(
+        campo
+        for campo in definicao_v2["codigo"]["segmentos"]
+        if campo.get("nome") == "classe"
+    )
+    campo_classe["valores"]["A7"] = "Classe cadastrada para reprocessamento"
+    PerfilContrato.objects.create(
+        contrato=contrato,
+        versao=2,
+        vigencia_inicio=timezone.localdate(),
+        definicao=definicao_v2,
+    )
+    admin = django_user_model.objects.create_user(username="admin-reprocessa-ui", password="senha")
+    Participacao.objects.create(usuario=admin, contrato=contrato, papel="admin")
+    client.force_login(admin)
+    url = reverse("linhas_recusadas", args=(contrato.pk,))
+
+    previa_resposta = client.post(
+        url,
+        {"acao": "prever_reprocessamento", "importacao_id": importacao.pk},
+    )
+
+    assert previa_resposta.status_code == 200
+    assert "1 agora são válidas" in previa_resposta.content.decode()
+    assert not Documento.objects.filter(contrato=contrato).exists()
+
+    resposta = client.post(url, {"acao": "confirmar_reprocessamento"}, follow=True)
+
+    assert resposta.status_code == 200
+    assert "1 linhas reprocessadas" in resposta.content.decode()
+    incidencia.refresh_from_db()
+    assert incidencia.resolvida_em is not None
+    assert ItemPrevisto.objects.filter(indice=indice).count() == 1
 
 
 @pytest.mark.django_db

@@ -32,6 +32,7 @@
 
 {% if indices %}
 <section class="panel">
+  <p>Linhas recusadas por contrato: {% for indice in indices %}{% if not forloop.first %} · {% endif %}<a href="{% url 'linhas_recusadas' indice.contrato_id %}">{{ indice.contrato.codigo_interno }}</a>{% endfor %}</p>
   <h2>Índices recentes</h2>
   <div class="table-wrap">
     <table><thead><tr><th>Contrato</th><th>Fonte</th><th>ID</th><th>Revisão</th><th>Importado em</th><th>Vigente</th></tr></thead>

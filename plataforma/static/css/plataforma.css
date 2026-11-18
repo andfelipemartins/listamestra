@@ -96,6 +96,9 @@ h1 { margin: 9px 0 8px; font-size: clamp(25px, 3vw, 32px); font-weight: 650; let
 .painel-filtros-acoes .button-primary { min-height: 38px; margin-top: 0; padding: 0 14px; }
 .painel-filtros-acoes .button-quiet { min-height: 38px; display: inline-flex; align-items: center; }
 .painel-filtros-resumo { margin: -4px 0 14px; color: #536477; font-size: 11px; line-height: 1.6; }
+.painel-recusa-aviso { margin: -4px 0 14px; padding: 8px 11px; background: #f7fafc; color: #536477; font-size: 11px; }
+.recusadas-grupo { margin-top: 12px; padding: 11px 13px; border: 1px solid var(--line); border-radius: 8px; background: #fbfcfd; }
+.recusadas-grupo > summary { color: #46596c; cursor: pointer; font-size: 12px; font-weight: 650; }
 .painel-grupos { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 12px; }
 .painel-grupo-card { min-height: 137px; display: flex; flex-direction: column; gap: 11px; padding: 18px; border: 1px solid var(--line); border-top: 4px solid var(--grupo-cor); border-radius: 11px; background: var(--paper); box-shadow: 0 2px 8px #1b2b3d05; }
 .painel-grupo-label { min-height: 28px; color: #536477; font-size: 11px; font-weight: 750; letter-spacing: .035em; }

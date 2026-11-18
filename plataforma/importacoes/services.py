@@ -14,8 +14,17 @@ class ErroAplicacaoID(ValueError):
 
 
 @transaction.atomic
-def aplicar_previa(previa: PreviaID, *, contrato, perfil_modelo, usuario=None):
+def aplicar_previa(
+    previa: PreviaID,
+    *,
+    contrato,
+    perfil_modelo,
+    usuario=None,
+    inconsistencias_existentes=None,
+):
     """Aplica uma prévia validada de forma atômica e idempotente."""
+    reprocessamento = inconsistencias_existentes is not None
+    inconsistencias_existentes = list(inconsistencias_existentes or ())
     if previa.contrato_id != contrato.pk or perfil_modelo.contrato_id != contrato.pk:
         raise ErroAplicacaoID("A prévia, o perfil e o contrato precisam ser os mesmos.")
     if previa.perfil_id != perfil_modelo.pk:
@@ -40,6 +49,16 @@ def aplicar_previa(previa: PreviaID, *, contrato, perfil_modelo, usuario=None):
     }
     indice = IndiceDocumentos.objects.filter(**chave).first()
     agora = timezone.now()
+    if reprocessamento:
+        if not inconsistencias_existentes or indice is None:
+            raise ErroAplicacaoID("A importação original não está disponível para reprocessamento.")
+        if any(
+            inconsistencia.importacao_id_id is None
+            or inconsistencia.importacao_id.indice_id != indice.pk
+            or inconsistencia.importacao_id.contrato_id != contrato.pk
+            for inconsistencia in inconsistencias_existentes
+        ):
+            raise ErroAplicacaoID("As linhas recusadas não pertencem ao índice desta prévia.")
     if indice is None:
         if not problemáticas:
             anteriores = IndiceDocumentos.objects.filter(
@@ -60,7 +79,7 @@ def aplicar_previa(previa: PreviaID, *, contrato, perfil_modelo, usuario=None):
         )
         indice._history_user = usuario
         indice.save()
-    else:
+    elif not reprocessamento:
         campos_alterados = []
         if indice.arquivo_nome != previa.arquivo_nome:
             indice.arquivo_nome = previa.arquivo_nome
@@ -87,22 +106,26 @@ def aplicar_previa(previa: PreviaID, *, contrato, perfil_modelo, usuario=None):
                 indice._history_user = usuario
                 indice.save(update_fields=("vigente",))
 
-    importacao = ImportacaoID.objects.create(
-        contrato=contrato,
-        indice=indice,
-        arquivo_nome=previa.arquivo_nome,
-        importado_por=usuario,
-        linhas_validas=len(linhas_validas),
-        linhas_invalidas=len(problemáticas),
-    )
-    for linha in problemáticas:
-        InconsistenciaImportacao.objects.create(
-            importacao_id=importacao,
-            numero_linha=linha.numero_linha,
-            codigo_lido=linha.codigo,
-            caixa_falhou=linha.caixa_falhou or linha.campo_falhou,
-            mensagem=linha.mensagem or "Linha não importada por ser inválida.",
+    if not reprocessamento:
+        importacao = ImportacaoID.objects.create(
+            contrato=contrato,
+            indice=indice,
+            arquivo_nome=previa.arquivo_nome,
+            importado_por=usuario,
+            linhas_validas=len(linhas_validas),
+            linhas_invalidas=len(problemáticas),
         )
+        for linha in problemáticas:
+            InconsistenciaImportacao.objects.create(
+                importacao_id=importacao,
+                numero_linha=linha.numero_linha,
+                codigo_lido=linha.codigo,
+                categoria=linha.categoria,
+                campo_falhou=linha.campo_falhou,
+                caixa_falhou=linha.caixa_falhou or linha.campo_falhou,
+                mensagem=linha.mensagem or "Linha não importada por ser inválida.",
+                dados_linha=linha.dados_linha or {},
+            )
 
     documentos_incluidos = set()
     for linha in linhas_validas:
@@ -180,7 +203,13 @@ def aplicar_previa(previa: PreviaID, *, contrato, perfil_modelo, usuario=None):
             item.save(update_fields=("titulo", "excluido"))
         documentos_incluidos.add(documento.pk)
 
-    if not problemáticas:
+    if reprocessamento:
+        numeros_validos = {linha.numero_linha for linha in linhas_validas}
+        for inconsistencia in inconsistencias_existentes:
+            if inconsistencia.numero_linha in numeros_validos and inconsistencia.resolvida_em is None:
+                inconsistencia.resolvida_em = agora
+                inconsistencia.save(update_fields=("resolvida_em",))
+    elif not problemáticas:
         itens_removidos = indice.itens.exclude(documento_id__in=documentos_incluidos).select_related("documento")
         for item in itens_removidos:
             item._history_user = usuario

@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}Linhas recusadas · {{ contrato.codigo_interno }}{% endblock %}
+
+{% block content %}
+<section class="page-heading">
+  <div>
+    <span class="eyebrow">Importações · {{ contrato.codigo_interno }}</span>
+    <h1>Linhas recusadas</h1>
+    <p>{{ total_recusadas }} linha{{ total_recusadas|pluralize }} aguardando correção ou reprocessamento.</p>
+    {% if user.is_staff %}<p><a href="{% url 'importar_id' %}">Importar outro ID</a></p>{% endif %}
+  </div>
+</section>
+
+{% if messages %}
+  {% for message in messages %}<p class="notice notice-{{ message.tags }}">{{ message }}</p>{% endfor %}
+{% endif %}
+
+{% if previa %}
+<section class="panel" id="previa-reprocessamento">
+  <div class="panel-heading">
+    <div>
+      <span class="eyebrow">Prévia · {{ importacao_previa.indice.codigo }}</span>
+      <h2>Reprocessar com o perfil vigente</h2>
+      <p>{{ previa.arquivo_nome }} · {{ previa.linhas|length }} linhas recusadas reavaliadas</p>
+    </div>
+  </div>
+  <p><strong>{{ linhas_validas }} agora são válidas</strong>; {{ linhas_fora }} continuam recusadas.</p>
+  {% if previa.linhas %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Linha</th><th>Código</th><th>Resultado</th><th>Mensagem</th></tr></thead>
+      <tbody>
+        {% for linha in previa.linhas %}
+        <tr>
+          <td>{{ linha.numero_linha }}</td>
+          <td>{{ linha.codigo|default:"—" }}</td>
+          <td>{% if linha.identificador_base %}Válida{% else %}Recusada{% endif %}</td>
+          <td>{{ linha.mensagem|default:"Pronta para importar." }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="acao" value="confirmar_reprocessamento">
+    <button class="button button-primary" type="submit" {% if not linhas_validas %}disabled{% endif %}>Confirmar reprocessamento</button>
+  </form>
+</section>
+{% endif %}
+
+{% for item in importacoes %}
+<section class="panel">
+  <div class="panel-heading">
+    <div>
+      <span class="eyebrow">{{ item.importacao.indice.get_fonte_display }}</span>
+      <h2>{{ item.importacao.indice.codigo }} · revisão {{ item.importacao.indice.revisao }}</h2>
+      <p>{{ item.importacao.arquivo_nome }} · importada em {{ item.importacao.importado_em|date:"d/m/Y H:i" }}</p>
+    </div>
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="acao" value="prever_reprocessamento">
+      <input type="hidden" name="importacao_id" value="{{ item.importacao.pk }}">
+      <button class="button button-primary" type="submit">Reprocessar com o perfil vigente</button>
+    </form>
+  </div>
+  <p>{{ item.inconsistencias|length }} linha{{ item.inconsistencias|length|pluralize }} recusada{{ item.inconsistencias|length|pluralize }}.</p>
+  {% for grupo in item.grupos %}
+  <details class="recusadas-grupo">
+    <summary>{{ grupo.motivo }} — {{ grupo.linhas|length }} linha{{ grupo.linhas|length|pluralize }}</summary>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Linha</th><th>Código lido</th><th>Mensagem</th></tr></thead>
+        <tbody>
+          {% for linha in grupo.linhas %}
+          <tr><td>{{ linha.numero_linha }}</td><td>{{ linha.codigo_lido|default:"—" }}</td><td>{{ linha.mensagem }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
+  {% endfor %}
+</section>
+{% empty %}
+  {% if not previa %}<section class="panel"><p class="painel-sem-dados">Não há linhas recusadas pendentes neste contrato.</p></section>{% endif %}
+{% endfor %}
+{% endblock %}

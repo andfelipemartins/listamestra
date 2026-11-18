@@ -169,8 +169,12 @@ class InconsistenciaImportacao(models.Model):
     )
     numero_linha = models.PositiveIntegerField("número da linha")
     codigo_lido = models.CharField("código lido", max_length=250, blank=True)
+    categoria = models.CharField("categoria da recusa", max_length=32, blank=True)
+    campo_falhou = models.CharField("campo que falhou", max_length=120, blank=True)
     caixa_falhou = models.CharField("caixa que falhou", max_length=120, blank=True)
     mensagem = models.TextField("mensagem")
+    dados_linha = models.JSONField("dados declarativos da linha", default=dict, blank=True)
+    resolvida_em = models.DateTimeField("resolvida em", null=True, blank=True)
 
     class Meta:
         verbose_name = "inconsistência de importação"

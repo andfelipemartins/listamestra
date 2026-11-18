@@ -4,7 +4,9 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views import View
 
+from contas.models import Usuario
 from contratos.models import Contrato, Participacao
+from importacoes.models import InconsistenciaImportacao
 from .servicos import PainelIndisponivel, carregar_painel
 
 
@@ -34,7 +36,9 @@ class PainelRecorteView(View):
         if not acesso:
             return render(request, "painel/pin.html", {"contrato": contrato, "erro": erro})
         try:
-            contexto = _contexto_painel(contrato, request.GET.get("por"), request.GET)
+            contexto = _contexto_painel(
+                contrato, request.GET.get("por"), request.GET, usuario=request.user
+            )
         except PainelIndisponivel as erro:
             return render(request, "painel/indisponivel.html", {"contrato": contrato, "erro": erro})
         return render(request, "painel/_recortes.html", contexto)
@@ -85,7 +89,9 @@ def _verificar_acesso(request, contrato, verificar_pin=False):
 
 def _render_painel(request, contrato):
     try:
-        contexto = _contexto_painel(contrato, request.GET.get("por"), request.GET)
+        contexto = _contexto_painel(
+            contrato, request.GET.get("por"), request.GET, usuario=request.user
+        )
     except PainelIndisponivel as erro:
         return render(request, "painel/indisponivel.html", {"contrato": contrato, "erro": erro})
     template = "painel/_conteudo.html" if request.headers.get("HX-Request") == "true" else "painel/index.html"
@@ -94,7 +100,7 @@ def _render_painel(request, contrato):
     return response
 
 
-def _contexto_painel(contrato, por, filtros=None):
+def _contexto_painel(contrato, por, filtros=None, *, usuario=None):
     dados = carregar_painel(contrato, por, filtros)
     resumo = dados["resumo"]
     total = dados["total_documentos_previstos"]
@@ -125,6 +131,27 @@ def _contexto_painel(contrato, por, filtros=None):
     dados["grupo_cards"] = grupo_cards
     dados["percentual_avanco"] = resumo.percentual_avanco
     dados["estados_nao_mapeados"] = resumo.estados_nao_mapeados
+    tem_acesso_recusadas = bool(
+        usuario
+        and usuario.is_authenticated
+        and (
+            usuario.is_staff
+            or Participacao.objects.filter(
+                usuario=usuario,
+                contrato=contrato,
+                ativo=True,
+                papel=Usuario.Perfil.ADMIN,
+            ).exists()
+        )
+    )
+    dados["linhas_recusadas"] = (
+        InconsistenciaImportacao.objects.filter(
+            importacao_id__contrato=contrato,
+            resolvida_em__isnull=True,
+        ).count()
+        if tem_acesso_recusadas
+        else 0
+    )
     dados["grafico_pizza"] = {
         "labels": [grupo.rotulo for grupo in chart_groups],
         "datasets": [

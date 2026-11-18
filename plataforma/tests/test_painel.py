@@ -15,6 +15,7 @@ from contratos.admin import ContratoAdminForm
 from contratos.models import Contrato, Participacao, PerfilContrato
 from documentos.models import Analise, Documento, Emissao
 from importacoes.models import (
+    InconsistenciaImportacao,
     ImportacaoID,
     ImportacaoSituacao,
     IndiceDocumentos,
@@ -371,6 +372,43 @@ def test_participante_logado_entra_sem_pin(client, contrato, perfil_modelo, djan
     assert resposta.status_code == 200
     assert "Documentos previstos" in resposta.content.decode()
     assert f"painel_liberado_{contrato.pk}" not in client.session
+
+
+@pytest.mark.django_db
+def test_painel_avisa_recusas_somente_a_quem_pode_abri_las(
+    client, contrato, perfil_modelo, django_user_model
+):
+    indice = _indice(contrato, "ID-RECUSAS")
+    importacao = ImportacaoID.objects.create(
+        contrato=contrato,
+        indice=indice,
+        arquivo_nome="ID-RECUSAS.xlsx",
+        linhas_invalidas=1,
+    )
+    InconsistenciaImportacao.objects.create(
+        importacao_id=importacao,
+        numero_linha=2,
+        codigo_lido="DE-15.25.00.00-6A7-1001",
+        mensagem="Classe desconhecida.",
+    )
+    administrador = django_user_model.objects.create_user(username="admin-aviso", password="senha")
+    Participacao.objects.create(
+        usuario=administrador,
+        contrato=contrato,
+        papel="admin",
+    )
+    client.force_login(administrador)
+    resposta = client.get(reverse("painel", args=(contrato.pk,)))
+    assert resposta.status_code == 200
+    assert "1 linha recusada nas importações" in resposta.content.decode()
+    assert reverse("linhas_recusadas", args=(contrato.pk,)) in resposta.content.decode()
+
+    equipe = django_user_model.objects.create_user(username="equipe-aviso", password="senha")
+    Participacao.objects.create(usuario=equipe, contrato=contrato, papel="equipe")
+    client.force_login(equipe)
+    resposta = client.get(reverse("painel", args=(contrato.pk,)))
+    assert resposta.status_code == 200
+    assert "linha recusada nas importações" not in resposta.content.decode()
 
 
 @pytest.mark.django_db

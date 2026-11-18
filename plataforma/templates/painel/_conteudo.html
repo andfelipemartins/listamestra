@@ -3,6 +3,10 @@
   <div class="painel-total"><span>Documentos previstos em conta</span><strong>{{ total_documentos_previstos }}</strong><small>{{ total_documentos_id }} no ID{% if quantidade_filtros_ativos %} com os filtros{% endif %}</small></div>
 </section>
 
+{% if linhas_recusadas %}
+<p class="notice painel-recusa-aviso">{{ linhas_recusadas }} linha{{ linhas_recusadas|pluralize }} recusada{{ linhas_recusadas|pluralize }} nas importações · <a href="{% url 'linhas_recusadas' contrato.pk %}">ver</a></p>
+{% endif %}
+
 <details class="painel-filtros" {% if quantidade_filtros_ativos %}open{% endif %}>
   <summary>Filtros{% if quantidade_filtros_ativos %} · {{ quantidade_filtros_ativos }} ativos{% endif %}</summary>
   <form id="filtros-painel" class="painel-filtros-form" method="get" action="{% url 'painel' contrato.pk %}"
