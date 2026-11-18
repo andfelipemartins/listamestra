@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Painel · {{ contrato.codigo_interno }}{% endblock %}
+{% block extra_head %}<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>{% endblock %}
+{% block content %}
+<section class="page-heading painel-heading">
+  <div><span class="eyebrow">ACOMPANHAMENTO EXECUTIVO</span><h1>{{ contrato.nome }}</h1><p>{{ contrato.codigo_interno }} · {{ contrato.cliente }}</p></div>
+  <div class="painel-total"><span>Documentos previstos</span><strong>{{ total_documentos_previstos }}</strong></div>
+</section>
+
+<section class="painel-grupos" aria-label="Situação dos documentos previstos">
+  {% for item in grupo_cards %}
+  <article class="painel-grupo-card" style="--grupo-cor: {{ item.grupo.cor|default:'#64748b' }}">
+    <span class="painel-grupo-label">{{ item.grupo.rotulo }}</span>
+    <strong>{{ item.quantidade }}</strong>
+    <span class="painel-grupo-percentual">{{ item.percentual|floatformat:1 }}% do previsto</span>
+  </article>
+  {% endfor %}
+</section>
+
+<section class="painel-avanco panel" aria-label="Avanço do contrato">
+  <div class="painel-avanco-topo"><div><span class="eyebrow">AVANÇO</span><h2>{{ percentual_avanco|floatformat:1 }}%</h2></div><span>com base no critério do perfil vigente</span></div>
+  <div class="painel-progresso" role="progressbar" aria-label="Percentual de avanço" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ percentual_avanco|floatformat:0 }}"><span style="width: {{ percentual_avanco }}%"></span></div>
+</section>
+
+<div class="painel-destaques">
+  <section class="panel painel-chart-panel">
+    <div class="panel-heading"><div><h2>Distribuição por situação</h2><p>Documentos da união dos IDs vigentes</p></div></div>
+    <div class="painel-pizza-wrap"><canvas id="grafico-pizza" aria-label="Gráfico de pizza com documentos por situação"></canvas></div>
+  </section>
+  <section class="panel painel-fora-id"><span class="eyebrow">ESCOPO</span><strong>{{ fora_do_id }}</strong><h2>Fora do ID</h2><p>Documentos com emissão que não constam em nenhum ID vigente.</p></section>
+</div>
+
+<section class="panel painel-recorte-panel">
+  <div class="panel-heading painel-recorte-heading"><div><h2>Avanço por recorte</h2><p>Distribuição das situações pelas caixas do perfil</p></div>
+    <label class="painel-seletor">Recortar por
+      <select name="por" aria-label="Selecionar caixa do perfil" hx-get="{% url 'painel_recorte' contrato.pk %}" hx-trigger="change" hx-target="#painel-recortes" hx-swap="innerHTML">
+        {% for caixa in caixas %}<option value="{{ caixa.nome }}" {% if caixa.nome == por %}selected{% endif %}>{{ caixa.rotulo }}</option>{% endfor %}
+      </select>
+    </label>
+  </div>
+  <div id="painel-recortes">{% include "painel/_recortes.html" %}</div>
+</section>
+
+{% if estados_nao_mapeados %}
+<section class="notice painel-nao-mapeado" role="status">
+  <strong>{{ estados_nao_mapeados|length }} estados do PW não mapeados</strong>
+  <p>O administrador pode ajustar o mapeamento no perfil do contrato.</p>
+  <ul>{% for estado in estados_nao_mapeados %}<li>{% if estado.situacao %}{{ estado.situacao }}{% else %}(estado vazio){% endif %} <span>{{ estado.contagem }} documento{{ estado.contagem|pluralize:"s" }}</span></li>{% endfor %}</ul>
+</section>
+{% endif %}
+
+<footer class="painel-fontes">Dados do PW de: <strong>{% if ultima_situacao_pw %}{{ ultima_situacao_pw|date:"d/m/Y" }}{% else %}sem importação{% endif %}</strong><span aria-hidden="true">·</span>Última importação de ID: <strong>{% if ultima_importacao_id %}{{ ultima_importacao_id|date:"d/m/Y" }}{% else %}sem importação{% endif %}</strong></footer>
+
+{{ grafico_pizza|json_script:"dados-grafico-pizza" }}
+<script>
+  function desenharGraficoPainel() {
+    if (!window.Chart) return;
+    const pizzaEl = document.getElementById("grafico-pizza");
+    if (pizzaEl && !pizzaEl.dataset.pronto) {
+      const dados = JSON.parse(document.getElementById("dados-grafico-pizza").textContent);
+      new Chart(pizzaEl, {type: "pie", data: dados, options: {responsive: true, maintainAspectRatio: false, plugins: {legend: {position: "bottom"}}}});
+      pizzaEl.dataset.pronto = "true";
+    }
+    const alvo = document.getElementById("grafico-recortes");
+    if (alvo) {
+      if (window.graficoRecortesPainel) window.graficoRecortesPainel.destroy();
+      const dados = JSON.parse(document.getElementById("dados-grafico-recortes").textContent);
+      window.graficoRecortesPainel = new Chart(alvo, {type: "bar", data: dados, options: {indexAxis: "y", responsive: true, maintainAspectRatio: false, scales: {x: {stacked: true, beginAtZero: true}, y: {stacked: true}}, plugins: {legend: {position: "bottom"}}}});
+    }
+  }
+  document.addEventListener("DOMContentLoaded", desenharGraficoPainel);
+  document.body.addEventListener("htmx:afterSwap", function(event) {
+    if (event.detail.target.id === "painel-recortes") desenharGraficoPainel();
+  });
+</script>
+{% endblock %}

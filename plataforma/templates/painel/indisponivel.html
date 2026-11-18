@@ -1,0 +1,5 @@
+{% extends "base.html" %}
+{% block title %}Painel indisponível · {{ contrato.codigo_interno }}{% endblock %}
+{% block content %}
+<section class="panel painel-indisponivel"><span class="eyebrow">ACOMPANHAMENTO EXECUTIVO</span><h1>{{ contrato.nome }}</h1><p>{{ erro }}</p></section>
+{% endblock %}

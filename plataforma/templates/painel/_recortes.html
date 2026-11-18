@@ -1,0 +1,10 @@
+{% if recortes %}
+<p class="painel-recorte-caption">{{ rotulo_caixa }}</p>
+<div class="painel-barras-wrap" style="--linhas: {{ recortes|length }}"><canvas id="grafico-recortes" aria-label="Barras empilhadas de avanço por {{ rotulo_caixa }}"></canvas></div>
+{{ grafico_recortes|json_script:"dados-grafico-recortes" }}
+<details class="painel-dados-tabulares"><summary>Ver números por recorte</summary>
+  <div class="table-wrap"><table><thead><tr><th>{{ rotulo_caixa }}</th>{% for grupo in grupos_recorte %}<th>{{ grupo.rotulo }}</th>{% endfor %}<th>Total</th></tr></thead><tbody>
+  {% for item in recortes %}<tr><th scope="row">{{ item.rotulo }}</th>{% for valor in item.contagens %}<td>{{ valor }}</td>{% endfor %}<td>{{ item.total }}</td></tr>{% endfor %}
+  </tbody></table></div>
+</details>
+{% else %}<p class="painel-sem-dados">Não há documentos previstos para este recorte.</p>{% endif %}

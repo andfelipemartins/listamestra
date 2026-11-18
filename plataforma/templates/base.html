@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}SCLME{% endblock %} · Lista Mestra</title>
   <link rel="stylesheet" href="{% static 'css/plataforma.css' %}">
+  {% block extra_head %}{% endblock %}
   <script src="https://unpkg.com/htmx.org@2.0.3" defer></script>
 </head>
 <body>
@@ -22,6 +23,7 @@
     <aside class="sidebar" aria-label="Navegação principal">
       <span class="nav-label">Menu</span>
       <a class="nav-item {% if request.resolver_match.url_name == 'inicio' %}active{% endif %}" href="{% url 'inicio' %}"><span class="nav-icon">⌂</span>Início</a>
+      {% for contrato_painel in contratos_painel %}<a class="nav-item {% if request.resolver_match.kwargs.contrato_id == contrato_painel.pk|stringformat:'s' %}active{% endif %}" href="{% url 'painel' contrato_painel.pk %}"><span class="nav-icon">◉</span>Painel · {{ contrato_painel.codigo_interno }}</a>{% endfor %}
       <span class="nav-item disabled" aria-disabled="true"><span class="nav-icon">▤</span>Documentos <small>Em breve</small></span>
       {% if user.is_staff %}<a class="nav-item" href="{% url 'importar_id' %}"><span class="nav-icon">⇧</span>Importar ID</a>{% endif %}
       {% if user.is_staff %}<a class="nav-item" href="{% url 'importar_situacao_pw' %}"><span class="nav-icon">⇧</span>Importar situação PW</a>{% endif %}

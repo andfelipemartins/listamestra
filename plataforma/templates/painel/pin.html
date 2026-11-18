@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Acesso ao painel · {{ contrato.codigo_interno }}{% endblock %}
+{% block content %}
+<section class="painel-pin-card">
+  <span class="eyebrow">ACOMPANHAMENTO EXECUTIVO</span>
+  <h1>{{ contrato.nome }}</h1>
+  <p>Este painel é somente para consulta. Informe o PIN compartilhado pela chefia.</p>
+  {% if erro %}<div class="form-error" role="alert">{{ erro }}</div>{% endif %}
+  {% if contrato.pin_painel %}
+  <form method="post" class="login-form painel-pin-form">
+    {% csrf_token %}<label for="pin">PIN do painel</label>
+    <input id="pin" name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,6}" minlength="4" maxlength="6" autocomplete="one-time-code" required autofocus>
+    <button class="button button-primary" type="submit">Acessar painel</button>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

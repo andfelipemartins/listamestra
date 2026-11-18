@@ -1,4 +1,8 @@
+import re
+
+from django import forms
 from django.contrib import admin
+from django.core.exceptions import ValidationError
 from django.core.exceptions import PermissionDenied
 from django.http import Http404
 from django.shortcuts import get_object_or_404
@@ -19,8 +23,46 @@ class PerfilContratoInline(admin.TabularInline):
     show_change_link = True
 
 
+class ContratoAdminForm(forms.ModelForm):
+    pin_painel = forms.CharField(
+        label="PIN do painel",
+        required=False,
+        widget=forms.PasswordInput(render_value=False),
+        help_text="Informe de 4 a 6 dígitos. Deixe em branco para manter o PIN atual.",
+    )
+
+    class Meta:
+        model = Contrato
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._pin_painel_atual = self.instance.pin_painel
+        self.fields["pin_painel"].initial = ""
+        self.initial["pin_painel"] = ""
+
+    def clean_pin_painel(self):
+        pin = self.cleaned_data.get("pin_painel", "")
+        if pin and not re.fullmatch(r"\d{4,6}", pin):
+            raise ValidationError("O PIN deve ter de 4 a 6 dígitos.")
+        return pin
+
+    def save(self, commit=True):
+        contrato = super().save(commit=False)
+        pin = self.cleaned_data.get("pin_painel", "")
+        if pin:
+            contrato.definir_pin_painel(pin)
+        else:
+            contrato.pin_painel = self._pin_painel_atual
+        if commit:
+            contrato.save()
+            self.save_m2m()
+        return contrato
+
+
 @admin.register(Contrato)
 class ContratoAdmin(admin.ModelAdmin):
+    form = ContratoAdminForm
     list_display = ("nome", "codigo_interno", "cliente", "ativo", "criado_em")
     list_filter = ("ativo", "cliente")
     search_fields = ("nome", "codigo_interno", "cliente", "descricao")

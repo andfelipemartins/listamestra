@@ -1,7 +1,9 @@
 from django.conf import settings
+from django.contrib.auth.hashers import check_password, make_password
 from django.core.exceptions import ValidationError
 from django.db import models
 from simple_history.models import HistoricalRecords
+import re
 
 from contas.models import Usuario
 from core.perfil import ErroPerfil, perfil_de_dict
@@ -13,6 +15,7 @@ class Contrato(models.Model):
     cliente = models.CharField("cliente", max_length=200)
     descricao = models.TextField("descrição", blank=True)
     ativo = models.BooleanField("ativo", default=True)
+    pin_painel = models.CharField("PIN do painel (hash)", max_length=128, blank=True, default="")
     criado_em = models.DateTimeField("criado em", auto_now_add=True)
     history = HistoricalRecords()
 
@@ -23,6 +26,14 @@ class Contrato(models.Model):
 
     def __str__(self):
         return f"{self.codigo_interno} — {self.nome}"
+
+    def definir_pin_painel(self, pin):
+        if not isinstance(pin, str) or not re.fullmatch(r"\d{4,6}", pin):
+            raise ValidationError({"pin_painel": "O PIN deve ter de 4 a 6 dígitos."})
+        self.pin_painel = make_password(pin)
+
+    def verificar_pin_painel(self, pin):
+        return bool(self.pin_painel and check_password(pin, self.pin_painel))
 
 
 class PerfilContrato(models.Model):
