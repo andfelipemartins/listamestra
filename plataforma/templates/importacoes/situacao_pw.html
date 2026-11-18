@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}Importar situação PW{% endblock %}
+
+{% block content %}
+<section class="page-heading">
+  <div>
+    <span class="eyebrow">Importações</span>
+    <h1>Importar situação do PW</h1>
+    <p>A extração reconstrói emissões e análises. Estados inferidos pelo ciclo aparecem separados dos estados explícitos.</p>
+  </div>
+</section>
+
+{% if messages %}
+  {% for message in messages %}<p class="notice notice-{{ message.tags }}">{{ message }}</p>{% endfor %}
+{% endif %}
+
+<section class="panel">
+  <h2>Arquivo, contrato e data da extração</h2>
+  <form method="post" enctype="multipart/form-data" hx-post="{% url 'importar_situacao_pw' %}" hx-target="#resultado-previa-pw" hx-swap="innerHTML" hx-encoding="multipart/form-data">
+    {% csrf_token %}
+    <input type="hidden" name="acao" value="prever">
+    {{ form.as_p }}
+    <button class="button button-primary" type="submit">Gerar prévia</button>
+  </form>
+</section>
+
+<div id="resultado-previa-pw">
+  {% include "importacoes/_resultado_situacao_pw.html" %}
+</div>
+
+{% if importacoes %}
+<section class="panel">
+  <h2>Importações recentes</h2>
+  <div class="table-wrap">
+    <table><thead><tr><th>Contrato</th><th>Data da extração</th><th>Arquivo</th><th>Documentos</th><th>Importado em</th></tr></thead>
+      <tbody>{% for importacao in importacoes %}<tr><td>{{ importacao.contrato.nome }}</td><td>{{ importacao.data_extracao|date:"d/m/Y" }}</td><td>{{ importacao.arquivo_nome }}</td><td>{{ importacao.documentos }}</td><td>{{ importacao.importado_em }}</td></tr>{% endfor %}</tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

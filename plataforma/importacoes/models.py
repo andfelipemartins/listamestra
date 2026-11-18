@@ -78,3 +78,110 @@ class ItemPrevisto(models.Model):
 
     def __str__(self):
         return f"{self.indice.codigo}: {self.documento.identificador_base}"
+
+
+class ImportacaoID(models.Model):
+    contrato = models.ForeignKey(
+        Contrato,
+        verbose_name="contrato",
+        on_delete=models.PROTECT,
+        related_name="importacoes_id",
+    )
+    indice = models.ForeignKey(
+        IndiceDocumentos,
+        verbose_name="índice",
+        on_delete=models.PROTECT,
+        related_name="importacoes",
+    )
+    arquivo_nome = models.CharField("nome do arquivo", max_length=255)
+    importado_em = models.DateTimeField("importado em", auto_now_add=True)
+    importado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="importado por",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="importacoes_id",
+    )
+    linhas_validas = models.PositiveIntegerField("linhas válidas", default=0)
+    linhas_invalidas = models.PositiveIntegerField("linhas inválidas", default=0)
+
+    class Meta:
+        verbose_name = "importação de ID"
+        verbose_name_plural = "importações de ID"
+        ordering = ("-importado_em", "-pk")
+
+
+class ImportacaoSituacao(models.Model):
+    contrato = models.ForeignKey(
+        Contrato,
+        verbose_name="contrato",
+        on_delete=models.PROTECT,
+        related_name="importacoes_situacao",
+    )
+    data_extracao = models.DateField("data da extração")
+    arquivo_nome = models.CharField("nome do arquivo", max_length=255)
+    importado_em = models.DateTimeField("importado em", auto_now_add=True)
+    importado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="importado por",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="importacoes_situacao",
+    )
+    documentos = models.PositiveIntegerField("documentos", default=0)
+    emissoes = models.PositiveIntegerField("emissões", default=0)
+    analises_explicitas = models.PositiveIntegerField("análises explícitas", default=0)
+    analises_deduzidas = models.PositiveIntegerField("análises deduzidas", default=0)
+    historicos_truncados = models.PositiveIntegerField("históricos truncados", default=0)
+    fora_do_id = models.PositiveIntegerField("documentos fora do ID", default=0)
+    linhas_invalidas = models.PositiveIntegerField("linhas inválidas", default=0)
+
+    class Meta:
+        verbose_name = "importação de situação do PW"
+        verbose_name_plural = "importações de situação do PW"
+        ordering = ("-data_extracao", "-importado_em", "-pk")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("contrato", "data_extracao", "arquivo_nome"),
+                name="importacao_situacao_arquivo_data_unica",
+            ),
+        ]
+
+
+class InconsistenciaImportacao(models.Model):
+    importacao_id = models.ForeignKey(
+        ImportacaoID,
+        verbose_name="importação de ID",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="inconsistencias",
+    )
+    importacao_situacao = models.ForeignKey(
+        ImportacaoSituacao,
+        verbose_name="importação de situação",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="inconsistencias",
+    )
+    numero_linha = models.PositiveIntegerField("número da linha")
+    codigo_lido = models.CharField("código lido", max_length=250, blank=True)
+    caixa_falhou = models.CharField("caixa que falhou", max_length=120, blank=True)
+    mensagem = models.TextField("mensagem")
+
+    class Meta:
+        verbose_name = "inconsistência de importação"
+        verbose_name_plural = "inconsistências de importação"
+        ordering = ("numero_linha", "pk")
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    (models.Q(importacao_id__isnull=False) & models.Q(importacao_situacao__isnull=True))
+                    | (models.Q(importacao_id__isnull=True) & models.Q(importacao_situacao__isnull=False))
+                ),
+                name="inconsistencia_uma_importacao",
+            ),
+        ]

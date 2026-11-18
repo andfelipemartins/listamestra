@@ -1,6 +1,12 @@
 from django.contrib import admin
 
-from .models import IndiceDocumentos, ItemPrevisto
+from .models import (
+    ImportacaoID,
+    ImportacaoSituacao,
+    InconsistenciaImportacao,
+    IndiceDocumentos,
+    ItemPrevisto,
+)
 
 
 class ItemPrevistoInline(admin.TabularInline):
@@ -23,3 +29,26 @@ class ItemPrevistoAdmin(admin.ModelAdmin):
     list_display = ("documento", "indice", "titulo", "excluido")
     list_filter = ("excluido", "indice__fonte", "indice__contrato")
     search_fields = ("documento__identificador_base", "titulo", "indice__codigo")
+
+
+@admin.register(ImportacaoID)
+class ImportacaoIDAdmin(admin.ModelAdmin):
+    list_display = ("contrato", "indice", "arquivo_nome", "importado_em", "linhas_validas", "linhas_invalidas")
+    list_filter = ("contrato", "importado_em")
+    search_fields = ("arquivo_nome", "indice__codigo")
+    readonly_fields = tuple(field.name for field in ImportacaoID._meta.fields)
+
+
+@admin.register(ImportacaoSituacao)
+class ImportacaoSituacaoAdmin(admin.ModelAdmin):
+    list_display = ("contrato", "data_extracao", "arquivo_nome", "importado_em", "documentos", "emissoes")
+    list_filter = ("contrato", "data_extracao")
+    search_fields = ("arquivo_nome",)
+    readonly_fields = tuple(field.name for field in ImportacaoSituacao._meta.fields)
+
+
+@admin.register(InconsistenciaImportacao)
+class InconsistenciaImportacaoAdmin(admin.ModelAdmin):
+    list_display = ("numero_linha", "codigo_lido", "caixa_falhou", "mensagem")
+    search_fields = ("codigo_lido", "caixa_falhou", "mensagem")
+    readonly_fields = tuple(field.name for field in InconsistenciaImportacao._meta.fields)

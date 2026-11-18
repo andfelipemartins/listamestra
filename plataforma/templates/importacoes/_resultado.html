@@ -10,6 +10,7 @@
     <article class="metric-card"><span>{{ categoria }}</span><strong>{{ total }}</strong></article>
     {% endfor %}
   </div>
+  <p class="notice">{{ previa.linhas_validas }} linhas serão importadas, {{ previa.linhas_fora }} ficarão de fora (ver lista).</p>
   <div class="table-wrap">
     <table>
       <thead><tr><th>Linha</th><th>Categoria</th><th>Código</th><th>Título</th><th>Excluído</th><th>Caixa / detalhe</th></tr></thead>
@@ -29,13 +30,11 @@
       </tbody>
     </table>
   </div>
-  {% if previa.contagens.codigos_invalidos or previa.contagens.linhas_ilegiveis %}
-    <p class="notice notice-error">Corrija os códigos inválidos e as linhas ilegíveis antes de confirmar.</p>
-  {% else %}
+  {% if previa.linhas_validas or previa.linhas_fora %}
     <form method="post">
       {% csrf_token %}
       <input type="hidden" name="acao" value="confirmar">
-      <button class="button button-primary" type="submit">Confirmar importação</button>
+      <button class="button button-primary" type="submit">Importar as {{ previa.linhas_validas }} válidas</button>
     </form>
   {% endif %}
 </section>

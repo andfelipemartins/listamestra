@@ -4,7 +4,7 @@ from django.contrib.auth import views as auth_views
 from django.urls import path
 
 from contas.views import InicioView
-from importacoes.views import ImportarIDView
+from importacoes.views import ImportarIDView, ImportarSituacaoPWView
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -19,5 +19,6 @@ urlpatterns = [
         name="logout",
     ),
     path("importacoes/id/", ImportarIDView.as_view(), name="importar_id"),
+    path("importacoes/situacao-pw/", ImportarSituacaoPWView.as_view(), name="importar_situacao_pw"),
     path("", InicioView.as_view(), name="inicio"),
 ]

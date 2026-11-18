@@ -1,0 +1,63 @@
+{% if erro %}<p class="notice notice-error">{{ erro }}</p>{% endif %}
+{% if form.errors %}<div class="notice notice-error">{{ form.errors }}</div>{% endif %}
+{% if previa %}
+<section class="panel">
+  <div class="panel-heading">
+    <div><h2>Prévia: {{ previa.arquivo_nome }}</h2><p>Data da extração: {{ previa.data_extracao|date:"d/m/Y" }} · Perfil {{ previa.perfil_id }}</p></div>
+  </div>
+  <div class="metric-grid">
+    {% for categoria, total in contagens %}
+    <article class="metric-card"><span>{{ categoria }}</span><strong>{{ total }}</strong></article>
+    {% endfor %}
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Código base</th><th>Título</th><th>Fora do ID</th><th>Emissões</th><th>Situação vigente</th></tr></thead>
+      <tbody>
+      {% for documento in previa.documentos %}
+        <tr>
+          <td>{{ documento.codigo_base }}</td>
+          <td>{{ documento.titulo }}</td>
+          <td>{% if documento.fora_do_id %}Sim{% else %}Não{% endif %}</td>
+          <td>
+            {% for emissao in documento.emissoes %}
+              Rev {{ emissao.revisao }} Ver {{ emissao.versao }} ({{ emissao.data_emissao|date:"d/m/Y" }}){% if emissao.nova %} · nova{% endif %}
+              {% for analise in emissao.analises %}<br>{{ analise.situacao }} — {{ analise.data_analise|date:"d/m/Y"|default:"sem data" }}{% if analise.origem == "deduzido_pw" %} · deduzido pelo ciclo{% endif %}{% endfor %}<br>
+            {% endfor %}
+          </td>
+          <td>{{ documento.situacao_vigente }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="5">Nenhum documento válido encontrado.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if previa.historicos_truncados %}
+    <h3>Históricos truncados</h3>
+    <p class="notice">O último item incompleto foi descartado.</p>
+    <div class="table-wrap"><table><thead><tr><th>Linha</th><th>Código</th><th>Trecho descartado</th></tr></thead><tbody>
+      {% for item in previa.historicos_truncados %}<tr><td>{{ item.numero_linha }}</td><td>{{ item.codigo }}</td><td>{{ item.trecho_descartado }}</td></tr>{% endfor %}
+    </tbody></table></div>
+  {% endif %}
+  {% if previa.mudancas_situacao %}
+    <h3>Mudanças de situação vigente</h3>
+    <div class="table-wrap"><table><thead><tr><th>Código base</th><th>Antes</th><th>Depois</th></tr></thead><tbody>
+      {% for mudanca in previa.mudancas_situacao %}<tr><td>{{ mudanca.codigo_base }}</td><td>{{ mudanca.antes|default:"Sem situação anterior" }}</td><td>{{ mudanca.depois }}</td></tr>{% endfor %}
+    </tbody></table></div>
+  {% endif %}
+  {% if previa.linhas_invalidas %}
+    <h3>Linhas inválidas que ficarão de fora</h3>
+    <div class="table-wrap"><table><thead><tr><th>Linha</th><th>Código lido</th><th>Caixa</th><th>Fora do ID</th><th>Mensagem</th></tr></thead><tbody>
+      {% for item in previa.linhas_invalidas %}<tr><td>{{ item.numero_linha }}</td><td>{{ item.codigo }}</td><td>{{ item.caixa_falhou }}</td><td>{% if item.fora_do_id %}Sim{% else %}Não{% endif %}</td><td>{{ item.mensagem }}</td></tr>{% endfor %}
+    </tbody></table></div>
+  {% endif %}
+  {% if previa.documentos or previa.linhas_invalidas %}
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="acao" value="confirmar">
+      <button class="button button-primary" type="submit">Importar dados válidos</button>
+    </form>
+  {% endif %}
+</section>
+{% endif %}

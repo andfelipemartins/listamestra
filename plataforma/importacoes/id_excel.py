@@ -102,6 +102,14 @@ class PreviaID:
     def contagens(self) -> dict[str, int]:
         return {categoria: sum(linha.categoria == categoria for linha in self.linhas) for categoria in CATEGORIAS}
 
+    @property
+    def linhas_validas(self) -> int:
+        return sum(bool(linha.identificador_base) for linha in self.linhas)
+
+    @property
+    def linhas_fora(self) -> int:
+        return len(self.linhas) - self.linhas_validas
+
 
 class ErroFormatoID(ValueError):
     """Arquivo sem cabeçalho reconhecido ou sem metadados suficientes."""

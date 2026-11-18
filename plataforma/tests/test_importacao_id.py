@@ -12,7 +12,7 @@ from core.perfil import perfil_de_dict
 from contratos.models import Contrato, PerfilContrato
 from documentos.models import Documento
 from importacoes.id_excel import FORMATOS_ID, gerar_previa_id
-from importacoes.models import IndiceDocumentos, ItemPrevisto
+from importacoes.models import InconsistenciaImportacao, ImportacaoID, IndiceDocumentos, ItemPrevisto
 from importacoes.services import aplicar_previa, previstos_vigentes
 
 
@@ -217,6 +217,38 @@ def test_importacao_e_idempotente_e_revisao_nova_substitui_a_anterior(contrato, 
 
 
 @pytest.mark.django_db
+def test_importa_linhas_validas_e_registra_invalidas_sem_bloquear(contrato, perfil_modelo):
+    previa = previa_para(
+        criar_excel_id(
+            [
+                {"titulo": "Documento válido", "sequencial": "1001"},
+                {
+                    "titulo": "Documento inválido",
+                    "sequencial": "10X2",
+                    "codigo": "DE-15.25.00.00-6A1-10X2",
+                },
+            ]
+        ),
+        contrato,
+        perfil_modelo,
+        codigo="ID-PARCIAL",
+    )
+
+    indice = aplicar_previa(previa, contrato=contrato, perfil_modelo=perfil_modelo)
+
+    importacao = ImportacaoID.objects.get(indice=indice)
+    inconsistencia = InconsistenciaImportacao.objects.get(importacao_id=importacao)
+    assert previa.linhas_validas == 1
+    assert previa.linhas_fora == 1
+    assert importacao.linhas_validas == 1
+    assert importacao.linhas_invalidas == 1
+    assert ItemPrevisto.objects.filter(indice=indice).count() == 1
+    assert inconsistencia.numero_linha == 3
+    assert inconsistencia.codigo_lido == "DE-15.25.00.00-6A1-10X2"
+    assert inconsistencia.caixa_falhou == "sequencial"
+
+
+@pytest.mark.django_db
 def test_previsto_vigente_e_uniao_de_dois_ids(contrato, perfil_modelo):
     primeira = previa_para(
         criar_excel_id([{"titulo": "Documento compartilhado", "sequencial": "1001"}]),
@@ -337,4 +369,4 @@ def test_tela_staff_mostra_previa_htmx_e_confirma_importacao(client, contrato, p
     assert resposta.status_code == 200
     assert IndiceDocumentos.objects.get().importado_por == administrador
     assert ItemPrevisto.objects.count() == 1
-    assert b"importado com 1 itens" in resposta.content
+    assert b"importado com 1 linhas v\xc3\xa1lidas" in resposta.content

@@ -6,7 +6,7 @@ from core.perfil.codigo import ErroCodigo, interpretar
 from documentos.models import CodigoDocumento, Documento
 
 from .id_excel import PreviaID
-from .models import IndiceDocumentos, ItemPrevisto
+from .models import InconsistenciaImportacao, ImportacaoID, IndiceDocumentos, ItemPrevisto
 
 
 class ErroAplicacaoID(ValueError):
@@ -24,12 +24,9 @@ def aplicar_previa(previa: PreviaID, *, contrato, perfil_modelo, usuario=None):
         linha for linha in previa.linhas
         if linha.categoria in {"codigos_invalidos", "linhas_ilegiveis"}
     ]
-    if problemáticas:
-        raise ErroAplicacaoID(
-            "A prévia contém códigos inválidos ou linhas ilegíveis. Corrija o arquivo antes de confirmar."
-        )
-    if not any(linha.identificador_base for linha in previa.linhas):
-        raise ErroAplicacaoID("A prévia não contém documentos válidos para importar.")
+    linhas_validas = [linha for linha in previa.linhas if linha.identificador_base]
+    if not linhas_validas and not problemáticas:
+        raise ErroAplicacaoID("A prévia não contém linhas para importar.")
     try:
         perfil_validado = perfil_de_dict(perfil_modelo.definicao)
     except ErroPerfil as erro:
@@ -44,16 +41,17 @@ def aplicar_previa(previa: PreviaID, *, contrato, perfil_modelo, usuario=None):
     indice = IndiceDocumentos.objects.filter(**chave).first()
     agora = timezone.now()
     if indice is None:
-        anteriores = IndiceDocumentos.objects.filter(
-            contrato=contrato,
-            fonte=previa.fonte,
-            codigo=previa.codigo_indice,
-            vigente=True,
-        )
-        for anterior in anteriores:
-            anterior.vigente = False
-            anterior._history_user = usuario
-            anterior.save(update_fields=("vigente",))
+        if not problemáticas:
+            anteriores = IndiceDocumentos.objects.filter(
+                contrato=contrato,
+                fonte=previa.fonte,
+                codigo=previa.codigo_indice,
+                vigente=True,
+            )
+            for anterior in anteriores:
+                anterior.vigente = False
+                anterior._history_user = usuario
+                anterior.save(update_fields=("vigente",))
         indice = IndiceDocumentos(
             **chave,
             arquivo_nome=previa.arquivo_nome,
@@ -73,9 +71,41 @@ def aplicar_previa(previa: PreviaID, *, contrato, perfil_modelo, usuario=None):
         if campos_alterados:
             indice._history_user = usuario
             indice.save(update_fields=campos_alterados)
+        if not problemáticas:
+            anteriores = IndiceDocumentos.objects.filter(
+                contrato=contrato,
+                fonte=previa.fonte,
+                codigo=previa.codigo_indice,
+                vigente=True,
+            ).exclude(pk=indice.pk)
+            for anterior in anteriores:
+                anterior.vigente = False
+                anterior._history_user = usuario
+                anterior.save(update_fields=("vigente",))
+            if not indice.vigente:
+                indice.vigente = True
+                indice._history_user = usuario
+                indice.save(update_fields=("vigente",))
+
+    importacao = ImportacaoID.objects.create(
+        contrato=contrato,
+        indice=indice,
+        arquivo_nome=previa.arquivo_nome,
+        importado_por=usuario,
+        linhas_validas=len(linhas_validas),
+        linhas_invalidas=len(problemáticas),
+    )
+    for linha in problemáticas:
+        InconsistenciaImportacao.objects.create(
+            importacao_id=importacao,
+            numero_linha=linha.numero_linha,
+            codigo_lido=linha.codigo,
+            caixa_falhou=linha.caixa_falhou or linha.campo_falhou,
+            mensagem=linha.mensagem or "Linha não importada por ser inválida.",
+        )
 
     documentos_incluidos = set()
-    for linha in previa.linhas:
+    for linha in linhas_validas:
         if not linha.identificador_base or linha.segmentos is None:
             continue
         interpretado = interpretar(perfil_validado, linha.codigo)
@@ -107,6 +137,7 @@ def aplicar_previa(previa: PreviaID, *, contrato, perfil_modelo, usuario=None):
                 "disciplina": linha.segmentos.get("disciplina", ""),
                 "atributos": dict(linha.segmentos),
                 "titulo": linha.titulo,
+                "fora_do_id": False,
             }
             campos_alterados = [
                 nome for nome, valor in alteracoes.items()
@@ -149,10 +180,11 @@ def aplicar_previa(previa: PreviaID, *, contrato, perfil_modelo, usuario=None):
             item.save(update_fields=("titulo", "excluido"))
         documentos_incluidos.add(documento.pk)
 
-    itens_removidos = indice.itens.exclude(documento_id__in=documentos_incluidos).select_related("documento")
-    for item in itens_removidos:
-        item._history_user = usuario
-        item.delete()
+    if not problemáticas:
+        itens_removidos = indice.itens.exclude(documento_id__in=documentos_incluidos).select_related("documento")
+        for item in itens_removidos:
+            item._history_user = usuario
+            item.delete()
 
     return indice
 

@@ -11,8 +11,11 @@ from django.core.management.base import CommandError
 from django.db import IntegrityError, transaction
 from django.urls import reverse
 
+from contratos.admin import PerfilContratoAdmin
 from contratos.models import Contrato, PerfilContrato
 from documentos.models import CodigoDocumento, Documento
+from core.perfil import perfil_de_dict
+from core.perfil.codigo import montar
 
 
 RAIZ_REPOSITORIO = Path(__file__).resolve().parents[2]
@@ -98,7 +101,15 @@ def test_edicao_do_perfil_exibe_caixas_e_botao_de_teste(client, django_user_mode
     assert "tipo documental" in response.content.decode()
     assert "sequencial" in response.content.decode()
     assert "Testar códigos" in response.content.decode()
-    assert "DE-15.19.00.00-0A1-0000" in response.content.decode()
+    perfil_definido = perfil_de_dict(perfil.definicao)
+    codigo_exemplo = montar(
+        perfil_definido,
+        {
+            segmento.nome: PerfilContratoAdmin._valor_de_exemplo(segmento)
+            for segmento in perfil_definido.codigo.campos
+        },
+    )
+    assert codigo_exemplo in response.content.decode()
 
 
 @pytest.mark.django_db

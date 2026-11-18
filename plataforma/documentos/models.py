@@ -20,6 +20,7 @@ class Documento(models.Model):
     disciplina = models.CharField("disciplina", max_length=100, blank=True)
     trecho = models.CharField("trecho", max_length=100, blank=True)
     atributos = models.JSONField("atributos interpretados", default=dict, blank=True)
+    fora_do_id = models.BooleanField("fora do ID", default=False)
     ativo = models.BooleanField("ativo", default=True)
     criado_em = models.DateTimeField("criado em", auto_now_add=True)
     history = HistoricalRecords()
@@ -138,6 +139,11 @@ class Emissao(models.Model):
 
 
 class Analise(models.Model):
+    class Origem(models.TextChoices):
+        MANUAL = "manual", "Manual"
+        IMPORTADO_PW = "importado_pw", "Importado do PW"
+        DEDUZIDO_PW = "deduzido_pw", "Deduzido do PW"
+
     emissao = models.ForeignKey(
         Emissao,
         verbose_name="emissão",
@@ -146,6 +152,12 @@ class Analise(models.Model):
     )
     etapa = models.CharField("etapa", max_length=100)
     situacao = models.CharField("situação", max_length=100)
+    origem = models.CharField(
+        "origem",
+        max_length=20,
+        choices=Origem.choices,
+        default=Origem.MANUAL,
+    )
     data_analise = models.DateField("data da análise", null=True, blank=True)
     documento_retorno = models.CharField("documento de retorno", max_length=150, blank=True)
     observacao = models.TextField("observação", blank=True)
