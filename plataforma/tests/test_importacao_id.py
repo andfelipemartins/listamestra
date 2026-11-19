@@ -296,6 +296,7 @@ def test_recusas_ficam_agrupadas_por_caixa_e_valor_e_exigem_acesso(contrato, per
 
     assert resposta.status_code == 200
     html = resposta.content.decode()
+    assert "Reprocessar com o perfil vigente" in html
     assert "Código inválido — 2 linhas" in html
     assert "Linha ilegível — 1 linha" in html
     assert "Corrija o código na planilha ou no PW e importe de novo." in html
@@ -303,15 +304,22 @@ def test_recusas_ficam_agrupadas_por_caixa_e_valor_e_exigem_acesso(contrato, per
     assert "ID-RECUSAS" in html
     assert "importada em" in html
 
-    sem_acesso = django_user_model.objects.create_user(username="sem-acesso", password="senha")
-    Participacao.objects.create(usuario=sem_acesso, contrato=contrato, papel="equipe")
-    client.force_login(sem_acesso)
-    assert client.get(reverse("linhas_recusadas", args=(contrato.pk,))).status_code == 403
+    participante = django_user_model.objects.create_user(username="participante", password="senha")
+    Participacao.objects.create(usuario=participante, contrato=contrato, papel="equipe")
+    client.force_login(participante)
+    url = reverse("linhas_recusadas", args=(contrato.pk,))
+    resposta_participante = client.get(url)
+    assert resposta_participante.status_code == 200
+    html_participante = resposta_participante.content.decode()
+    assert "Código inválido — 2 linhas" in html_participante
+    assert "Corrija o código na planilha ou no PW e importe de novo." in html_participante
+    assert "Reprocessar com o perfil vigente" not in html_participante
+    assert client.post(url, {"acao": "prever_reprocessamento", "importacao_id": indice.importacoes.first().pk}).status_code == 403
+    assert client.post(url, {"acao": "confirmar_reprocessamento"}).status_code == 403
 
-    admin_contrato = django_user_model.objects.create_user(username="admin-contrato", password="senha")
-    Participacao.objects.create(usuario=admin_contrato, contrato=contrato, papel="admin")
-    client.force_login(admin_contrato)
-    assert client.get(reverse("linhas_recusadas", args=(contrato.pk,))).status_code == 200
+    sem_participacao = django_user_model.objects.create_user(username="sem-participacao", password="senha")
+    client.force_login(sem_participacao)
+    assert client.get(url).status_code == 403
 
 
 @pytest.mark.django_db
@@ -394,7 +402,9 @@ def test_tela_previsualiza_e_confirma_reprocessamento(client, contrato, perfil_m
         vigencia_inicio=date.fromisoformat(definicao_v2["vigencia_inicio"]),
         definicao=definicao_v2,
     )
-    admin = django_user_model.objects.create_user(username="admin-reprocessa-ui", password="senha")
+    admin = django_user_model.objects.create_user(
+        username="admin-reprocessa-ui", password="senha"
+    )
     Participacao.objects.create(usuario=admin, contrato=contrato, papel="admin")
     client.force_login(admin)
     url = reverse("linhas_recusadas", args=(contrato.pk,))
@@ -415,6 +425,45 @@ def test_tela_previsualiza_e_confirma_reprocessamento(client, contrato, perfil_m
     incidencia.refresh_from_db()
     assert incidencia.resolvida_em is not None
     assert ItemPrevisto.objects.filter(indice=indice).count() == 1
+
+
+@pytest.mark.django_db
+def test_participante_sem_papel_admin_consulta_recusas_mas_nao_reprocessa(
+    client, contrato, perfil_modelo, django_user_model
+):
+    remover_a7_do_perfil(perfil_modelo)
+    previa = previa_para(
+        criar_excel_id(
+            [{"titulo": "Documento A7 recusado", "classe": "A7", "sequencial": "1001", "codigo": "DE-15.25.00.00-6A7-1001"}]
+        ),
+        contrato,
+        perfil_modelo,
+        codigo="ID-RECUSAS-EQUIPE",
+    )
+    indice = aplicar_previa(previa, contrato=contrato, perfil_modelo=perfil_modelo)
+    importacao = ImportacaoID.objects.get(indice=indice)
+    participante = django_user_model.objects.create_user(username="equipe-recusa", password="senha")
+    Participacao.objects.create(
+        usuario=participante,
+        contrato=contrato,
+        papel="equipe",
+        ativo=True,
+    )
+    client.force_login(participante)
+    url = reverse("linhas_recusadas", args=(contrato.pk,))
+
+    resposta = client.get(url)
+
+    assert resposta.status_code == 200
+    html = resposta.content.decode()
+    assert "ID-RECUSAS-EQUIPE" in html
+    assert "Reprocessar com o perfil vigente" not in html
+    assert "Confirmar reprocessamento" not in html
+    assert client.post(
+        url,
+        {"acao": "prever_reprocessamento", "importacao_id": importacao.pk},
+    ).status_code == 403
+    assert client.post(url, {"acao": "confirmar_reprocessamento"}).status_code == 403
 
 
 @pytest.mark.django_db

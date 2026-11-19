@@ -71,11 +71,13 @@
     </table></div>
     {% endif %}
   {% endif %}
-  <form method="post">
-    {% csrf_token %}
-    <input type="hidden" name="acao" value="confirmar_reprocessamento">
-    <button class="button button-primary" type="submit" {% if not linhas_validas %}disabled{% endif %}>Confirmar reprocessamento</button>
-  </form>
+  {% if pode_reprocessar %}
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="acao" value="confirmar_reprocessamento">
+      <button class="button button-primary" type="submit" {% if not linhas_validas %}disabled{% endif %}>Confirmar reprocessamento</button>
+    </form>
+  {% endif %}
 </section>
 {% endif %}
 
@@ -87,12 +89,14 @@
       <h2>{{ item.importacao.indice.codigo }} · revisão {{ item.importacao.indice.revisao }}</h2>
       <p>{{ item.importacao.arquivo_nome }} · importada em {{ item.importacao.importado_em|date:"d/m/Y H:i" }}</p>
     </div>
-    <form method="post">
-      {% csrf_token %}
-      <input type="hidden" name="acao" value="prever_reprocessamento">
-      <input type="hidden" name="importacao_id" value="{{ item.importacao.pk }}">
-      <button class="button button-primary" type="submit">Reprocessar com o perfil vigente</button>
-    </form>
+    {% if pode_reprocessar %}
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="acao" value="prever_reprocessamento">
+        <input type="hidden" name="importacao_id" value="{{ item.importacao.pk }}">
+        <button class="button button-primary" type="submit">Reprocessar com o perfil vigente</button>
+      </form>
+    {% endif %}
   </div>
   <p>{{ item.inconsistencias|length }} linha{{ item.inconsistencias|length|pluralize }} recusada{{ item.inconsistencias|length|pluralize }}.</p>
   {% for grupo in item.grupos %}
@@ -122,11 +126,13 @@
       <h2>{{ item.importacao.arquivo_nome }}</h2>
       <p>Importada em {{ item.importacao.importado_em|date:"d/m/Y H:i" }}</p>
     </div>
-    <form method="post">
-      {% csrf_token %}
-      <input type="hidden" name="importacao_situacao_id" value="{{ item.importacao.pk }}">
-      <button class="button button-primary" type="submit">Reprocessar com o perfil vigente</button>
-    </form>
+    {% if pode_reprocessar %}
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="importacao_situacao_id" value="{{ item.importacao.pk }}">
+        <button class="button button-primary" type="submit">Reprocessar com o perfil vigente</button>
+      </form>
+    {% endif %}
   </div>
   <p>{{ item.inconsistencias|length }} linha{{ item.inconsistencias|length|pluralize }} recusada{{ item.inconsistencias|length|pluralize }}.</p>
   {% for grupo in item.grupos %}

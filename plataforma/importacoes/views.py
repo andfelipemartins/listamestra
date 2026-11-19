@@ -65,8 +65,15 @@ class LinhasRecusadasView(LoginRequiredMixin, View):
             usuario=request.user,
             contrato=contrato,
             ativo=True,
-            papel=Usuario.Perfil.ADMIN,
         ).exists():
+            raise PermissionDenied
+        self.pode_reprocessar = request.user.is_staff or Participacao.objects.filter(
+            usuario=request.user,
+            contrato=contrato,
+            ativo=True,
+            papel=Usuario.Perfil.ADMIN,
+        ).exists()
+        if request.method == "POST" and not self.pode_reprocessar:
             raise PermissionDenied
         self.contrato = contrato
         return super().dispatch(request, *args, **kwargs)
@@ -107,6 +114,7 @@ class LinhasRecusadasView(LoginRequiredMixin, View):
                 importacao_previa=importacao_previa,
                 tipo_previa=tipo_previa,
                 codigos_reprocessados=codigos_reprocessados,
+                pode_reprocessar=self.pode_reprocessar,
             ),
         )
 
@@ -172,6 +180,7 @@ class LinhasRecusadasView(LoginRequiredMixin, View):
                 previa=previa,
                 importacao_previa=importacao,
                 tipo_previa="id",
+                pode_reprocessar=self.pode_reprocessar,
             ),
         )
 
@@ -249,6 +258,7 @@ class LinhasRecusadasView(LoginRequiredMixin, View):
                 importacao_previa=importacao,
                 tipo_previa="situacao_pw",
                 codigos_reprocessados=codigos_reprocessados,
+                pode_reprocessar=self.pode_reprocessar,
             ),
         )
 
@@ -368,6 +378,7 @@ def _contexto_recusadas(
     importacao_previa=None,
     tipo_previa="id",
     codigos_reprocessados=(),
+    pode_reprocessar=False,
 ):
     consulta_id = (
         ImportacaoID.objects.filter(
@@ -438,6 +449,7 @@ def _contexto_recusadas(
         "previa": previa,
         "importacao_previa": importacao_previa,
         "tipo_previa": tipo_previa,
+        "pode_reprocessar": pode_reprocessar,
         "linhas_validas": validas,
         "linhas_fora": linhas_fora,
         "codigos_reprocessados": sorted(codigos_reprocessados),
