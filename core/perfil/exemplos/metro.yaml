@@ -344,3 +344,24 @@ painel:
       rotulo_meta: Meta
       contar_estourados_sem_aprovacao: false
       ciclos: primeira_aprovacao
+prazos:
+  feriados: {nacionais: true, extras: []}
+  # PE-ENG-001, item 5.6: indicador satisfatório quando 80% ou mais dos prazos são cumpridos.
+  meta_percentual: 80
+  regras:
+    # Contrato, cláusula 25.1.2.1: o Metrô analisa em até 15 dias úteis desde a emissão no PW.
+    - id: analise_cliente
+      rotulo: Análise do cliente
+      dias: 15
+      tipo_dia: uteis
+      inicio: emissao
+      fim: analise
+      excecoes: [] # Manuais (30 dias): siglas a confirmar.
+    # Contrato, cláusula 25.1.2.3: devolução em até 15 dias corridos desde a análise do cliente.
+    - id: devolucao_nossa
+      rotulo: Nossa devolução
+      dias: 15
+      tipo_dia: corridos
+      inicio: analise
+      fim: proxima_emissao
+      so_quando_grupo: [nao_aprovado, inconsistente]

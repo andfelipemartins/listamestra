@@ -16,6 +16,7 @@ from .ciclo import (
     ciclo_analise_de_dict,
     regra_emissao_de_dict,
 )
+from .feriados import FeriadoExtra
 from .series import criar_serie
 
 
@@ -116,6 +117,50 @@ class IndicadorAprovacao:
     ciclos: str
 
 
+@dataclass(frozen=True)
+class ExcecaoPrazo:
+    siglas: tuple[str, ...]
+    dias: int
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "siglas", tuple(self.siglas))
+
+
+@dataclass(frozen=True)
+class RegraPrazo:
+    id: str
+    rotulo: str
+    dias: int
+    tipo_dia: str
+    inicio: str
+    fim: str
+    excecoes: tuple[ExcecaoPrazo, ...] = ()
+    so_quando_grupo: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "excecoes", tuple(self.excecoes))
+        object.__setattr__(self, "so_quando_grupo", tuple(self.so_quando_grupo))
+
+
+@dataclass(frozen=True)
+class FeriadosPerfil:
+    nacionais: bool = True
+    extras: tuple[FeriadoExtra, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "extras", tuple(self.extras))
+
+
+@dataclass(frozen=True)
+class PrazosPerfil:
+    feriados: FeriadosPerfil
+    meta_percentual: float
+    regras: tuple[RegraPrazo, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "regras", tuple(self.regras))
+
+
 def _painel_minimo() -> PainelPerfil:
     return PainelPerfil(
         grupos=(
@@ -135,6 +180,7 @@ class PerfilContrato:
     emissao: RegraEmissao
     analise: CicloAnalise
     painel: PainelPerfil = field(default_factory=_painel_minimo)
+    prazos: PrazosPerfil | None = None
 
 
 def perfil_de_dict(dados: Mapping[str, Any]) -> PerfilContrato:
@@ -150,7 +196,8 @@ def perfil_de_dict(dados: Mapping[str, Any]) -> PerfilContrato:
         _validar_series(emissao)
         analise = ciclo_analise_de_dict(dados.get("analise") or {})
         painel = _painel_de_dict(dados.get("painel"))
-        return PerfilContrato(nome, versao, vigencia, codigo, emissao, analise, painel)
+        prazos = _prazos_de_dict(dados.get("prazos"))
+        return PerfilContrato(nome, versao, vigencia, codigo, emissao, analise, painel, prazos)
     except ErroPerfil:
         raise
     except (KeyError, TypeError, ValueError, re.error) as erro:
@@ -356,6 +403,117 @@ def _indicadores_de_dict(dados: Any) -> tuple[IndicadorAprovacao, ...]:
             )
         )
     return tuple(indicadores)
+
+
+def _prazos_de_dict(dados: Any) -> PrazosPerfil | None:
+    if dados is None:
+        return None
+    if not isinstance(dados, Mapping):
+        raise ErroPerfil("'prazos' precisa ser um objeto.")
+
+    feriados_dados = dados.get("feriados", {})
+    if not isinstance(feriados_dados, Mapping):
+        raise ErroPerfil("'prazos.feriados' precisa ser um objeto.")
+    nacionais = feriados_dados.get("nacionais", True)
+    if not isinstance(nacionais, bool):
+        raise ErroPerfil("'prazos.feriados.nacionais' precisa ser booleano.")
+    extras_dados = feriados_dados.get("extras", ())
+    if not isinstance(extras_dados, (list, tuple)):
+        raise ErroPerfil("'prazos.feriados.extras' precisa ser uma lista.")
+    extras: list[FeriadoExtra] = []
+    for posicao, item in enumerate(extras_dados, start=1):
+        campo = f"prazos.feriados.extras[{posicao}]"
+        if not isinstance(item, Mapping):
+            raise ErroPerfil(f"{campo} precisa ser um objeto.")
+        try:
+            data = _data_prazo(item.get("data"), campo)
+        except ValueError as erro:
+            raise ErroPerfil(str(erro)) from erro
+        extras.append(FeriadoExtra(data, _texto_obrigatorio(item.get("nome"), f"nome em {campo}")))
+
+    meta = dados.get("meta_percentual")
+    if isinstance(meta, bool) or not isinstance(meta, (int, float)) or not 0 <= meta <= 100:
+        raise ErroPerfil("'prazos.meta_percentual' precisa ser um número entre 0 e 100.")
+
+    regras_dados = dados.get("regras")
+    if not isinstance(regras_dados, (list, tuple)):
+        raise ErroPerfil("'prazos.regras' precisa ser uma lista.")
+    regras: list[RegraPrazo] = []
+    ids: set[str] = set()
+    for posicao, item in enumerate(regras_dados, start=1):
+        campo = f"prazos.regras[{posicao}]"
+        if not isinstance(item, Mapping):
+            raise ErroPerfil(f"{campo} precisa ser um objeto.")
+        identificador = _texto_obrigatorio(item.get("id"), f"id em {campo}")
+        chave_id = identificador.casefold()
+        if chave_id in ids:
+            raise ErroPerfil(f"Id de regra repetido em 'prazos.regras': '{identificador}'.")
+        ids.add(chave_id)
+        dias = item.get("dias")
+        if isinstance(dias, bool) or not isinstance(dias, int) or dias < 1:
+            raise ErroPerfil(f"'dias' de '{identificador}' precisa ser inteiro maior ou igual a 1.")
+        tipo_dia = item.get("tipo_dia")
+        if tipo_dia not in {"uteis", "corridos"}:
+            raise ErroPerfil(f"'tipo_dia' de '{identificador}' precisa ser 'uteis' ou 'corridos'.")
+        excecoes = _excecoes_prazo(item.get("excecoes", ()), identificador)
+        grupos_dados = item.get("so_quando_grupo", ())
+        if not isinstance(grupos_dados, (list, tuple)):
+            raise ErroPerfil(f"'so_quando_grupo' de '{identificador}' precisa ser uma lista.")
+        grupos = tuple(
+            _texto_obrigatorio(grupo, f"grupo em 'so_quando_grupo' de '{identificador}'")
+            for grupo in grupos_dados
+        )
+        regras.append(
+            RegraPrazo(
+                id=identificador,
+                rotulo=_texto_obrigatorio(item.get("rotulo"), f"rótulo da regra '{identificador}'"),
+                dias=dias,
+                tipo_dia=tipo_dia,
+                inicio=_texto_obrigatorio(item.get("inicio"), f"início da regra '{identificador}'"),
+                fim=_texto_obrigatorio(item.get("fim"), f"fim da regra '{identificador}'"),
+                excecoes=excecoes,
+                so_quando_grupo=grupos,
+            )
+        )
+    return PrazosPerfil(FeriadosPerfil(nacionais=nacionais, extras=tuple(extras)), float(meta), tuple(regras))
+
+
+def _excecoes_prazo(dados: Any, identificador: str) -> tuple[ExcecaoPrazo, ...]:
+    if not isinstance(dados, (list, tuple)):
+        raise ErroPerfil(f"'excecoes' de '{identificador}' precisa ser uma lista.")
+    excecoes: list[ExcecaoPrazo] = []
+    siglas_vistas: set[str] = set()
+    for posicao, item in enumerate(dados, start=1):
+        campo = f"excecoes[{posicao}] de '{identificador}'"
+        if not isinstance(item, Mapping):
+            raise ErroPerfil(f"{campo} precisa ser um objeto.")
+        siglas_dados = item.get("siglas")
+        if not isinstance(siglas_dados, (list, tuple)) or not siglas_dados:
+            raise ErroPerfil(f"'siglas' em {campo} precisa ser uma lista não vazia.")
+        siglas = tuple(_texto_obrigatorio(sigla, f"sigla em {campo}") for sigla in siglas_dados)
+        dias = item.get("dias")
+        if isinstance(dias, bool) or not isinstance(dias, int) or dias < 1:
+            raise ErroPerfil(f"'dias' em {campo} precisa ser inteiro maior ou igual a 1.")
+        for sigla in siglas:
+            chave = sigla.casefold()
+            if chave in siglas_vistas:
+                raise ErroPerfil(f"Sigla repetida ou ambígua em exceções de '{identificador}': '{sigla}'.")
+            siglas_vistas.add(chave)
+        excecoes.append(ExcecaoPrazo(siglas=siglas, dias=dias))
+    return tuple(excecoes)
+
+
+def _data_prazo(valor: Any, campo: str) -> date:
+    if isinstance(valor, datetime):
+        return valor.date()
+    if isinstance(valor, date):
+        return valor
+    if isinstance(valor, str):
+        try:
+            return date.fromisoformat(valor)
+        except ValueError as erro:
+            raise ValueError(f"'data' em {campo} precisa estar no formato AAAA-MM-DD.") from erro
+    raise ValueError(f"'data' em {campo} precisa estar no formato AAAA-MM-DD.")
 
 
 def _estrutura_de_dict(dados: Any) -> EstruturaCodigo:
