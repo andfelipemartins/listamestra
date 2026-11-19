@@ -1,13 +1,11 @@
 from datetime import date, datetime
 from io import BytesIO
 from pathlib import Path
-from copy import deepcopy
 
 import pytest
 import yaml
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
-from django.utils import timezone
 from openpyxl import Workbook
 
 from core.perfil import perfil_de_dict
@@ -43,6 +41,23 @@ def perfil_modelo(contrato):
         vigencia_inicio=date(2026, 1, 1),
         definicao=definicao,
     )
+
+
+def definicao_metro_atualizada():
+    with PERFIL_METRO.open(encoding="utf-8") as arquivo:
+        return _json_compatibility(yaml.safe_load(arquivo))
+
+
+def remover_a7_do_perfil(perfil):
+    definicao = definicao_metro_atualizada()
+    campo_classe = next(
+        campo
+        for campo in definicao["codigo"]["segmentos"]
+        if campo.get("nome") == "classe"
+    )
+    campo_classe["valores"].pop("A7")
+    perfil.definicao = definicao
+    perfil.save(update_fields=["definicao"])
 
 
 def _json_compatibility(valor):
@@ -255,6 +270,7 @@ def test_importa_linhas_validas_e_registra_invalidas_sem_bloquear(contrato, perf
 
 @pytest.mark.django_db
 def test_recusas_ficam_agrupadas_por_caixa_e_valor_e_exigem_acesso(contrato, perfil_modelo, client, django_user_model):
+    remover_a7_do_perfil(perfil_modelo)
     previa = previa_para(
         criar_excel_id(
             [
@@ -297,6 +313,7 @@ def test_recusas_ficam_agrupadas_por_caixa_e_valor_e_exigem_acesso(contrato, per
 
 @pytest.mark.django_db
 def test_reprocessa_com_perfil_vigente_e_permanece_idempotente(contrato, perfil_modelo):
+    remover_a7_do_perfil(perfil_modelo)
     previa_inicial = previa_para(
         criar_excel_id(
             [{"titulo": "Documento A7 recuperado", "classe": "A7", "sequencial": "1001", "codigo": "DE-15.25.00.00-6A7-1001"}]
@@ -309,19 +326,14 @@ def test_reprocessa_com_perfil_vigente_e_permanece_idempotente(contrato, perfil_
     importacao = ImportacaoID.objects.get(indice=indice)
     inconsistencia = InconsistenciaImportacao.objects.get(importacao_id=importacao)
 
-    definicao_v2 = deepcopy(perfil_modelo.definicao)
-    campo_classe = next(
-        campo
-        for campo in definicao_v2["codigo"]["segmentos"]
-        if campo.get("nome") == "classe"
-    )
-    campo_classe["valores"]["A7"] = "Classe cadastrada para reprocessamento"
+    definicao_v2 = definicao_metro_atualizada()
     perfil_v2 = PerfilContrato.objects.create(
         contrato=contrato,
         versao=2,
-        vigencia_inicio=timezone.localdate(),
+        vigencia_inicio=date.fromisoformat(definicao_v2["vigencia_inicio"]),
         definicao=definicao_v2,
     )
+    assert perfil_de_dict(perfil_v2.definicao).codigo.campos[6].valores["A7"] == "Qualidade (a confirmar)"
     previa_reprocessada = gerar_previa_linhas_recusadas(
         [inconsistencia],
         contrato_id=contrato.pk,
@@ -360,6 +372,7 @@ def test_reprocessa_com_perfil_vigente_e_permanece_idempotente(contrato, perfil_
 
 @pytest.mark.django_db
 def test_tela_previsualiza_e_confirma_reprocessamento(client, contrato, perfil_modelo, django_user_model):
+    remover_a7_do_perfil(perfil_modelo)
     previa_inicial = previa_para(
         criar_excel_id(
             [{"titulo": "Documento A7 da tela", "classe": "A7", "sequencial": "1001", "codigo": "DE-15.25.00.00-6A7-1001"}]
@@ -371,17 +384,11 @@ def test_tela_previsualiza_e_confirma_reprocessamento(client, contrato, perfil_m
     indice = aplicar_previa(previa_inicial, contrato=contrato, perfil_modelo=perfil_modelo)
     importacao = ImportacaoID.objects.get(indice=indice)
     incidencia = InconsistenciaImportacao.objects.get(importacao_id=importacao)
-    definicao_v2 = deepcopy(perfil_modelo.definicao)
-    campo_classe = next(
-        campo
-        for campo in definicao_v2["codigo"]["segmentos"]
-        if campo.get("nome") == "classe"
-    )
-    campo_classe["valores"]["A7"] = "Classe cadastrada para reprocessamento"
+    definicao_v2 = definicao_metro_atualizada()
     PerfilContrato.objects.create(
         contrato=contrato,
         versao=2,
-        vigencia_inicio=timezone.localdate(),
+        vigencia_inicio=date.fromisoformat(definicao_v2["vigencia_inicio"]),
         definicao=definicao_v2,
     )
     admin = django_user_model.objects.create_user(username="admin-reprocessa-ui", password="senha")

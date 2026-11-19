@@ -121,6 +121,8 @@ codigo:
         A3: "Ocupação de espaços"
         A4: "Implantação geral"
         A6: "Infraestrutura administrativa"
+        # D-038: ausente do MAN-10-201; veio do ID do cliente.
+        A7: "Qualidade (a confirmar)"
         A8: "Planta chave"
         A9: "Diversos"
         B1: "Arquitetura conceitual"

@@ -81,8 +81,24 @@ def test_metro_interpreta_classe_e_subclasse_com_rotulo(metro):
     assert resultado.significados["classe"] == "Iluminação"
 
 
+def test_metro_aceita_classe_a7_provisoria(metro):
+    resultado = interpretar(metro, "RT-15.00.00.00-6A7-0001")
+
+    assert isinstance(resultado, CodigoInterpretado)
+    assert resultado.segmentos["classe"] == "A7"
+    assert resultado.significados["classe"] == "Qualidade (a confirmar)"
+
+
 def test_metro_rejeita_classe_que_nao_consta_nas_tabelas(metro):
     resultado = interpretar(metro, "DE-15.25.00.00-6X1-1513")
+
+    assert isinstance(resultado, ErroCodigo)
+    assert resultado.segmento == "classe"
+    assert "classe e subclasse" in resultado.mensagem
+
+
+def test_metro_rejeita_classe_a5_inexistente(metro):
+    resultado = interpretar(metro, "DE-15.25.00.00-6A5-1513")
 
     assert isinstance(resultado, ErroCodigo)
     assert resultado.segmento == "classe"

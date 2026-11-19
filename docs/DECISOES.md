@@ -510,3 +510,39 @@ Aprovado, Não Conforme, Inconsistente, Erro de Assinatura, Cancelado, Revisão 
 - A regra `ask` de `git push` saiu do `.claude/settings.local.json`; o push normal passou a rodar
   sem aprovação. Force-push continua pedindo confirmação.
 - A ESTEIRA.md já registra isso (seção "Duas sessões, um repositório").
+
+## D-038 · A7 entra no perfil Metrô como "Qualidade (a confirmar)"
+
+*Origem: Q4 · 2026-11-19 (respondida às 02:29Z) · completa a D-034 (P6)*
+
+- A classe A7 entra já no perfil Metrô com o rótulo provisório **"Qualidade (a confirmar)"**, para
+  os 50 documentos do ID do PW deixarem de ficar de fora.
+- O dono vai procurar o MAN de qualidade e trazer o nome certo; aí o rótulo é trocado. Block-023.
+
+## D-039 · Indicador do procedimento específico: barras com linha de meta
+
+*Origem: Q3 · 2026-11-19 (respondida às 02:01Z, com imagem de exemplo anexa)*
+
+- O indicador "aprovado em até 3 revisões, meta de 80%" aparece como **gráfico de barras com uma
+  linha tracejada de meta** (o dono anexou um exemplo: barras azuis e a linha "Meta" atravessando).
+- Leitura: um número geral do contrato e o mesmo número em cada recorte, ao lado do limite.
+  O dono acha que "meta" talvez não seja o nome certo; seria o "limite ideal".
+- Cada obra terá o seu procedimento específico e o seu controle de qualidade. Por isso o limite de
+  revisões e o percentual vêm do **perfil do contrato**, não do código.
+- Mais para frente, quem usa deve poder configurar os gráficos: nem toda empresa nem todo gerente
+  quer ver do mesmo jeito. Fica para depois; não trava esta versão.
+
+## D-040 · Painel de visualização separado da tela de ação
+
+*Origem: R2 · 2026-11-19 (respondida às 02:37Z) · ajusta a D-036*
+
+- O dono quer **separar visualização de ação**. O painel (da chefia, de reunião) mostra só o que é
+  produtivo para acompanhar o contrato, interativo para filtrar e mexer. Não serve para resolver
+  problema.
+- Um coordenador ou gerente de contrato não precisa ver que há documento com erro no painel ("fica
+  até feio"). Erros e pendências não ficam à vista da chefia.
+- Ao entrar com o próprio login, a pessoa cai numa **tela inicial dela**, um dashboard com
+  pendências, erros e principalmente o que tem a ver com a conta dela (o que ela mesma fez).
+- Consequência: o grupo ERRO (D-036) sai do painel da chefia e vai para a tela de ação. A Central
+  de Pendências / tela inicial do usuário é onde se ignora, corrige ou pede a correção.
+  O recorte exato (o que some do painel, o que conta no total) segue nas perguntas abertas.
