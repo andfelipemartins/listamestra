@@ -31,6 +31,10 @@ ACOES = (
 def carregar_eventos(contrato):
     """Monta uma linha por registro histórico e uma por lote de importação."""
     eventos = []
+    documentos_existentes = dict(
+        Documento.objects.filter(contrato=contrato).values_list("identificador_base", "pk")
+    )
+    documentos_existentes_ids = set(documentos_existentes.values())
     historicos_documentos = list(
         Documento.history.filter(contrato_id=contrato.pk).select_related("history_user")
     )
@@ -44,12 +48,10 @@ def carregar_eventos(contrato):
                 entidade="documento",
                 contrato=contrato,
                 codigo=registro.identificador_base,
+                documento_id=registro.id if registro.id in documentos_existentes_ids else None,
             )
         )
-    documentos_ids = set(documentos_por_id)
-    documentos_ids.update(
-        Documento.objects.filter(contrato=contrato).values_list("pk", flat=True)
-    )
+    documentos_ids = set(documentos_por_id) | documentos_existentes_ids
 
     for registro in CodigoDocumento.history.filter(documento_id__in=documentos_ids).select_related("history_user"):
         eventos.append(
@@ -59,6 +61,7 @@ def carregar_eventos(contrato):
                 entidade="código do documento",
                 contrato=contrato,
                 codigo=documentos_por_id.get(registro.documento_id, ""),
+                documento_id=registro.documento_id if registro.documento_id in documentos_existentes_ids else None,
             )
         )
 
@@ -75,6 +78,7 @@ def carregar_eventos(contrato):
                 entidade="emissão",
                 contrato=contrato,
                 codigo=documentos_por_id.get(registro.documento_id, ""),
+                documento_id=registro.documento_id if registro.documento_id in documentos_existentes_ids else None,
             )
         )
     emissoes_ids = set(emissao_documentos)
@@ -94,6 +98,13 @@ def carregar_eventos(contrato):
         ),
     ):
         for registro in modelo.history.filter(**filtro).select_related("history_user"):
+            documento_id = None
+            if modelo is Analise:
+                documento_id = emissao_documentos.get(registro.emissao_id)
+            elif modelo is InconsistenciaImportacao:
+                documento_id = documentos_existentes.get(registro.codigo_lido)
+            if documento_id not in documentos_existentes_ids:
+                documento_id = None
             eventos.append(
                 _evento_historico(
                     registro,
@@ -101,6 +112,7 @@ def carregar_eventos(contrato):
                     entidade=entidade,
                     contrato=contrato,
                     codigo=codigo_resolver(registro),
+                    documento_id=documento_id,
                 )
             )
 
@@ -114,6 +126,7 @@ def carregar_eventos(contrato):
                 entidade="inconsistência de importação",
                 contrato=contrato,
                 codigo=registro.codigo_lido,
+                documento_id=documentos_existentes.get(registro.codigo_lido),
             )
         )
 
@@ -131,6 +144,7 @@ def carregar_eventos(contrato):
                 entidade="item previsto",
                 contrato=contrato,
                 codigo=documentos_por_id.get(registro.documento_id, ""),
+                documento_id=registro.documento_id if registro.documento_id in documentos_existentes_ids else None,
             )
         )
 
@@ -142,6 +156,7 @@ def carregar_eventos(contrato):
                 entidade="previsão de emissão",
                 contrato=contrato,
                 codigo=documentos_por_id.get(registro.documento_id, ""),
+                documento_id=registro.documento_id if registro.documento_id in documentos_existentes_ids else None,
             )
         )
 
@@ -255,12 +270,14 @@ def _evento_importacao(registro, *, chave, tipo, titulo, resumo, validas, recusa
     }
 
 
-def _evento_historico(registro, modelo, *, entidade, contrato, codigo):
+def _evento_historico(registro, modelo, *, entidade, contrato, codigo, documento_id=None):
     acao = {"+": "criou", "~": "alterou", "-": "excluiu"}.get(registro.history_type, "alterou")
     detalhes = _diferencas(registro, modelo) if acao == "alterou" else []
     ator = _ator_historico(registro)
     nome = _nome_usuario(ator)
     descricao = _descricao_historico(registro, entidade, acao, codigo, detalhes)
+    resumo = f"{nome} {descricao}"
+    resumo_antes_codigo, separador, resumo_depois_codigo = resumo.partition(codigo) if codigo else ("", "", "")
     return {
         "chave": f"historico-{modelo._meta.model_name}-{registro.history_id}",
         "data_hora": _localizar(registro.history_date),
@@ -272,7 +289,10 @@ def _evento_historico(registro, modelo, *, entidade, contrato, codigo):
         "usuario": ator,
         "usuario_id": getattr(ator, "pk", None),
         "usuario_nome": nome,
-        "resumo": f"{nome} {descricao}",
+        "resumo": resumo,
+        "resumo_antes_codigo": resumo_antes_codigo if separador else None,
+        "resumo_depois_codigo": resumo_depois_codigo if separador else None,
+        "documento_id": documento_id,
         "detalhes": detalhes,
         "registro_id": registro.pk,
         "contrato_id": contrato.pk,

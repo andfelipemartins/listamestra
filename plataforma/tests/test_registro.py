@@ -239,8 +239,40 @@ def test_filtros_por_pessoa_acao_periodo_e_codigo(client, contrato, usuario):
 
     html = resposta.content.decode()
     assert resposta.status_code == 200
-    assert "alterou o título de DE-15.25.00.00-6A1-1001" in html
+    pasta_documento = reverse("documento_pasta", args=(contrato.pk, documento.pk))
+    assert "alterou o título de " in html
+    assert f'href="{pasta_documento}">DE-15.25.00.00-6A1-1001</a>' in html
     assert "MC-15.25.00.00-6A1-1002" not in html
+
+
+@pytest.mark.django_db
+def test_evento_de_documento_linka_codigo_a_pasta_na_lista_e_no_detalhe(
+    client, contrato, usuario
+):
+    codigo = "DE-15.25.00.00-6A1-1001"
+    documento = _documento(contrato, codigo, "Título inicial", usuario)
+    documento.titulo = "Título atualizado"
+    documento._history_user = usuario
+    documento.save(update_fields=("titulo",))
+    evento = next(
+        item
+        for item in carregar_eventos(contrato)
+        if item["acao"] == "alterou" and item["codigo"] == codigo
+    )
+    client.force_login(usuario)
+    pasta = reverse("documento_pasta", args=(contrato.pk, documento.pk))
+    link = f'href="{pasta}">{codigo}</a>'
+
+    lista = client.get(reverse("atividade"), {"contrato": contrato.pk})
+    detalhe = client.get(
+        reverse("atividade"), {"contrato": contrato.pk, "evento": evento["chave"]}
+    )
+
+    assert evento["documento_id"] == documento.pk
+    assert lista.status_code == 200
+    assert detalhe.status_code == 200
+    assert link in lista.content.decode()
+    assert link in detalhe.content.decode()
 
 
 @pytest.mark.django_db

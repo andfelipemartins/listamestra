@@ -113,6 +113,31 @@ def test_janela_erros_usa_grupo_oculto_e_mostra_quem_lancou(contrato, perfil_mod
 
 
 @pytest.mark.django_db
+def test_codigo_da_mesa_e_do_ver_todos_abre_a_pasta_do_documento(
+    contrato, perfil_modelo, usuario, client
+):
+    documento = _documento(contrato, "DOC-ERRO-PASTA-1001")
+    _emissao(
+        documento,
+        date(2026, 11, 10),
+        situacao="Erro de Assinatura",
+        data_analise=date(2026, 11, 12),
+        usuario=usuario,
+    )
+    client.force_login(usuario)
+    pasta = reverse("documento_pasta", args=(contrato.pk, documento.pk))
+    link = f'href="{pasta}"><strong>{documento.identificador_base}</strong></a>'
+
+    mesa = client.get(reverse("inicio"), {"contrato": contrato.pk})
+    ver_todos = client.get(reverse("acoes:janela", args=("erros",)), {"contrato": contrato.pk})
+
+    assert mesa.status_code == 200
+    assert ver_todos.status_code == 200
+    assert link in mesa.content.decode()
+    assert link in ver_todos.content.decode()
+
+
+@pytest.mark.django_db
 def test_janela_analise_usa_dias_uteis_e_ordena_atrasados_primeiro(contrato, perfil_modelo, usuario):
     perfil_modelo.definicao["prazos"]["regras"][0]["dias"] = 3
     perfil_modelo.save(update_fields=("definicao",))

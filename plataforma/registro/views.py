@@ -54,11 +54,19 @@ class AtividadeView(LoginRequiredMixin, View):
         for evento in eventos_filtrados:
             evento["data_hora_local"] = timezone.localtime(evento["data_hora"])
             evento["url_detalhe"] = _url_com_parametros(request.GET, "evento", evento["chave"])
+            if evento.get("documento_id"):
+                evento["url_documento"] = reverse(
+                    "documento_pasta", args=(contrato.pk, evento["documento_id"])
+                )
             if evento["link_recusadas"]:
                 evento["url_recusadas"] = reverse("linhas_recusadas", args=(contrato.pk,))
 
         if evento_detalhe is not None:
             evento_detalhe["data_hora_local"] = timezone.localtime(evento_detalhe["data_hora"])
+            if evento_detalhe.get("documento_id"):
+                evento_detalhe["url_documento"] = reverse(
+                    "documento_pasta", args=(contrato.pk, evento_detalhe["documento_id"])
+                )
             if evento_detalhe["link_recusadas"]:
                 evento_detalhe["url_recusadas"] = reverse("linhas_recusadas", args=(contrato.pk,))
 

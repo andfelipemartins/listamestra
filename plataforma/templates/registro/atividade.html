@@ -21,7 +21,7 @@
     </div>
   </div>
 
-  {% if evento_detalhe.codigo %}<p><strong>Documento:</strong> {{ evento_detalhe.codigo }}</p>{% endif %}
+  {% if evento_detalhe.codigo %}<p><strong>Documento:</strong> {% if evento_detalhe.url_documento %}<a href="{{ evento_detalhe.url_documento }}">{{ evento_detalhe.codigo }}</a>{% else %}{{ evento_detalhe.codigo }}{% endif %}</p>{% endif %}
   {% if evento_detalhe.detalhes %}
   <div class="table-wrap">
     <table>
@@ -95,7 +95,7 @@
         {% for evento in pagina.object_list %}
         <tr>
           <td><time datetime="{{ evento.data_hora|date:'c' }}">{{ evento.data_hora_local|date:"d/m/Y H:i" }}</time></td>
-          <td><span aria-hidden="true">{% if evento.acao == "criou" %}＋{% elif evento.acao == "alterou" %}✎{% elif evento.acao == "excluiu" %}−{% elif evento.acao == "importou" %}⇧{% else %}↻{% endif %}</span> <a href="{{ evento.url_detalhe }}">{{ evento.resumo }}</a></td>
+          <td><span aria-hidden="true">{% if evento.acao == "criou" %}＋{% elif evento.acao == "alterou" %}✎{% elif evento.acao == "excluiu" %}−{% elif evento.acao == "importou" %}⇧{% else %}↻{% endif %}</span> {% if evento.url_documento and evento.resumo_antes_codigo != None %}{% if evento.resumo_antes_codigo %}<a href="{{ evento.url_detalhe }}">{{ evento.resumo_antes_codigo }}</a>{% endif %}<a href="{{ evento.url_documento }}">{{ evento.codigo }}</a>{% if evento.resumo_depois_codigo %}<a href="{{ evento.url_detalhe }}">{{ evento.resumo_depois_codigo }}</a>{% endif %}{% else %}<a href="{{ evento.url_detalhe }}">{{ evento.resumo }}</a>{% endif %}</td>
           <td>{{ evento.entidade }}{% if evento.link_recusadas %}<br><a href="{{ evento.url_recusadas }}">Ver recusadas</a>{% endif %}</td>
         </tr>
         {% endfor %}

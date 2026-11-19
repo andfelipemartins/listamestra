@@ -1,6 +1,6 @@
 <article class="mesa-item">
   <div class="mesa-item-meta"><span class="mesa-selo">{{ item.grupo }}</span><span>Desde {{ item.data_desde|date:"d/m/Y" }}</span></div>
-  <strong>{{ item.codigo }}</strong><p>{{ item.titulo }}</p>
+  <a href="{% url 'documento_pasta' contrato.pk item.documento.pk %}"><strong>{{ item.codigo }}</strong></a><p>{{ item.titulo }}</p>
   <div class="mesa-item-meta"><span>Situação: {{ item.situacao }}</span><span>Rev. {{ item.revisao }}{% if item.versao != None %} · Ver. {{ item.versao }}{% endif %}</span><span>Lançado por: {{ item.quem_lancou }}</span></div>
   {% if item.ultima_acao %}<p>Última ação: {{ item.ultima_acao.get_acao_display }} · {{ item.ultima_acao_por }}{% if item.ultima_acao.motivo %} · {{ item.ultima_acao.motivo }}{% endif %}</p>{% endif %}
   {% if janela.id == "ignorados" %}
