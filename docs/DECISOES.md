@@ -821,3 +821,42 @@ Aprovado, Não Conforme, Inconsistente, Erro de Assinatura, Cancelado, Revisão 
   município) e os feriados vêm sozinhos; o que alguém cadastrar fica no acervo para os próximos contratos. Mudança de
   lei é esporádica e se ajusta à mão.
 - **Lembretes do dono** (pedido na AA5): o que ele adiou fica numa lista no painel para ser cobrado.
+
+## D-065 · Os prazos estão certos; falta mostrar o quanto se atrasou
+
+*Origem: AA10 · 2026-11-19*
+
+- O dono confirma os números (Metrô 64,1% no prazo; nós 16,7%): a fonte é a extração atualizada e o contrato teve
+  problemas reais (equipe subdimensionada, projetistas com entregas ruins). O sistema mostra de forma automática o que o
+  Excel não acompanha.
+- Pedido novo: **faixas de criticidade do atraso**. Passar 1 a 5 dias do prazo é diferente de passar 30 ou 60 dias. O
+  painel deve mostrar quantos dos atrasados estão em cada faixa.
+- Generalização: cada contrato define as **suas faixas** (limites e nomes) no perfil.
+
+## D-066 · A cópia 0 não conta como revisão; reaberturas têm contagem própria
+
+*Origem: AB1 · 2026-11-19*
+
+- A Rev 0 (original emitida depois da aprovação, PE 5.3.3) aparece como **"Original (aprovado)"** e não soma revisão.
+  A contagem da reabertura começa nela: A1 = Revisão 1 da reabertura.
+- Ideia do dono para a melhoria do PE (não é regra ainda): um segundo parâmetro de excelência para reaberturas causadas
+  por **problema não previsto em campo** (não erro de projeto). Ex.: abrir A1 e aprovar logo em A, sem A2/A3, e até duas
+  reaberturas assim (A1 → A, B1 → B) ainda contam como qualidade.
+
+## D-067 · W1 e W2 de São Mateus: os DE valem; o RT vai ser desmembrado
+
+*Origem: AC2 · 2026-11-19*
+
+- A pedido do cliente, os relatórios de sondagem (classes W1 e W2) viraram **DE** no PW. O RT ainda existe e não se sabe se
+  será cancelado; ele vai ser desmembrado em vários DE (sondagens a trado, mista e a percussão).
+- Os DE não são duplicados com sigla errada. O efeito do RT no 100% enquanto ele existir ficou para a AC6.
+
+## D-068 · Painel abre no total; cada ID diz o que representa
+
+*Origem: AC3 · 2026-11-19*
+
+- Com várias fases, o painel abre **somando tudo** e o filtro "Fase" mostra o 100% de cada uma (já é o comportamento do
+  block-042).
+- Os IDs ficam todos num só previsto, mas quem configura diz **o que cada ID representa** (ex.: ID 1001 = arquitetura e
+  civil, ID 1002 = sistemas, um ID de qualidade, o ID 1501 = fase 2 com tudo). Esse agrupamento vira filtro no painel e
+  nos gráficos.
