@@ -13,6 +13,15 @@ class ImportarIDForm(forms.Form):
     codigo_id = forms.CharField(label="Código do ID", max_length=250, required=False)
     revisao = forms.CharField(label="Revisão", max_length=100, required=False)
     fase = forms.CharField(label="Fase", max_length=100, required=False)
+    escopo = forms.CharField(
+        label="O que este ID representa",
+        max_length=100,
+        required=False,
+        help_text=(
+            "Ex.: ID 1001 = Arquitetura e civil; ID 1002 = Sistemas; um ID futuro pode ser de Qualidade; "
+            "ID 1501 = fase 2 com tudo."
+        ),
+    )
 
     def clean_arquivo(self):
         arquivo = self.cleaned_data["arquivo"]

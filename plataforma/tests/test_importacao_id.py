@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from django.contrib.admin.sites import AdminSite
 from django.db import connection
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test.utils import CaptureQueriesContext
@@ -13,6 +14,7 @@ from openpyxl import Workbook
 from core.perfil import perfil_de_dict
 from contratos.models import Contrato, Participacao, PerfilContrato
 from documentos.models import CodigoDocumento, Documento
+from importacoes.admin import IndiceDocumentosAdmin
 from importacoes.id_excel import FORMATOS_ID, gerar_previa_id, gerar_previa_linhas_recusadas
 from importacoes.models import InconsistenciaImportacao, ImportacaoID, IndiceDocumentos, ItemPrevisto
 from importacoes.services import aplicar_previa, previstos_vigentes
@@ -627,6 +629,9 @@ def test_tela_staff_mostra_previa_htmx_e_confirma_importacao(client, contrato, p
     formulario = client.get(reverse("importar_id"))
     assert formulario.status_code == 200
     assert b'name="fase"' in formulario.content
+    assert b'name="escopo"' in formulario.content
+    assert "O que este ID representa".encode() in formulario.content
+    assert "ID 1001 = Arquitetura e civil".encode() in formulario.content
     arquivo = criar_excel_id([{"titulo": "Documento na tela", "sequencial": "1001"}])
     upload = SimpleUploadedFile("ID-TESTE-1.xlsx", arquivo.read(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
@@ -638,6 +643,7 @@ def test_tela_staff_mostra_previa_htmx_e_confirma_importacao(client, contrato, p
             "codigo_id": "ID-TESTE",
             "revisao": "1",
             "fase": "Fase 1",
+            "escopo": "Arquitetura e civil",
             "arquivo": upload,
         },
         HTTP_HX_REQUEST="true",
@@ -652,9 +658,18 @@ def test_tela_staff_mostra_previa_htmx_e_confirma_importacao(client, contrato, p
     assert resposta.status_code == 200
     assert IndiceDocumentos.objects.get().importado_por == administrador
     assert IndiceDocumentos.objects.get().fase == "Fase 1"
+    assert IndiceDocumentos.objects.get().escopo == "Arquitetura e civil"
     assert IndiceDocumentos.objects.get().conta_no_previsto is True
     assert ItemPrevisto.objects.count() == 1
     assert b"importado com 1 linhas v\xc3\xa1lidas" in resposta.content
+
+
+def test_admin_indice_documentos_expoe_escopo_na_lista_e_no_filtro():
+    configuracao = IndiceDocumentosAdmin(IndiceDocumentos, AdminSite())
+
+    assert "escopo" in configuracao.list_display
+    assert "escopo" in configuracao.list_editable
+    assert "escopo" in configuracao.list_filter
 
 
 @pytest.mark.django_db

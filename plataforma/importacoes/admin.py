@@ -23,14 +23,15 @@ class IndiceDocumentosAdmin(admin.ModelAdmin):
         "codigo",
         "revisao",
         "fase",
+        "escopo",
         "conta_no_previsto",
         "fonte",
         "contrato",
         "importado_em",
         "vigente",
     )
-    list_editable = ("fase", "conta_no_previsto")
-    list_filter = ("fase", "conta_no_previsto", "fonte", "vigente", "contrato")
+    list_editable = ("fase", "escopo", "conta_no_previsto")
+    list_filter = ("fase", "escopo", "conta_no_previsto", "fonte", "vigente", "contrato")
     search_fields = ("codigo", "arquivo_nome", "contrato__nome")
     readonly_fields = ("importado_em",)
     inlines = (ItemPrevistoInline,)

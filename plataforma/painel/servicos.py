@@ -40,6 +40,8 @@ class PainelIndisponivel(ValueError):
 _ID_OUTROS = "__outros__"
 _FASE_SEM_FASE = "__sem_fase__"
 _FILTRO_FASE = "fase"
+_ESCOPO_SEM_ESCOPO = "__sem_escopo__"
+_FILTRO_ESCOPO = "escopo"
 
 
 @dataclass(frozen=True)
@@ -49,6 +51,7 @@ class DocumentoPainel:
     situacao_vigente: str | None
     situacoes_mais_recentes: tuple[str | None, ...]
     fases: tuple[str, ...] = ()
+    escopos: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -85,6 +88,11 @@ def carregar_painel(contrato, por=None, filtros=None):
         for indice in indices_vigentes
         if indice.conta_no_previsto
     }
+    escopos_contaveis = {
+        _valor_escopo(indice.escopo)
+        for indice in indices_vigentes
+        if indice.conta_no_previsto
+    }
     itens = (
         ItemPrevisto.objects.filter(indice_id__in=ids_vigentes, excluido=False)
         .select_related("documento")
@@ -95,6 +103,7 @@ def carregar_painel(contrato, por=None, filtros=None):
     previstos = {}
     documentos_em_ids = set()
     fases_por_documento = {}
+    escopos_por_documento = {}
     for item in itens:
         documentos_em_ids.add(item.documento_id)
         indice = indices_por_id[item.indice_id]
@@ -103,6 +112,9 @@ def carregar_painel(contrato, por=None, filtros=None):
         previstos.setdefault(item.documento_id, item.documento)
         fases_por_documento.setdefault(item.documento_id, set()).add(
             _valor_fase(indice.fase)
+        )
+        escopos_por_documento.setdefault(item.documento_id, set()).add(
+            _valor_escopo(indice.escopo)
         )
     todos_documentos = []
     for documento in previstos.values():
@@ -121,6 +133,12 @@ def carregar_painel(contrato, por=None, filtros=None):
                 situacao_vigente,
                 historico,
                 tuple(sorted(fases_por_documento[documento.pk], key=str.casefold)),
+                tuple(
+                    sorted(
+                        escopos_por_documento[documento.pk],
+                        key=_chave_ordenacao_escopo,
+                    )
+                ),
             )
         )
 
@@ -143,6 +161,24 @@ def carregar_painel(contrato, por=None, filtros=None):
                 ],
             }
         )
+    caixa_escopo = None
+    escopos_ordenados = sorted(escopos_contaveis, key=_chave_ordenacao_escopo)
+    if len(escopos_contaveis) > 1:
+        caixa_escopo = CaixaPainel(
+            nome=_FILTRO_ESCOPO,
+            rotulo="Escopo do ID",
+            valores={escopo: _rotulo_escopo(escopo) for escopo in escopos_ordenados},
+        )
+        filtros_disponiveis.append(
+            {
+                "nome": _FILTRO_ESCOPO,
+                "rotulo": "Escopo do ID",
+                "opcoes": [
+                    {"valor": escopo, "rotulo": _rotulo_escopo(escopo)}
+                    for escopo in escopos_ordenados
+                ],
+            }
+        )
     if perfil.painel.categorias:
         filtros_disponiveis.append(_filtro_categorias(perfil, todos_documentos))
     filtros_selecionados = _normalizar_filtros(filtros, filtros_disponiveis)
@@ -155,7 +191,11 @@ def carregar_painel(contrato, por=None, filtros=None):
         item
         for item in todos_documentos
         if _corresponde_filtros(
-            item.documento, filtros_selecionados, perfil, item.fases
+            item.documento,
+            filtros_selecionados,
+            perfil,
+            item.fases,
+            item.escopos,
         )
     ]
 
@@ -192,6 +232,8 @@ def carregar_painel(contrato, por=None, filtros=None):
         raise PainelIndisponivel("O perfil vigente não define caixas para recorte.")
     if caixa_fase is not None:
         caixas.append(caixa_fase)
+    if caixa_escopo is not None:
+        caixas.append(caixa_escopo)
     nomes_caixas = {caixa.nome for caixa in caixas}
     nome_categoria = "categoria"
     caixa_selecionada = (
@@ -207,7 +249,13 @@ def carregar_painel(contrato, por=None, filtros=None):
     )
 
     def valor_recorte(perfil_recorte, documento, nome):
-        return _valor_recorte(perfil_recorte, documento, nome, fases_por_documento)
+        return _valor_recorte(
+            perfil_recorte,
+            documento,
+            nome,
+            fases_por_documento,
+            escopos_por_documento,
+        )
 
     indicadores_prazo, analises_deduzidas_sem_data = calcular_indicadores_prazo(
         perfil,
@@ -228,51 +276,58 @@ def carregar_painel(contrato, por=None, filtros=None):
         valor_recorte=valor_recorte,
         rotulo_recorte=_rotulo_recorte,
     )
-    if caixa_selecionada == _FILTRO_FASE:
-        indicadores_prazo_por_fase = {}
-        cronograma_por_fase = {}
-        for fase in fases_ordenadas:
-            documentos_fase = [
-                item for item in documentos_filtrados if fase in item.fases
+    dimensoes_id = {
+        _FILTRO_FASE: (fases_ordenadas, "fases", _rotulo_fase),
+        _FILTRO_ESCOPO: (escopos_ordenados, "escopos", _rotulo_escopo),
+    }
+    if caixa_selecionada in dimensoes_id:
+        valores_dimensao, atributo_dimensao, _ = dimensoes_id[caixa_selecionada]
+        indicadores_prazo_por_dimensao = {}
+        cronograma_por_dimensao = {}
+        for valor_dimensao in valores_dimensao:
+            documentos_dimensao = [
+                item
+                for item in documentos_filtrados
+                if valor_dimensao in getattr(item, atributo_dimensao)
             ]
 
-            def valor_recorte_fase(perfil_recorte, documento, nome):
-                if nome == _FILTRO_FASE:
-                    return fase
+            def valor_recorte_dimensao(perfil_recorte, documento, nome):
+                if nome == caixa_selecionada:
+                    return valor_dimensao
                 return _valor_recorte(perfil_recorte, documento, nome)
 
-            indicadores_prazo_fase, _ = calcular_indicadores_prazo(
+            indicadores_prazo_dimensao, _ = calcular_indicadores_prazo(
                 perfil,
-                documentos_fase,
+                documentos_dimensao,
                 caixa_selecionada,
                 definicao_caixa,
                 hoje,
-                valor_recorte=valor_recorte_fase,
+                valor_recorte=valor_recorte_dimensao,
                 rotulo_recorte=_rotulo_recorte,
             )
-            indicadores_prazo_por_fase[fase] = indicadores_prazo_fase
+            indicadores_prazo_por_dimensao[valor_dimensao] = indicadores_prazo_dimensao
             if indicador_cronograma is not None:
-                cronograma_por_fase[fase] = calcular_indicador_cronograma(
+                cronograma_por_dimensao[valor_dimensao] = calcular_indicador_cronograma(
                     contrato,
                     perfil,
-                    documentos_fase,
+                    documentos_dimensao,
                     caixa_selecionada,
                     definicao_caixa,
                     hoje,
-                    valor_recorte=valor_recorte_fase,
+                    valor_recorte=valor_recorte_dimensao,
                     rotulo_recorte=_rotulo_recorte,
                 )
         for indice, indicador in enumerate(indicadores_prazo):
             indicador["recortes"] = [
                 recorte
-                for fase in fases_ordenadas
-                for recorte in indicadores_prazo_por_fase[fase][indice]["recortes"]
+                for valor_dimensao in valores_dimensao
+                for recorte in indicadores_prazo_por_dimensao[valor_dimensao][indice]["recortes"]
             ]
         if indicador_cronograma is not None:
             indicador_cronograma["recortes"] = [
                 recorte
-                for fase in fases_ordenadas
-                for recorte in cronograma_por_fase[fase]["recortes"]
+                for valor_dimensao in valores_dimensao
+                for recorte in cronograma_por_dimensao[valor_dimensao]["recortes"]
             ]
 
     indicadores_aprovacao = []
@@ -301,22 +356,25 @@ def carregar_painel(contrato, por=None, filtros=None):
         ]
         resultado = calcular_indicador_aprovacao(perfil, indicador, documentos_indicador)
         recortes_indicador = []
-        if caixa_selecionada == _FILTRO_FASE:
-            for fase in fases_ordenadas:
-                documentos_fase = [
-                    replace(documento_indicador, recorte=fase)
+        if caixa_selecionada in dimensoes_id:
+            valores_dimensao, atributo_dimensao, rotular_dimensao = dimensoes_id[
+                caixa_selecionada
+            ]
+            for valor_dimensao in valores_dimensao:
+                documentos_dimensao = [
+                    replace(documento_indicador, recorte=valor_dimensao)
                     for documento_indicador, item in zip(
                         documentos_indicador, documentos_filtrados
                     )
-                    if fase in item.fases
+                    if valor_dimensao in getattr(item, atributo_dimensao)
                 ]
                 contagem = calcular_indicador_aprovacao(
-                    perfil, indicador, documentos_fase
+                    perfil, indicador, documentos_dimensao
                 ).geral
                 recortes_indicador.append(
                     {
-                        "valor": fase,
-                        "rotulo": _rotulo_fase(fase),
+                        "valor": valor_dimensao,
+                        "rotulo": rotular_dimensao(valor_dimensao),
                         "percentual": contagem.percentual,
                         "tem_dados": contagem.percentual is not None,
                         "dentro_limite": contagem.dentro_limite,
@@ -486,12 +544,24 @@ def _valor_fase(fase):
     return fase.strip() if fase and fase.strip() else _FASE_SEM_FASE
 
 
+def _valor_escopo(escopo):
+    return escopo.strip() if escopo and escopo.strip() else _ESCOPO_SEM_ESCOPO
+
+
 def _rotulo_fase(fase):
     return "Sem fase" if fase == _FASE_SEM_FASE else fase
 
 
+def _rotulo_escopo(escopo):
+    return "Sem escopo" if escopo == _ESCOPO_SEM_ESCOPO else escopo
+
+
 def _chave_ordenacao_fase(fase):
     return (fase == _FASE_SEM_FASE, fase.casefold())
+
+
+def _chave_ordenacao_escopo(escopo):
+    return (escopo == _ESCOPO_SEM_ESCOPO, escopo.casefold())
 
 
 def _normalizar_filtros(filtros, filtros_disponiveis):
@@ -525,10 +595,13 @@ def _resumir_filtros(filtros_disponiveis, selecionados):
     return ativos
 
 
-def _corresponde_filtros(documento, filtros, perfil=None, fases=()):
+def _corresponde_filtros(documento, filtros, perfil=None, fases=(), escopos=()):
     for nome, valores in filtros.items():
         if nome == _FILTRO_FASE:
             if not set(fases).intersection(valores):
+                return False
+        elif nome == _FILTRO_ESCOPO:
+            if not set(escopos).intersection(valores):
                 return False
         elif nome == "categoria" and perfil is not None and perfil.painel.categorias:
             if _id_categoria(perfil, documento) not in valores:
@@ -546,18 +619,29 @@ def _id_categoria(perfil, documento):
     return categoria.id if categoria is not None else _ID_OUTROS
 
 
-def _valor_recorte(perfil, documento, nome, fases_por_documento=None):
+def _valor_recorte(
+    perfil,
+    documento,
+    nome,
+    fases_por_documento=None,
+    escopos_por_documento=None,
+):
     if nome == "categoria" and perfil.painel.categorias:
         return _id_categoria(perfil, documento)
     if nome == _FILTRO_FASE:
         fases = (fases_por_documento or {}).get(documento.pk, ())
         return sorted(fases, key=_chave_ordenacao_fase)[0] if fases else ""
+    if nome == _FILTRO_ESCOPO:
+        escopos = (escopos_por_documento or {}).get(documento.pk, ())
+        return sorted(escopos, key=_chave_ordenacao_escopo)[0] if escopos else ""
     return _valor_caixa(documento, nome)
 
 
 def _valores_recorte(perfil, item, nome):
     if nome == _FILTRO_FASE:
         return item.fases
+    if nome == _FILTRO_ESCOPO:
+        return item.escopos
     return (_valor_recorte(perfil, item.documento, nome),)
 
 
@@ -571,6 +655,8 @@ def _rotulo_recorte(perfil, nome, valor, definicao_caixa):
         )
     if nome == _FILTRO_FASE:
         return _rotulo_fase(valor)
+    if nome == _FILTRO_ESCOPO:
+        return _rotulo_escopo(valor)
     return (definicao_caixa.valores or {}).get(valor, valor)
 
 
