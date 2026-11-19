@@ -11,7 +11,7 @@ from django.utils import timezone
 from acoes.models import AcaoPendencia
 from acoes.services import contratos_acessiveis, resolver_contrato
 from core.perfil import ErroPerfil, perfil_de_dict
-from core.perfil.ciclo import _normalizar_situacao, rotulo_cronologico
+from core.perfil.ciclo import _normalizar_situacao, rotulos_ciclo
 from core.perfil.codigo import ErroCodigo, interpretar
 from core.perfil.painel import classificar, classificar_categoria
 from contratos.models import PerfilContrato
@@ -85,7 +85,7 @@ def carregar_lista_documentos(
                 "categoria_id": categoria_id,
                 "situacao": situacao_atual,
                 "situacao_grupo": grupo,
-                "ultima_emissao": _rotulo_ultima_emissao(documento),
+                "ultima_emissao": _rotulo_ultima_emissao(documento, perfil),
                 "ultima_movimentacao": ultima_movimentacao.get(documento.pk),
                 "valores_caixas": valores,
             }
@@ -280,9 +280,9 @@ def _situacao_atual(documento, perfil):
     return emissao, analise, situacao, classificar(perfil, situacao)
 
 
-def _rotulo_ultima_emissao(documento):
+def _rotulo_ultima_emissao(documento, perfil):
     emissoes = sorted(documento.emissoes.all(), key=lambda item: (item.data_emissao, item.pk))
-    rotulos = rotulo_cronologico(emissoes)
+    rotulos = rotulos_ciclo(perfil, emissoes)
     return rotulos[-1] if rotulos else "—"
 
 
@@ -342,7 +342,7 @@ def _movimentacoes_por_documento(documentos):
 
 def _linha_tempo(perfil, documento, hoje):
     emissoes = sorted(documento.emissoes.all(), key=lambda item: (item.data_emissao, item.pk))
-    rotulos = rotulo_cronologico(emissoes)
+    rotulos = rotulos_ciclo(perfil, emissoes)
     aprovacoes = _situacoes_aprovacao(perfil)
     primeiro_aprovado = None
     analises_por_emissao = {}

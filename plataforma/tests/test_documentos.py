@@ -82,11 +82,11 @@ def _valores_codigo(codigo):
     return match.groupdict()
 
 
-def _emissao(documento, revisao, data, *, fase=Emissao.Fase.PRELIMINAR, situacao=None, data_analise=None):
+def _emissao(documento, revisao, data, *, fase=Emissao.Fase.PRELIMINAR, versao=1, situacao=None, data_analise=None):
     emissao = Emissao.objects.create(
         documento=documento,
         revisao=revisao,
-        versao=1,
+        versao=versao,
         fase=fase,
         data_emissao=data,
         origem=Emissao.Origem.CLIENTE,
@@ -144,7 +144,11 @@ def test_pasta_mantem_reabertura_na_mesma_linha_e_destaca_primeira_aprovacao(
     pasta = carregar_pasta_documento(usuario, contrato.pk, documento.pk, hoje=date(2026, 3, 6))
 
     assert [item["emissao"].revisao for item in pasta["linha_tempo"]] == ["0", "A1", "A"]
-    assert [item["rotulo"] for item in pasta["linha_tempo"]] == ["Emissão Inicial", "Revisão 1", "Revisão 2"]
+    assert [item["rotulo"] for item in pasta["linha_tempo"]] == [
+        "Original (aprovado)",
+        "Reabertura A · Revisão 1",
+        "Original A",
+    ]
     aprovacoes_que_contam = [
         analise
         for item in pasta["linha_tempo"]
@@ -153,6 +157,34 @@ def test_pasta_mantem_reabertura_na_mesma_linha_e_destaca_primeira_aprovacao(
     ]
     assert len(aprovacoes_que_contam) == 1
     assert aprovacoes_que_contam[0]["situacao"] == "Aprovado"
+
+
+@pytest.mark.django_db
+def test_pasta_e_lista_rotulam_emissoes_pelo_perfil_e_exibem_versao(
+    contrato, perfil_modelo, usuario
+):
+    documento = _documento(
+        contrato,
+        "DE-15.19.02.00-6F4-1001",
+        "Documento aprovado e reaberto",
+    )
+    _emissao(documento, "1", date(2026, 1, 1))
+    _emissao(documento, "0", date(2026, 1, 5), fase=Emissao.Fase.ORIGINAL)
+    _emissao(documento, "A1", date(2026, 2, 1))
+    _emissao(documento, "A", date(2026, 3, 1), fase=Emissao.Fase.ORIGINAL, versao=2)
+
+    pasta = carregar_pasta_documento(usuario, contrato.pk, documento.pk, hoje=date(2026, 3, 6))
+    lista = carregar_lista_documentos(usuario, contrato.pk)
+    linha = next(item for item in lista["pagina"].object_list if item["documento"] == documento)
+
+    rotulos_esperados = [
+        "Emissão Inicial",
+        "Original (aprovado)",
+        "Reabertura A · Revisão 1",
+        "Original A (versão 2)",
+    ]
+    assert [item["rotulo"] for item in pasta["linha_tempo"]] == rotulos_esperados
+    assert linha["ultima_emissao"] == rotulos_esperados[-1]
 
 
 @pytest.mark.django_db

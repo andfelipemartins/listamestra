@@ -270,6 +270,123 @@ def rotulo_cronologico(historico: Any) -> list[str]:
     return ["Emissão Inicial", *(f"Revisão {indice}" for indice in range(1, quantidade))]
 
 
+def rotulos_ciclo(perfil: PerfilContrato, historico: Any) -> list[str]:
+    """Rotula emissões conforme as séries de revisão definidas no perfil."""
+    emissoes = list(historico)
+    emissao = getattr(perfil, "emissao", None)
+    eixo = getattr(emissao, "revisao", None)
+    if eixo is None or getattr(eixo, "preliminar", None) is None or getattr(eixo, "original", None) is None:
+        return rotulo_cronologico(emissoes)
+
+    try:
+        preliminar = _serie(eixo.preliminar)
+        original = _serie(eixo.original)
+        configuracao_reabertura = getattr(eixo, "reabertura", None)
+        reabertura = _serie(configuracao_reabertura) if configuracao_reabertura else None
+        primeira_original = original.primeira()
+        versao_cfg = getattr(emissao, "versao", None)
+        primeira_versao = _serie(versao_cfg).primeira() if versao_cfg else None
+    except (AttributeError, TypeError, ValueError):
+        return rotulo_cronologico(emissoes)
+
+    rotulos: list[str] = []
+    rotulos_por_revisao: dict[tuple[str, str], str] = {}
+    versoes_por_revisao: dict[tuple[str, str], str] = {}
+    tem_original = False
+    ultima_original: str | None = None
+    revisoes_preliminares = 0
+    revisoes_reabertura = 0
+    alvo_reabertura: str | None = None
+
+    for item in emissoes:
+        revisao = str(getattr(item, "revisao", ""))
+        fase = getattr(item, "fase", None)
+        tipo = _tipo_revisao(revisao, fase, tem_original, preliminar, original, reabertura)
+        if tipo is None:
+            return rotulo_cronologico(emissoes)
+
+        chave = (tipo, revisao)
+        if chave not in rotulos_por_revisao:
+            if tipo == "original":
+                rotulo = "Original (aprovado)" if revisao == primeira_original else f"Original {revisao}"
+                tem_original = True
+                ultima_original = revisao
+                revisoes_reabertura = 0
+                alvo_reabertura = None
+                for chave_existente in tuple(rotulos_por_revisao):
+                    if chave_existente[0] == "reabertura":
+                        rotulos_por_revisao.pop(chave_existente, None)
+                        versoes_por_revisao.pop(chave_existente, None)
+            elif tipo == "reabertura" and tem_original:
+                if revisoes_reabertura == 0:
+                    alvo_reabertura = _alvo_reabertura(revisao, ultima_original, eixo, original)
+                revisoes_reabertura += 1
+                prefixo = f"Reabertura {alvo_reabertura}" if alvo_reabertura else "Reabertura"
+                rotulo = f"{prefixo} · Revisão {revisoes_reabertura}"
+            else:
+                revisoes_preliminares += 1
+                rotulo = "Emissão Inicial" if revisoes_preliminares == 1 else f"Revisão {revisoes_preliminares - 1}"
+            rotulos_por_revisao[chave] = rotulo
+
+        rotulo = rotulos_por_revisao[chave]
+        versao = getattr(item, "versao", None)
+        versao_texto = str(versao) if versao is not None else None
+        versao_anterior = versoes_por_revisao.get(chave)
+        if versao_texto is not None and _versao_posterior(versao_texto, versao_anterior, primeira_versao):
+            rotulo = f"{rotulo} (versão {versao_texto})"
+        if versao_texto is not None:
+            versoes_por_revisao[chave] = versao_texto
+        rotulos.append(rotulo)
+
+    return rotulos
+
+
+def _tipo_revisao(revisao, fase, tem_original, preliminar, original, reabertura):
+    valida_preliminar = preliminar.valida(revisao)
+    valida_original = original.valida(revisao)
+    valida_reabertura = bool(reabertura and reabertura.valida(revisao))
+
+    if fase == "original":
+        return "original" if valida_original else None
+    if fase == "preliminar":
+        if tem_original and (valida_reabertura or valida_preliminar):
+            return "reabertura"
+        if valida_preliminar or valida_reabertura:
+            return "preliminar"
+        return None
+
+    correspondencias = sum((valida_preliminar, valida_original, valida_reabertura))
+    if correspondencias != 1:
+        return None
+    if valida_original:
+        return "original"
+    return "reabertura" if tem_original else "preliminar"
+
+
+def _alvo_reabertura(revisao, ultima_original, eixo, serie_original):
+    configuracao = getattr(eixo, "reabertura", None)
+    if configuracao and configuracao.nome == "letra_mais_numero":
+        prefixo = re.sub(r"\d+$", "", revisao)
+        if prefixo != revisao and serie_original.valida(prefixo):
+            return prefixo
+    if ultima_original is not None:
+        try:
+            return serie_original.proxima(ultima_original)
+        except ValueError:
+            pass
+    return None
+
+
+def _versao_posterior(versao, anterior, primeira):
+    referencia = anterior if anterior is not None else primeira
+    if referencia is None or versao == referencia:
+        return False
+    try:
+        return int(versao) > int(referencia)
+    except ValueError:
+        return anterior is not None
+
+
 def _serie(configuracao: SerieConfiguracao | None):
     if configuracao is None:
         raise ValueError("Série não configurada.")
