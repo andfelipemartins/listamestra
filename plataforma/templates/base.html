@@ -23,6 +23,7 @@
     <aside class="sidebar sidebar--fixed" aria-label="Navegação principal">
       <span class="nav-label">Menu</span>
       <a class="nav-item {% if request.resolver_match.url_name == 'inicio' %}active{% endif %}" href="{% url 'inicio' %}"><span class="nav-icon">⌂</span>Início</a>
+      {% if user.is_authenticated %}{% if user.is_staff or contratos_painel %}<a class="nav-item {% if request.resolver_match.url_name == 'atividade' %}active{% endif %}" href="{% url 'atividade' %}"><span class="nav-icon">◷</span>Atividade</a>{% endif %}{% endif %}
       {% for contrato_painel in contratos_painel %}<a class="nav-item {% if request.resolver_match.kwargs.contrato_id == contrato_painel.pk|stringformat:'s' %}active{% endif %}" href="{% url 'painel' contrato_painel.pk %}"><span class="nav-icon">◉</span>Painel · {{ contrato_painel.codigo_interno }}</a>{% endfor %}
       <span class="nav-item disabled" aria-disabled="true"><span class="nav-icon">▤</span>Documentos <small>Em breve</small></span>
       {% if user.is_staff %}<a class="nav-item" href="{% url 'importar_id' %}"><span class="nav-icon">⇧</span>Importar ID</a>{% endif %}

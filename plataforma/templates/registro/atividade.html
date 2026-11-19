@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}Atividade · {{ contrato.codigo_interno }}{% endblock %}
+
+{% block content %}
+<section class="page-heading">
+  <div>
+    <span class="eyebrow">Registro auditável · {{ contrato.codigo_interno }}</span>
+    <h1>Atividade</h1>
+    <p>Alterações e importações do contrato, da mais recente para a mais antiga.</p>
+  </div>
+</section>
+
+{% if evento_detalhe %}
+<section class="panel">
+  <div class="panel-heading">
+    <div>
+      <span class="eyebrow">{{ evento_detalhe.acao_rotulo }} · {{ evento_detalhe.entidade }}</span>
+      <h2>{{ evento_detalhe.resumo }}</h2>
+      <p>{{ evento_detalhe.data_hora_local|date:"d/m/Y H:i" }} · {{ contrato.nome }}</p>
+    </div>
+  </div>
+
+  {% if evento_detalhe.codigo %}<p><strong>Documento:</strong> {{ evento_detalhe.codigo }}</p>{% endif %}
+  {% if evento_detalhe.detalhes %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Campo</th>{% if evento_detalhe.acao == "importou" %}<th>Valor</th>{% else %}<th>Antes</th><th>Depois</th>{% endif %}</tr></thead>
+      <tbody>
+        {% for detalhe in evento_detalhe.detalhes %}
+        <tr>
+          <td>{{ detalhe.campo }}</td>
+          {% if evento_detalhe.acao == "importou" %}<td>{{ detalhe.depois }}</td>{% else %}<td>{{ detalhe.antes }}</td><td>{{ detalhe.depois }}</td>{% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% elif evento_detalhe.acao == "alterou" %}
+  <p>O histórico não contém diferença de campos para este evento.</p>
+  {% else %}
+  <p>O registro foi {{ evento_detalhe.acao }}.</p>
+  {% endif %}
+
+  {% if evento_detalhe.link_recusadas %}<p><a class="button button-quiet" href="{{ evento_detalhe.url_recusadas }}">Ver linhas recusadas</a></p>{% endif %}
+  <p><a href="{{ url_lista }}">Voltar para a atividade</a></p>
+</section>
+{% else %}
+<details class="painel-filtros" open>
+  <summary>Filtros</summary>
+  <form class="painel-filtros-form" method="get" action="{% url 'atividade' %}">
+    <div class="painel-filtros-grade">
+      <label>Contrato
+        <select name="contrato">
+          {% for opcao in contratos %}<option value="{{ opcao.pk }}" {% if opcao.pk == contrato.pk %}selected{% endif %}>{{ opcao.codigo_interno }} · {{ opcao.nome }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Pessoa
+        <select name="pessoa">
+          <option value="">Todas</option>
+          {% for id, nome in pessoas %}<option value="{{ id }}" {% if filtros.pessoa == id %}selected{% endif %}>{{ nome }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Ação
+        <select name="acao">
+          <option value="">Todas</option>
+          {% for id, rotulo in acoes %}<option value="{{ id }}" {% if filtros.acao == id %}selected{% endif %}>{{ rotulo }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>De
+        <input type="date" name="de" value="{{ filtros.de }}">
+      </label>
+      <label>Até
+        <input type="date" name="ate" value="{{ filtros.ate }}">
+      </label>
+      <label>Código do documento
+        <input type="search" name="codigo" value="{{ filtros.codigo }}" placeholder="Parte do código">
+      </label>
+    </div>
+    <div class="painel-filtros-acoes">
+      <button class="button button-primary" type="submit">Filtrar</button>
+      <a class="button button-quiet" href="{% url 'atividade' %}?contrato={{ contrato.pk }}">Limpar filtros</a>
+    </div>
+  </form>
+</details>
+
+<p class="painel-filtros-resumo">{{ total_filtrado }} evento{{ total_filtrado|pluralize }} · página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</p>
+
+{% if pagina.object_list %}
+<section class="panel" aria-label="Eventos de atividade">
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Data e hora</th><th>Evento</th><th>Tipo</th></tr></thead>
+      <tbody>
+        {% for evento in pagina.object_list %}
+        <tr>
+          <td><time datetime="{{ evento.data_hora|date:'c' }}">{{ evento.data_hora_local|date:"d/m/Y H:i" }}</time></td>
+          <td><span aria-hidden="true">{% if evento.acao == "criou" %}＋{% elif evento.acao == "alterou" %}✎{% elif evento.acao == "excluiu" %}−{% elif evento.acao == "importou" %}⇧{% else %}↻{% endif %}</span> <a href="{{ evento.url_detalhe }}">{{ evento.resumo }}</a></td>
+          <td>{{ evento.entidade }}{% if evento.link_recusadas %}<br><a href="{{ evento.url_recusadas }}">Ver recusadas</a>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+<nav aria-label="Paginação">
+  {% if pagina.has_previous %}<a href="{{ anterior_url }}">Anterior</a>{% endif %}
+  {% for link in links_paginas %}{% if link.atual %} <strong aria-current="page">{{ link.numero }}</strong> {% else %} <a href="{{ link.url }}">{{ link.numero }}</a> {% endif %}{% endfor %}
+  {% if pagina.has_next %}<a href="{{ proxima_url }}">Próxima</a>{% endif %}
+</nav>
+{% else %}
+<section class="panel"><p>Não há eventos para os filtros selecionados.</p></section>
+{% endif %}
+{% endif %}
+{% endblock %}
