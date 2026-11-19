@@ -25,12 +25,12 @@
   {% if evento_detalhe.detalhes %}
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Campo</th>{% if evento_detalhe.acao == "importou" %}<th>Valor</th>{% else %}<th>Antes</th><th>Depois</th>{% endif %}</tr></thead>
+      <thead><tr><th>Campo</th>{% if evento_detalhe.acao == "importou" or evento_detalhe.acao == "reprocessou" %}<th>Valor</th>{% else %}<th>Antes</th><th>Depois</th>{% endif %}</tr></thead>
       <tbody>
         {% for detalhe in evento_detalhe.detalhes %}
         <tr>
           <td>{{ detalhe.campo }}</td>
-          {% if evento_detalhe.acao == "importou" %}<td>{{ detalhe.depois }}</td>{% else %}<td>{{ detalhe.antes }}</td><td>{{ detalhe.depois }}</td>{% endif %}
+          {% if evento_detalhe.acao == "importou" or evento_detalhe.acao == "reprocessou" %}<td>{{ detalhe.depois }}</td>{% else %}<td>{{ detalhe.antes }}</td><td>{{ detalhe.depois }}</td>{% endif %}
         </tr>
         {% endfor %}
       </tbody>

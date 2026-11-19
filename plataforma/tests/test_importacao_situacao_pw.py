@@ -13,6 +13,7 @@ from contratos.models import Contrato, PerfilContrato
 from documentos.models import Analise, Documento, Emissao
 from importacoes.models import ImportacaoSituacao, InconsistenciaImportacao, ItemPrevisto
 from importacoes.situacao_pw import aplicar_previa_situacao_pw, gerar_previa_situacao_pw
+from registro.servicos import carregar_eventos
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -229,6 +230,19 @@ def test_importacao_idempotente_registra_extracao_e_nao_duplica(contrato, perfil
     previa = previa_para(arquivo, contrato, perfil_modelo)
 
     primeira = aplicar_previa_situacao_pw(previa, contrato=contrato, perfil_modelo=perfil_modelo)
+    eventos_do_codigo = [
+        evento for evento in carregar_eventos(contrato)
+        if codigo in evento["codigo"]
+    ]
+    assert len(eventos_do_codigo) == 1
+    assert eventos_do_codigo[0]["acao"] == "importou"
+    detalhe_importado = {
+        item["campo"]: item["depois"]
+        for item in eventos_do_codigo[0]["detalhes"]
+    }
+    assert "criou 1 documento" in detalhe_importado["Alterações agrupadas"]
+    assert "criou 1 emissão" in detalhe_importado["Alterações agrupadas"]
+    assert "criou 1 análise" in detalhe_importado["Alterações agrupadas"]
     repetir = previa_para(criar_excel_pw([linha]), contrato, perfil_modelo)
     segunda = aplicar_previa_situacao_pw(repetir, contrato=contrato, perfil_modelo=perfil_modelo)
 
@@ -237,7 +251,7 @@ def test_importacao_idempotente_registra_extracao_e_nao_duplica(contrato, perfil
     assert Documento.objects.filter(contrato=contrato).count() == 1
     assert Emissao.objects.filter(documento__contrato=contrato).count() == 1
     assert Analise.objects.filter(emissao__documento__contrato=contrato).count() == 1
-    assert ImportacaoSituacao.objects.filter(contrato=contrato).count() == 1
+    assert ImportacaoSituacao.objects.filter(contrato=contrato).count() == 2
 
 
 @pytest.mark.django_db
@@ -392,5 +406,15 @@ def test_reprocessa_recusa_situacao_com_perfil_vigente_e_resolve(contrato, perfi
     for recusa in recusas:
         recusa.refresh_from_db()
         assert recusa.resolvida_em is not None
+        assert recusa.resolvida_por == administrador
     assert Documento.objects.filter(contrato=contrato).count() == 2
     assert Emissao.objects.filter(documento__contrato=contrato, revisao="1", versao=1).count() == 2
+    evento = next(
+        item
+        for item in carregar_eventos(contrato)
+        if item["acao"] == "reprocessou" and item["tipo_importacao"] == "situação do pw"
+    )
+    assert evento["usuario_nome"] == "admin-reprocessa-situacao"
+    assert evento["validas"] == 2
+    assert codigo_a7 in evento["codigo"]
+    assert codigo_701 in evento["codigo"]

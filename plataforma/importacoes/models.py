@@ -142,10 +142,48 @@ class ImportacaoSituacao(models.Model):
         verbose_name = "importação de situação do PW"
         verbose_name_plural = "importações de situação do PW"
         ordering = ("-data_extracao", "-importado_em", "-pk")
+
+
+class ReprocessamentoImportacao(models.Model):
+    importacao_id = models.ForeignKey(
+        ImportacaoID,
+        verbose_name="importação de ID",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="reprocessamentos",
+    )
+    importacao_situacao = models.ForeignKey(
+        ImportacaoSituacao,
+        verbose_name="importação de situação",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="reprocessamentos",
+    )
+    reprocessado_em = models.DateTimeField("reprocessado em", auto_now_add=True)
+    reprocessado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="reprocessado por",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reprocessamentos_importacao",
+    )
+    linhas_validas = models.PositiveIntegerField("linhas que passaram a valer", default=0)
+    codigos = models.JSONField("códigos reprocessados", default=list, blank=True)
+
+    class Meta:
+        verbose_name = "reprocessamento de importação"
+        verbose_name_plural = "reprocessamentos de importação"
+        ordering = ("-reprocessado_em", "-pk")
         constraints = [
-            models.UniqueConstraint(
-                fields=("contrato", "data_extracao", "arquivo_nome"),
-                name="importacao_situacao_arquivo_data_unica",
+            models.CheckConstraint(
+                condition=(
+                    (models.Q(importacao_id__isnull=False) & models.Q(importacao_situacao__isnull=True))
+                    | (models.Q(importacao_id__isnull=True) & models.Q(importacao_situacao__isnull=False))
+                ),
+                name="reprocessamento_uma_importacao",
             ),
         ]
 
@@ -254,6 +292,15 @@ class InconsistenciaImportacao(models.Model):
     mensagem = models.TextField("mensagem")
     dados_linha = models.JSONField("dados declarativos da linha", default=dict, blank=True)
     resolvida_em = models.DateTimeField("resolvida em", null=True, blank=True)
+    resolvida_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="resolvida por",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="inconsistencias_resolvidas",
+    )
+    history = HistoricalRecords()
 
     class Meta:
         verbose_name = "inconsistência de importação"

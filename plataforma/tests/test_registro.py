@@ -1,12 +1,24 @@
+from datetime import date, datetime
+from pathlib import Path
+
 import pytest
+import yaml
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone
 
-from contratos.models import Contrato, Participacao
+from core.perfil import perfil_de_dict
+from core.perfil.codigo import interpretar
+from contratos.models import Contrato, Participacao, PerfilContrato
 from documentos.models import Documento
-from importacoes.models import ImportacaoID, IndiceDocumentos, ItemPrevisto
+from importacoes.id_excel import LinhaPrevia, PreviaID
+from importacoes.models import ImportacaoID, IndiceDocumentos, InconsistenciaImportacao, ItemPrevisto
+from importacoes.services import aplicar_previa
 from registro.servicos import carregar_eventos
+
+
+RAIZ = Path(__file__).resolve().parents[2]
+PERFIL_METRO = RAIZ / "core" / "perfil" / "exemplos" / "metro.yaml"
 
 
 @pytest.fixture
@@ -33,6 +45,57 @@ def usuario(contrato):
         papel=modelo.Perfil.EQUIPE,
     )
     return usuario
+
+
+@pytest.fixture
+def perfil_modelo(contrato):
+    with PERFIL_METRO.open(encoding="utf-8") as arquivo:
+        definicao = _json_compatibility(yaml.safe_load(arquivo))
+    return PerfilContrato.objects.create(
+        contrato=contrato,
+        versao=1,
+        vigencia_inicio=date(2026, 1, 1),
+        definicao=definicao,
+    )
+
+
+def _json_compatibility(valor):
+    if isinstance(valor, (date, datetime)):
+        return valor.isoformat()
+    if isinstance(valor, dict):
+        return {chave: _json_compatibility(item) for chave, item in valor.items()}
+    if isinstance(valor, list):
+        return [_json_compatibility(item) for item in valor]
+    return valor
+
+
+def _linha_previa(perfil_modelo, numero, codigo, categoria="novos"):
+    interpretado = interpretar(perfil_de_dict(perfil_modelo.definicao), codigo)
+    return LinhaPrevia(
+        numero_linha=numero,
+        codigo=codigo,
+        titulo="Título importado",
+        excluido=False,
+        categoria=categoria,
+        identificador_base=interpretado.identificador_base if categoria == "novos" else "",
+        segmentos=dict(interpretado.segmentos) if categoria == "novos" else None,
+        campo_falhou="sequencial" if categoria != "novos" else "",
+        mensagem="Código inválido" if categoria != "novos" else "",
+        dados_linha={"Name": codigo},
+    )
+
+
+def _previa(contrato, perfil_modelo, codigo, linhas):
+    return PreviaID(
+        contrato_id=contrato.pk,
+        perfil_id=perfil_modelo.pk,
+        fonte="excel_id",
+        codigo_indice="ID-REGISTRO",
+        revisao="1",
+        arquivo_nome="ID-registro.xlsx",
+        formato="excel_id",
+        linhas=tuple(linhas),
+    )
 
 
 def _documento(contrato, codigo, titulo, usuario=None):
@@ -94,6 +157,60 @@ def test_importacao_id_aparece_como_um_evento_para_o_lote(contrato, usuario):
     assert len(importacoes) == 1
     assert importacoes[0]["resumo"] == "Ana Silva importou ID ID-atividade.xlsx: 3 válidas, 2 recusadas"
     assert importacoes[0]["link_recusadas"] is True
+
+
+@pytest.mark.django_db
+def test_importacao_id_agrupa_historicos_no_detalhe_com_codigos(contrato, usuario, perfil_modelo):
+    codigo = "DE-15.25.00.00-6A1-1001"
+    previa = _previa(contrato, perfil_modelo, codigo, [_linha_previa(perfil_modelo, 2, codigo)])
+
+    aplicar_previa(previa, contrato=contrato, perfil_modelo=perfil_modelo, usuario=usuario)
+
+    eventos = carregar_eventos(contrato)
+    eventos_do_codigo = [evento for evento in eventos if codigo in evento["codigo"]]
+
+    assert len(eventos_do_codigo) == 1
+    evento = eventos_do_codigo[0]
+    assert evento["acao"] == "importou"
+    detalhes = {item["campo"]: item["depois"] for item in evento["detalhes"]}
+    assert "criou 1 documento" in detalhes["Alterações agrupadas"]
+    assert "criou 1 código" in detalhes["Alterações agrupadas"]
+    assert "criou 1 item previsto" in detalhes["Alterações agrupadas"]
+    assert detalhes["Códigos"] == codigo
+
+
+@pytest.mark.django_db
+def test_reprocessamento_id_gera_evento_com_usuario_e_codigo(contrato, usuario, perfil_modelo):
+    codigo = "DE-15.25.00.00-6A1-1002"
+    previa_invalida = _previa(
+        contrato,
+        perfil_modelo,
+        codigo,
+        [_linha_previa(perfil_modelo, 2, "CÓDIGO-INVÁLIDO", categoria="codigos_invalidos")],
+    )
+    aplicar_previa(previa_invalida, contrato=contrato, perfil_modelo=perfil_modelo, usuario=usuario)
+    inconsistencia = InconsistenciaImportacao.objects.get(importacao_id__contrato=contrato)
+    previa_corrigida = _previa(
+        contrato,
+        perfil_modelo,
+        codigo,
+        [_linha_previa(perfil_modelo, 2, codigo)],
+    )
+
+    aplicar_previa(
+        previa_corrigida,
+        contrato=contrato,
+        perfil_modelo=perfil_modelo,
+        usuario=usuario,
+        inconsistencias_existentes=[inconsistencia],
+    )
+
+    evento = next(evento for evento in carregar_eventos(contrato) if evento["acao"] == "reprocessou")
+    assert evento["usuario_nome"] == "Ana Silva"
+    assert evento["validas"] == 1
+    assert codigo in evento["codigo"]
+    inconsistencia.refresh_from_db()
+    assert inconsistencia.resolvida_por == usuario
 
 
 @pytest.mark.django_db

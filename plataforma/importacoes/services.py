@@ -1,12 +1,19 @@
 from django.db import transaction
 from django.utils import timezone
+from uuid import uuid4
 
 from core.perfil import ErroPerfil, perfil_de_dict
 from core.perfil.codigo import ErroCodigo, interpretar
 from documentos.models import CodigoDocumento, Documento
 
 from .id_excel import PreviaID
-from .models import InconsistenciaImportacao, ImportacaoID, IndiceDocumentos, ItemPrevisto
+from .models import (
+    InconsistenciaImportacao,
+    ImportacaoID,
+    IndiceDocumentos,
+    ItemPrevisto,
+    ReprocessamentoImportacao,
+)
 
 
 class ErroAplicacaoID(ValueError):
@@ -49,6 +56,7 @@ def aplicar_previa(
     }
     indice = IndiceDocumentos.objects.filter(**chave).first()
     agora = timezone.now()
+    motivo_historico = f"importacao_id:pendente:{uuid4().hex}"
     if reprocessamento:
         if not inconsistencias_existentes or indice is None:
             raise ErroAplicacaoID("A importação original não está disponível para reprocessamento.")
@@ -59,6 +67,25 @@ def aplicar_previa(
             for inconsistencia in inconsistencias_existentes
         ):
             raise ErroAplicacaoID("As linhas recusadas não pertencem ao índice desta prévia.")
+        importacoes_origem = {item.importacao_id_id for item in inconsistencias_existentes}
+        if None in importacoes_origem or len(importacoes_origem) != 1:
+            raise ErroAplicacaoID("As linhas recusadas precisam pertencer ao mesmo lote original.")
+        numeros_validos = {linha.numero_linha for linha in linhas_validas}
+        linhas_reprocessadas = [
+            item for item in inconsistencias_existentes
+            if item.resolvida_em is None and item.numero_linha in numeros_validos
+        ]
+        codigos_reprocessados = [
+            linha.codigo for linha in linhas_validas
+            if linha.numero_linha in {item.numero_linha for item in linhas_reprocessadas}
+        ]
+        evento_reprocessamento = ReprocessamentoImportacao.objects.create(
+            importacao_id_id=next(iter(importacoes_origem)),
+            reprocessado_por=usuario,
+            linhas_validas=len(linhas_reprocessadas),
+            codigos=sorted(set(codigos_reprocessados)),
+        )
+        motivo_historico = f"reprocessamento:{evento_reprocessamento.pk}"
     if indice is None:
         if not problemáticas:
             anteriores = IndiceDocumentos.objects.filter(
@@ -69,7 +96,7 @@ def aplicar_previa(
             )
             for anterior in anteriores:
                 anterior.vigente = False
-                anterior._history_user = usuario
+                _marcar_historico(anterior, usuario, motivo_historico)
                 anterior.save(update_fields=("vigente",))
         indice = IndiceDocumentos(
             **chave,
@@ -77,7 +104,7 @@ def aplicar_previa(
             importado_em=agora,
             importado_por=usuario,
         )
-        indice._history_user = usuario
+        _marcar_historico(indice, usuario, motivo_historico)
         indice.save()
     elif not reprocessamento:
         campos_alterados = []
@@ -88,7 +115,7 @@ def aplicar_previa(
             indice.importado_por = usuario
             campos_alterados.append("importado_por")
         if campos_alterados:
-            indice._history_user = usuario
+            _marcar_historico(indice, usuario, motivo_historico)
             indice.save(update_fields=campos_alterados)
         if not problemáticas:
             anteriores = IndiceDocumentos.objects.filter(
@@ -99,11 +126,11 @@ def aplicar_previa(
             ).exclude(pk=indice.pk)
             for anterior in anteriores:
                 anterior.vigente = False
-                anterior._history_user = usuario
+                _marcar_historico(anterior, usuario, motivo_historico)
                 anterior.save(update_fields=("vigente",))
             if not indice.vigente:
                 indice.vigente = True
-                indice._history_user = usuario
+                _marcar_historico(indice, usuario, motivo_historico)
                 indice.save(update_fields=("vigente",))
 
     if not reprocessamento:
@@ -115,8 +142,13 @@ def aplicar_previa(
             linhas_validas=len(linhas_validas),
             linhas_invalidas=len(problemáticas),
         )
+        motivo_importacao = f"importacao_id:{importacao.pk}"
+        IndiceDocumentos.history.filter(
+            history_change_reason=motivo_historico
+        ).update(history_change_reason=motivo_importacao)
+        motivo_historico = motivo_importacao
         for linha in problemáticas:
-            InconsistenciaImportacao.objects.create(
+            inconsistencia = InconsistenciaImportacao(
                 importacao_id=importacao,
                 numero_linha=linha.numero_linha,
                 codigo_lido=linha.codigo,
@@ -126,6 +158,8 @@ def aplicar_previa(
                 mensagem=linha.mensagem or "Linha não importada por ser inválida.",
                 dados_linha=linha.dados_linha or {},
             )
+            _marcar_historico(inconsistencia, usuario, motivo_historico)
+            inconsistencia.save()
         codigos_importados = {
             linha.codigo.strip().upper()
             for linha in linhas_validas
@@ -140,7 +174,9 @@ def aplicar_previa(
             for inconsistencia in recusas_anteriores:
                 if inconsistencia.codigo_lido.strip().upper() in codigos_importados:
                     inconsistencia.resolvida_em = agora
-                    inconsistencia.save(update_fields=("resolvida_em",))
+                    inconsistencia.resolvida_por = usuario
+                    _marcar_historico(inconsistencia, usuario, motivo_historico)
+                    inconsistencia.save(update_fields=("resolvida_em", "resolvida_por"))
 
     documentos_incluidos = set()
     for linha in linhas_validas:
@@ -166,7 +202,7 @@ def aplicar_previa(
             documento.disciplina = linha.segmentos.get("disciplina", "")
             documento.atributos = dict(linha.segmentos)
             documento.titulo = linha.titulo
-            documento._history_user = usuario
+            _marcar_historico(documento, usuario, motivo_historico)
             documento.save()
         else:
             alteracoes = {
@@ -184,7 +220,7 @@ def aplicar_previa(
             if campos_alterados:
                 for nome in campos_alterados:
                     setattr(documento, nome, alteracoes[nome])
-                documento._history_user = usuario
+                _marcar_historico(documento, usuario, motivo_historico)
                 documento.save(update_fields=campos_alterados)
 
         codigo = CodigoDocumento.objects.filter(documento=documento, perfil=perfil_modelo).first()
@@ -194,11 +230,11 @@ def aplicar_previa(
                 perfil=perfil_modelo,
                 codigo=linha.codigo,
             )
-            codigo._history_user = usuario
+            _marcar_historico(codigo, usuario, motivo_historico)
             codigo.save()
         elif codigo.codigo != linha.codigo:
             codigo.codigo = linha.codigo
-            codigo._history_user = usuario
+            _marcar_historico(codigo, usuario, motivo_historico)
             codigo.save(update_fields=("codigo",))
 
         item = ItemPrevisto.objects.filter(indice=indice, documento=documento).first()
@@ -209,12 +245,12 @@ def aplicar_previa(
                 titulo=linha.titulo,
                 excluido=linha.excluido,
             )
-            item._history_user = usuario
+            _marcar_historico(item, usuario, motivo_historico)
             item.save()
         elif item.titulo != linha.titulo or item.excluido != linha.excluido:
             item.titulo = linha.titulo
             item.excluido = linha.excluido
-            item._history_user = usuario
+            _marcar_historico(item, usuario, motivo_historico)
             item.save(update_fields=("titulo", "excluido"))
         documentos_incluidos.add(documento.pk)
 
@@ -227,7 +263,9 @@ def aplicar_previa(
                 continue
             if inconsistencia.numero_linha in numeros_validos:
                 inconsistencia.resolvida_em = agora
-                inconsistencia.save(update_fields=("resolvida_em",))
+                inconsistencia.resolvida_por = usuario
+                _marcar_historico(inconsistencia, usuario, motivo_historico)
+                inconsistencia.save(update_fields=("resolvida_em", "resolvida_por"))
                 continue
             campos = {
                 "codigo_lido": linha.codigo,
@@ -243,11 +281,12 @@ def aplicar_previa(
                     setattr(inconsistencia, nome, valor)
                     alterados.append(nome)
             if alterados:
+                _marcar_historico(inconsistencia, usuario, motivo_historico)
                 inconsistencia.save(update_fields=alterados)
     elif not problemáticas:
         itens_removidos = indice.itens.exclude(documento_id__in=documentos_incluidos).select_related("documento")
         for item in itens_removidos:
-            item._history_user = usuario
+            _marcar_historico(item, usuario, motivo_historico)
             item.delete()
 
     return indice
@@ -256,6 +295,11 @@ def aplicar_previa(
 def previstos_vigentes(contrato):
     """Itens não excluídos que compõem a união dos índices vigentes do contrato."""
     return _previstos_sem_duplicatas(contrato)
+
+
+def _marcar_historico(instancia, usuario, motivo):
+    instancia._history_user = usuario
+    instancia._change_reason = motivo
 
 
 def _previstos_sem_duplicatas(contrato):

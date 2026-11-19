@@ -499,6 +499,41 @@ def _valor_json(valor):
     return str(valor)
 
 
+def _criar_analise_se_ausente(
+    modelo,
+    *,
+    emissao,
+    etapa,
+    situacao,
+    data_analise,
+    origem,
+    observacao,
+    registrado_por,
+    marcar_historico,
+):
+    consulta = modelo.objects.filter(
+        emissao=emissao,
+        etapa=etapa,
+        situacao=situacao,
+        data_analise=data_analise,
+        origem=origem,
+    )
+    if consulta.exists():
+        return consulta.first()
+    analise = modelo(
+        emissao=emissao,
+        etapa=etapa,
+        situacao=situacao,
+        data_analise=data_analise,
+        origem=origem,
+        observacao=observacao,
+        registrado_por=registrado_por,
+    )
+    marcar_historico(analise)
+    analise.save()
+    return analise
+
+
 def aplicar_previa_situacao_pw(
     previa: PreviaSituacaoPW,
     *,
@@ -513,7 +548,11 @@ def aplicar_previa_situacao_pw(
     from django.utils import timezone
 
     from documentos.models import Analise, CodigoDocumento, Documento, Emissao
-    from .models import ImportacaoSituacao, InconsistenciaImportacao
+    from .models import (
+        ImportacaoSituacao,
+        InconsistenciaImportacao,
+        ReprocessamentoImportacao,
+    )
 
     reprocessamento = inconsistencias_existentes is not None
     inconsistencias_existentes = list(inconsistencias_existentes or ())
@@ -523,32 +562,34 @@ def aplicar_previa_situacao_pw(
         raise ValueError("O perfil vigente mudou. Gere uma nova prévia antes de confirmar.")
 
     with transaction.atomic():
-        chave_importacao = {
-            "contrato": contrato,
-            "data_extracao": previa.data_extracao,
-            "arquivo_nome": previa.arquivo_nome,
-        }
         if reprocessamento:
-            importacao = ImportacaoSituacao.objects.filter(**chave_importacao).first()
-            if importacao is None or any(
-                item.importacao_situacao_id != importacao.pk
-                for item in inconsistencias_existentes
+            importacoes_origem = {item.importacao_situacao_id for item in inconsistencias_existentes}
+            if (
+                not inconsistencias_existentes
+                or None in importacoes_origem
+                or len(importacoes_origem) != 1
+                or any(item.importacao_situacao.contrato_id != contrato.pk for item in inconsistencias_existentes)
             ):
                 raise ValueError("As linhas recusadas não pertencem à importação de situação desta prévia.")
+            importacao = inconsistencias_existentes[0].importacao_situacao
+            if (
+                importacao.data_extracao != previa.data_extracao
+                or importacao.arquivo_nome != previa.arquivo_nome
+            ):
+                raise ValueError("A prévia não corresponde ao lote de situação original.")
         else:
-            importacao, _ = ImportacaoSituacao.objects.update_or_create(
-                **chave_importacao,
-                defaults={
-                    "importado_por": usuario,
-                    "importado_em": timezone.now(),
-                    "documentos": len(previa.documentos),
-                    "emissoes": previa.emissoes_novas,
-                    "analises_explicitas": previa.analises_explicitas,
-                    "analises_deduzidas": previa.analises_deduzidas,
-                    "historicos_truncados": len(previa.historicos_truncados),
-                    "fora_do_id": previa.documentos_fora_do_id,
-                    "linhas_invalidas": len(previa.linhas_invalidas),
-                },
+            importacao = ImportacaoSituacao.objects.create(
+                contrato=contrato,
+                data_extracao=previa.data_extracao,
+                arquivo_nome=previa.arquivo_nome,
+                importado_por=usuario,
+                documentos=len(previa.documentos),
+                emissoes=previa.emissoes_novas,
+                analises_explicitas=previa.analises_explicitas,
+                analises_deduzidas=previa.analises_deduzidas,
+                historicos_truncados=len(previa.historicos_truncados),
+                fora_do_id=previa.documentos_fora_do_id,
+                linhas_invalidas=len(previa.linhas_invalidas),
             )
 
         codigos_validos = {
@@ -559,6 +600,26 @@ def aplicar_previa_situacao_pw(
         for documento in previa.documentos:
             codigos_validos.add(_normalizar_codigo(documento.codigo_base))
             codigos_validos.add(_normalizar_codigo(documento.identificador_base))
+        if reprocessamento:
+            linhas_validas_reprocessadas = [
+                item for item in inconsistencias_existentes
+                if item.resolvida_em is None
+                and _normalizar_codigo(item.codigo_lido) in codigos_validos
+            ]
+            evento_reprocessamento = ReprocessamentoImportacao.objects.create(
+                importacao_situacao=importacao,
+                reprocessado_por=usuario,
+                linhas_validas=len(linhas_validas_reprocessadas),
+                codigos=sorted({item.codigo_lido for item in linhas_validas_reprocessadas if item.codigo_lido}),
+            )
+            motivo_historico = f"reprocessamento:{evento_reprocessamento.pk}"
+        else:
+            motivo_historico = f"importacao_situacao:{importacao.pk}"
+
+        def marcar_historico(instancia):
+            instancia._history_user = usuario
+            instancia._change_reason = motivo_historico
+
         if codigos_validos:
             abertas = InconsistenciaImportacao.objects.filter(
                 importacao_situacao__contrato=contrato,
@@ -568,7 +629,9 @@ def aplicar_previa_situacao_pw(
             for inconsistencia in abertas:
                 if _normalizar_codigo(inconsistencia.codigo_lido) in codigos_validos:
                     inconsistencia.resolvida_em = agora
-                    inconsistencia.save(update_fields=("resolvida_em",))
+                    inconsistencia.resolvida_por = usuario
+                    marcar_historico(inconsistencia)
+                    inconsistencia.save(update_fields=("resolvida_em", "resolvida_por"))
 
         if reprocessamento:
             linhas_invalidas = {
@@ -594,6 +657,7 @@ def aplicar_previa_situacao_pw(
                         setattr(inconsistencia, nome, valor)
                         alterados.append(nome)
                 if alterados:
+                    marcar_historico(inconsistencia)
                     inconsistencia.save(update_fields=alterados)
 
         if not reprocessamento:
@@ -605,7 +669,7 @@ def aplicar_previa_situacao_pw(
                 chave = (linha.numero_linha, _normalizar_codigo(linha.codigo))
                 inconsistencia = existentes_abertas.pop(chave, None)
                 if inconsistencia is None:
-                    InconsistenciaImportacao.objects.create(
+                    inconsistencia = InconsistenciaImportacao(
                         importacao_situacao=importacao,
                         numero_linha=linha.numero_linha,
                         codigo_lido=linha.codigo,
@@ -614,11 +678,14 @@ def aplicar_previa_situacao_pw(
                         mensagem=linha.mensagem,
                         dados_linha=linha.dados_linha or {},
                     )
+                    marcar_historico(inconsistencia)
+                    inconsistencia.save()
                     continue
                 inconsistencia.categoria = linha.categoria
                 inconsistencia.caixa_falhou = linha.caixa_falhou
                 inconsistencia.mensagem = linha.mensagem
                 inconsistencia.dados_linha = linha.dados_linha or {}
+                marcar_historico(inconsistencia)
                 inconsistencia.save(update_fields=("categoria", "caixa_falhou", "mensagem", "dados_linha"))
 
         for item in previa.documentos:
@@ -637,7 +704,7 @@ def aplicar_previa_situacao_pw(
                     atributos=dict(item.segmentos),
                     fora_do_id=item.fora_do_id,
                 )
-                documento._history_user = usuario
+                marcar_historico(documento)
                 documento.save()
             else:
                 campos = {
@@ -649,31 +716,38 @@ def aplicar_previa_situacao_pw(
                 if alterados:
                     for nome in alterados:
                         setattr(documento, nome, campos[nome])
-                    documento._history_user = usuario
+                    marcar_historico(documento)
                     documento.save(update_fields=alterados)
 
             codigo = CodigoDocumento.objects.filter(documento=documento, perfil=perfil_modelo).first()
             if codigo is None:
                 codigo = CodigoDocumento(documento=documento, perfil=perfil_modelo, codigo=item.codigo_base)
-                codigo._history_user = usuario
+                marcar_historico(codigo)
                 codigo.save()
             elif codigo.codigo != item.codigo_base:
                 codigo.codigo = item.codigo_base
-                codigo._history_user = usuario
+                marcar_historico(codigo)
                 codigo.save(update_fields=("codigo",))
 
             for emissao_item in item.emissoes:
-                emissao, criada = Emissao.objects.get_or_create(
+                emissao = Emissao.objects.filter(
                     documento=documento,
                     revisao=emissao_item.revisao,
                     versao=emissao_item.versao,
-                    defaults={
-                        "fase": emissao_item.fase,
-                        "data_emissao": emissao_item.data_emissao,
-                        "origem": Emissao.Origem.CLIENTE,
-                        "criado_por": usuario,
-                    },
-                )
+                ).first()
+                criada = emissao is None
+                if criada:
+                    emissao = Emissao(
+                        documento=documento,
+                        revisao=emissao_item.revisao,
+                        versao=emissao_item.versao,
+                        fase=emissao_item.fase,
+                        data_emissao=emissao_item.data_emissao,
+                        origem=Emissao.Origem.CLIENTE,
+                        criado_por=usuario,
+                    )
+                    marcar_historico(emissao)
+                    emissao.save()
                 if not criada:
                     alterados = []
                     for nome, valor in (("fase", emissao_item.fase), ("data_emissao", emissao_item.data_emissao)):
@@ -681,7 +755,7 @@ def aplicar_previa_situacao_pw(
                             setattr(emissao, nome, valor)
                             alterados.append(nome)
                     if alterados:
-                        emissao._history_user = usuario
+                        marcar_historico(emissao)
                         emissao.save(update_fields=alterados)
 
                 analises_deduzidas = [a for a in emissao_item.analises if a.origem == "deduzido_pw"]
@@ -700,20 +774,22 @@ def aplicar_previa_situacao_pw(
                             igual.origem = Analise.Origem.IMPORTADO_PW
                             igual.observacao = analise_item.observacao
                             igual.registrado_por = usuario
-                            igual._history_user = usuario
+                            marcar_historico(igual)
                             igual.save(update_fields=("origem", "observacao", "registrado_por"))
                         else:
-                            existentes_deduzidas.delete()
-                    Analise.objects.get_or_create(
+                            for analise in existentes_deduzidas:
+                                marcar_historico(analise)
+                                analise.delete()
+                    _criar_analise_se_ausente(
+                        Analise,
                         emissao=emissao,
                         etapa="Análise do cliente",
                         situacao=analise_item.situacao,
                         data_analise=analise_item.data_analise,
                         origem=Analise.Origem.IMPORTADO_PW,
-                        defaults={
-                            "observacao": analise_item.observacao,
-                            "registrado_por": usuario,
-                        },
+                        observacao=analise_item.observacao,
+                        registrado_por=usuario,
+                        marcar_historico=marcar_historico,
                     )
                 for analise_item in analises_deduzidas:
                     if Analise.objects.filter(
@@ -723,16 +799,16 @@ def aplicar_previa_situacao_pw(
                         origem=Analise.Origem.IMPORTADO_PW,
                     ).exists():
                         continue
-                    Analise.objects.get_or_create(
+                    _criar_analise_se_ausente(
+                        Analise,
                         emissao=emissao,
                         etapa="Análise do cliente",
                         situacao=analise_item.situacao,
                         data_analise=analise_item.data_analise,
                         origem=Analise.Origem.DEDUZIDO_PW,
-                        defaults={
-                            "observacao": analise_item.observacao,
-                            "registrado_por": usuario,
-                        },
+                        observacao=analise_item.observacao,
+                        registrado_por=usuario,
+                        marcar_historico=marcar_historico,
                     )
         return importacao
 

@@ -3,6 +3,7 @@ from datetime import date, datetime
 
 from django.utils import timezone
 from django.contrib.auth import get_user_model
+from django.db.models import Q
 
 from contratos.models import PerfilContrato
 from documentos.models import Analise, CodigoDocumento, Documento, Emissao
@@ -11,8 +12,10 @@ from importacoes.models import (
     ImportacaoID,
     ImportacaoSituacao,
     IndiceDocumentos,
+    InconsistenciaImportacao,
     ItemPrevisto,
     PrevisaoEmissao,
+    ReprocessamentoImportacao,
 )
 
 
@@ -83,6 +86,12 @@ def carregar_eventos(contrato):
         (Analise, {"emissao_id__in": emissoes_ids}, "análise", lambda r: documentos_por_id.get(emissao_documentos.get(r.emissao_id), "")),
         (PerfilContrato, {"contrato_id": contrato.pk}, "perfil do contrato", lambda r: ""),
         (IndiceDocumentos, {"contrato_id": contrato.pk}, "índice de documentos", lambda r: ""),
+        (
+            InconsistenciaImportacao,
+            {"importacao_id__contrato": contrato.pk},
+            "inconsistência de importação",
+            lambda r: r.codigo_lido,
+        ),
     ):
         for registro in modelo.history.filter(**filtro).select_related("history_user"):
             eventos.append(
@@ -94,6 +103,19 @@ def carregar_eventos(contrato):
                     codigo=codigo_resolver(registro),
                 )
             )
+
+    for registro in InconsistenciaImportacao.history.filter(
+        importacao_situacao__contrato=contrato
+    ).select_related("history_user"):
+        eventos.append(
+            _evento_historico(
+                registro,
+                InconsistenciaImportacao,
+                entidade="inconsistência de importação",
+                contrato=contrato,
+                codigo=registro.codigo_lido,
+            )
+        )
 
     indices_ids = set(
         IndiceDocumentos.history.filter(contrato_id=contrato.pk).values_list("id", flat=True)
@@ -124,14 +146,17 @@ def carregar_eventos(contrato):
         )
 
     eventos.extend(_eventos_importacao(contrato))
-    return sorted(eventos, key=lambda evento: (evento["data_hora"], evento["chave"]), reverse=True)
+    return sorted(
+        (evento for evento in eventos if not evento.get("agrupar_no_evento")),
+        key=lambda evento: (evento["data_hora"], evento["chave"]),
+        reverse=True,
+    )
 
 
 def _eventos_importacao(contrato):
     eventos = []
     for registro in ImportacaoID.objects.filter(contrato=contrato).select_related("importado_por", "indice"):
-        eventos.append(
-            _evento_importacao(
+        evento = _evento_importacao(
                 registro,
                 chave=f"importacao-id-{registro.pk}",
                 tipo="id",
@@ -149,10 +174,10 @@ def _eventos_importacao(contrato):
                     ("Linhas recusadas", registro.linhas_invalidas),
                 ],
             )
-        )
+        _anexar_historico_agrupado(evento, f"importacao_id:{registro.pk}")
+        eventos.append(evento)
     for registro in ImportacaoSituacao.objects.filter(contrato=contrato).select_related("importado_por"):
-        eventos.append(
-            _evento_importacao(
+        evento = _evento_importacao(
                 registro,
                 chave=f"importacao-situacao-{registro.pk}",
                 tipo="situação do PW",
@@ -175,7 +200,8 @@ def _eventos_importacao(contrato):
                     ("Linhas recusadas", registro.linhas_invalidas),
                 ],
             )
-        )
+        _anexar_historico_agrupado(evento, f"importacao_situacao:{registro.pk}")
+        eventos.append(evento)
     for registro in ImportacaoCronograma.objects.filter(contrato=contrato).select_related("importado_por"):
         eventos.append(
             _evento_importacao(
@@ -196,6 +222,14 @@ def _eventos_importacao(contrato):
                 ],
             )
         )
+    reprocessamentos = ReprocessamentoImportacao.objects.filter(
+        Q(importacao_id__contrato=contrato)
+        | Q(importacao_situacao__contrato=contrato)
+    ).select_related("reprocessado_por", "importacao_id__indice", "importacao_situacao")
+    for registro in reprocessamentos:
+        evento = _evento_reprocessamento(registro)
+        _anexar_historico_agrupado(evento, f"reprocessamento:{registro.pk}")
+        eventos.append(evento)
     return eventos
 
 
@@ -217,6 +251,7 @@ def _evento_importacao(registro, *, chave, tipo, titulo, resumo, validas, recusa
         "recusadas": recusadas,
         "importacao_id": registro.pk,
         "link_recusadas": recusadas > 0,
+        "agrupar_no_evento": False,
     }
 
 
@@ -244,7 +279,149 @@ def _evento_historico(registro, modelo, *, entidade, contrato, codigo):
         "validas": None,
         "recusadas": None,
         "link_recusadas": False,
+        "history_change_reason": registro.history_change_reason,
+        "agrupar_no_evento": bool(
+            registro.history_change_reason
+            and registro.history_change_reason.startswith(
+                ("importacao_id:", "importacao_situacao:", "reprocessamento:")
+            )
+        ),
     }
+
+
+def _evento_reprocessamento(registro):
+    if registro.importacao_id_id:
+        tipo = "ID"
+        importacao = registro.importacao_id
+        lote = f"ID {importacao.indice.codigo}, revisão {importacao.indice.revisao}"
+        recusadas = importacao.linhas_invalidas
+        importacao_id = importacao.pk
+    else:
+        tipo = "situação do PW"
+        importacao = registro.importacao_situacao
+        lote = f"situação do PW {importacao.arquivo_nome}"
+        recusadas = importacao.linhas_invalidas
+        importacao_id = importacao.pk
+    nome = _nome_usuario(registro.reprocessado_por)
+    codigos = registro.codigos or []
+    codigo_filtro = ", ".join(codigos)
+    resumo = (
+        f"{nome} reprocessou {registro.linhas_validas} linha(s) em {lote}"
+    )
+    detalhes = [
+        ("Lote original", lote),
+        ("Linhas que passaram a valer", registro.linhas_validas),
+        ("Códigos reprocessados", ", ".join(codigos) if codigos else "—"),
+    ]
+    return {
+        "chave": f"reprocessamento-{registro.pk}",
+        "data_hora": _localizar(registro.reprocessado_em),
+        "acao": "reprocessou",
+        "acao_rotulo": "Reprocessou",
+        "entidade": f"Reprocessamento de {tipo}",
+        "tipo_importacao": tipo.casefold(),
+        "codigo": codigo_filtro,
+        "codigos": codigos,
+        "usuario": registro.reprocessado_por,
+        "usuario_id": registro.reprocessado_por_id,
+        "usuario_nome": nome,
+        "resumo": resumo,
+        "detalhes": [
+            {"campo": campo, "antes": "", "depois": _formatar(valor)}
+            for campo, valor in detalhes
+        ],
+        "validas": registro.linhas_validas,
+        "recusadas": recusadas,
+        "importacao_id": importacao_id,
+        "link_recusadas": recusadas > 0,
+        "agrupar_no_evento": False,
+    }
+
+
+def _anexar_historico_agrupado(evento, motivo):
+    historicos = []
+    modelos = (
+        Documento,
+        CodigoDocumento,
+        Emissao,
+        Analise,
+        IndiceDocumentos,
+        ItemPrevisto,
+        PrevisaoEmissao,
+        InconsistenciaImportacao,
+    )
+    for modelo in modelos:
+        historicos.extend(
+            (modelo, historico)
+            for historico in modelo.history.filter(history_change_reason=motivo)
+        )
+    if not historicos:
+        return
+
+    nomes = {
+        Documento: "documento",
+        CodigoDocumento: "código",
+        Emissao: "emissão",
+        Analise: "análise",
+        IndiceDocumentos: "índice",
+        ItemPrevisto: "item previsto",
+        PrevisaoEmissao: "previsão de emissão",
+        InconsistenciaImportacao: "inconsistência",
+    }
+    plurais = {
+        "documento": "documentos",
+        "código": "códigos",
+        "emissão": "emissões",
+        "análise": "análises",
+        "índice": "índices",
+        "item previsto": "itens previstos",
+        "previsão de emissão": "previsões de emissão",
+        "inconsistência": "inconsistências",
+    }
+    verbos = {"+": "criou", "~": "alterou", "-": "excluiu"}
+    contagens = {}
+    codigos = set(evento.get("codigos", ()))
+    documentos_ids = set()
+    for modelo, historico in historicos:
+        nome = nomes.get(modelo)
+        if nome:
+            verbo = verbos.get(historico.history_type, "alterou")
+            contagens[(verbo, nome)] = contagens.get((verbo, nome), 0) + 1
+        for campo in ("codigo_lido", "codigo", "identificador_base"):
+            valor = getattr(historico, campo, None)
+            if valor and modelo not in (IndiceDocumentos,):
+                codigos.add(str(valor))
+        documento_id = getattr(historico, "documento_id", None)
+        if documento_id:
+            documentos_ids.add(documento_id)
+    if documentos_ids:
+        codigos.update(
+            Documento.objects.filter(pk__in=documentos_ids).values_list("identificador_base", flat=True)
+        )
+
+    frases = []
+    for (verbo, nome), quantidade in sorted(contagens.items()):
+        substantivo = nome if quantidade == 1 else plurais[nome]
+        frases.append(f"{verbo} {quantidade} {substantivo}")
+    if frases:
+        evento["detalhes"].append(
+            {
+                "campo": "Alterações agrupadas",
+                "antes": "",
+                "depois": "; ".join(frases),
+            }
+        )
+    if codigos:
+        codigos_ordenados = sorted(codigos)
+        evento["codigos"] = codigos_ordenados
+        evento["codigo"] = ", ".join(codigos_ordenados)
+        evento["detalhes"].append(
+            {
+                "campo": "Códigos",
+                "antes": "",
+                "depois": ", ".join(codigos_ordenados),
+            }
+        )
 
 
 def _diferencas(registro, modelo):
@@ -292,6 +469,7 @@ def _descricao_historico(registro, entidade, acao, codigo, detalhes):
         "item previsto": "o item previsto",
         "previsão de emissão": "a previsão de emissão",
         "código do documento": "o código do documento",
+        "inconsistência de importação": "a inconsistência de importação",
     }.get(entidade, entidade)
     if acao == "criou":
         if codigo:
@@ -328,7 +506,7 @@ def _ator_historico(registro):
     usuario = registro.history_user
     if usuario is not None:
         return usuario
-    for campo in ("criado_por", "registrado_por", "importado_por"):
+    for campo in ("criado_por", "registrado_por", "importado_por", "resolvida_por"):
         usuario_id = getattr(registro, f"{campo}_id", None)
         if usuario_id:
             return get_user_model().objects.filter(pk=usuario_id).first()
