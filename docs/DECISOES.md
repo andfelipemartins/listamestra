@@ -483,3 +483,20 @@ Aprovado, Não Conforme, Inconsistente, Erro de Assinatura, Cancelado, Revisão 
   do SharePoint e às informações do sistema, sem inventar coisas fora dele.
 - Pergunta do dono que precisa de resposta: é possível ter essa força num chat fechado no sistema?
 - Continua valendo a D-033: sem IA embutida até a conversa acontecer.
+
+## D-036 · Erro de PW é um grupo próprio no painel, separado de INCONSISTENTE
+
+*Origem: Q2 · 2026-11-18 (respondida às 23:06Z; registrado pela checagem agendada das 23:56Z) · substitui a proposta do Claude na D-034 (P1)*
+
+- O dono recusou juntar tudo em INCONSISTENTE: ele precisa distinguir o que é inconsistência do
+  que é erro.
+- **INCONSISTENTE** é conceito de projeto: o projetista fez o documento fora do manual e das
+  premissas do Metrô. Tem informação técnica, mas não segue o que o cliente pediu.
+- **NÃO CONFORME**, pelo que o dono lembra, só apareceu até hoje em revisões originais (de
+  aprovação), quando o cliente percebe algo que não tinha visto antes. A causa e o efeito acabam
+  sendo os mesmos da inconsistência: a revisão se mantém e a versão muda no PW. Por isso os dois
+  continuam juntos no grupo INCONSISTENTE.
+- **'Em Desenvolvimento' e 'Erro de Assinatura'** são erros de mecânica, não de conceito de
+  projeto. Ficam num **grupo próprio, ERRO**, com um cartão separado no painel.
+- Consequência: no perfil Metrô, os dois estados saem de EM ANÁLISE e vão para o grupo ERRO, que
+  continua contando no total (exige ação), como INCONSISTENTE. Block-022.

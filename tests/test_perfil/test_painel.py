@@ -34,7 +34,7 @@ def _perfil_base(painel=None):
     ("situacao", "grupo"),
     [
         (None, "a_emitir"),
-        ("Em Desenvolvimento", "em_analise"),
+        ("Em Desenvolvimento", "erro"),
         ("Em Análise", "em_analise"),
         ("Para Aprovação", "aprovado"),
         ("Em coleta de Assinaturas", "aprovado"),
@@ -42,7 +42,7 @@ def _perfil_base(painel=None):
         ("Não Aprovado", "nao_aprovado"),
         ("Não Conforme", "inconsistente"),
         ("Inconsistente", "inconsistente"),
-        ("Erro de Assinatura", "em_analise"),
+        ("Erro de Assinatura", "erro"),
         ("Cancelado", "cancelado"),
         ("Revisão Superada", "ignorado"),
     ],
@@ -70,6 +70,7 @@ def test_resumo_conta_grupos_e_calcula_avanco_excluindo_cancelados_e_ignorados(m
             "Em Análise",
             "Cancelado",
             "Não Aprovado",
+            "Erro de Assinatura",
             "Revisão Superada",
         ],
     )
@@ -80,6 +81,7 @@ def test_resumo_conta_grupos_e_calcula_avanco_excluindo_cancelados_e_ignorados(m
         "aprovado",
         "nao_aprovado",
         "inconsistente",
+        "erro",
         "cancelado",
         "nao_mapeado",
     ]
@@ -89,11 +91,12 @@ def test_resumo_conta_grupos_e_calcula_avanco_excluindo_cancelados_e_ignorados(m
         "aprovado": 1,
         "nao_aprovado": 1,
         "inconsistente": 0,
+        "erro": 1,
         "cancelado": 1,
         "nao_mapeado": 0,
     }
-    assert resumo.total_previsto == 5
-    assert resumo.percentual_avanco == pytest.approx(25.0)
+    assert resumo.total_previsto == 6
+    assert resumo.percentual_avanco == pytest.approx(20.0)
     assert resumo.estados_nao_mapeados == ()
 
 

@@ -307,8 +307,7 @@ painel:
       sem_emissao: true
     - id: em_analise
       rotulo: EM ANÁLISE
-      # Em Desenvolvimento e Erro de Assinatura são estados internos anteriores à análise.
-      estados: ["Em Análise", "Em Desenvolvimento", "Erro de Assinatura"]
+      estados: ["Em Análise"]
     - id: aprovado
       rotulo: APROVADO
       # Os trâmites de aprovação e assinatura já contam como aprovado para o contrato.
@@ -318,7 +317,14 @@ painel:
       estados: ["Não Aprovado"]
     - id: inconsistente
       rotulo: INCONSISTENTE
+      cor: "#7857a5"
       estados: ["Inconsistente", "Não Conforme"]
+    # D-036: erro de mecânica do PW, distinto da inconsistência de projeto.
+    - id: erro
+      rotulo: ERRO
+      cor: "#dc2626"
+      # D-036: conta no total, mas não entra em painel.avanco.
+      estados: ["Em Desenvolvimento", "Erro de Assinatura"]
     - id: cancelado
       rotulo: CANCELADO
       estados: ["Cancelado"]

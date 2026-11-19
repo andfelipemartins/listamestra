@@ -241,6 +241,48 @@ def test_cancelado_fica_fora_da_conta_dos_graficos_e_cartoes(contrato, perfil_mo
 
 
 @pytest.mark.django_db
+def test_grupo_erro_tem_cartao_e_fatia_separados_de_inconsistente(
+    contrato, perfil_modelo, client, django_user_model
+):
+    usuario = django_user_model.objects.create_user(username="chefia-erros", password="senha")
+    Participacao.objects.create(usuario=usuario, contrato=contrato, papel="chefia")
+    indice = _indice(contrato, "ID-ERROS")
+    _documento(contrato, indice, 3501, situacao="Em Desenvolvimento")
+    _documento(contrato, indice, 3502, situacao="Erro de Assinatura")
+    _documento(contrato, indice, 3503, situacao="Inconsistente")
+    _documento(contrato, indice, 3504, situacao="Não Conforme")
+    client.force_login(usuario)
+
+    resposta = client.get(reverse("painel", args=(contrato.pk,)))
+    html = resposta.content.decode()
+    pizza = json.loads(
+        re.search(
+            r'<script id="dados-grafico-pizza" type="application/json">(.*?)</script>',
+            html,
+        ).group(1)
+    )
+    barras = json.loads(
+        re.search(
+            r'<script id="dados-grafico-recortes" type="application/json">(.*?)</script>',
+            html,
+        ).group(1)
+    )
+    cards = {
+        item["grupo"].id: item["quantidade"] for item in resposta.context["grupo_cards"]
+    }
+
+    assert resposta.status_code == 200
+    assert cards["erro"] == 2
+    assert cards["inconsistente"] == 2
+    assert 'painel-grupo-label">ERRO</span>' in html
+    assert 'painel-grupo-label">INCONSISTENTE</span>' in html
+    assert "ERRO" in pizza["labels"]
+    assert "INCONSISTENTE" in pizza["labels"]
+    assert "ERRO" in [dataset["label"] for dataset in barras["datasets"]]
+    assert "INCONSISTENTE" in [dataset["label"] for dataset in barras["datasets"]]
+
+
+@pytest.mark.django_db
 def test_filtros_combinam_ou_na_mesma_caixa_e_e_entre_caixas(contrato, perfil_modelo):
     indice = _indice(contrato, "ID-FILTROS")
     _documento(contrato, indice, 4001, tipo="DE", trecho="25", classe="P7", etapa="6")
