@@ -11,7 +11,7 @@ from contas.models import Usuario
 from contratos.models import Contrato, Participacao, PerfilContrato
 from documentos.models import Analise, Documento, Emissao
 
-from .forms import ImportarIDForm, ImportarSituacaoPWForm
+from .forms import ImportarCronogramaForm, ImportarIDForm, ImportarSituacaoPWForm
 from .id_excel import (
     CATEGORIAS,
     ROTULOS_CATEGORIA,
@@ -37,11 +37,21 @@ from .situacao_pw import (
     gerar_previa_linhas_recusadas_situacao_pw,
     gerar_previa_situacao_pw,
 )
+from .cronograma import (
+    ErroAplicacaoCronograma,
+    ErroFormatoCronograma,
+    PreviaCronograma,
+    LinhaCronograma,
+    aplicar_previa_cronograma,
+    gerar_previa_cronograma,
+)
+from .models import ImportacaoCronograma
 
 
 CHAVE_SESSAO = "previa_importacao_id"
 CHAVE_SESSAO_SITUACAO = "previa_importacao_situacao_pw"
 CHAVE_SESSAO_REPROCESSAMENTO = "previa_reprocessamento_recusadas"
+CHAVE_SESSAO_CRONOGRAMA = "previa_importacao_cronograma"
 
 
 class LinhasRecusadasView(LoginRequiredMixin, View):
@@ -858,4 +868,146 @@ def _previsao_situacao_da_sessao(dados):
         linhas_invalidas=tuple(LinhaInvalidaPW(**linha) for linha in dados["linhas_invalidas"]),
         historicos_truncados=tuple(HistoricoTruncadoPW(**linha) for linha in dados["historicos_truncados"]),
         mudancas_situacao=tuple(MudancaSituacaoPW(**linha) for linha in dados["mudancas_situacao"]),
+    )
+
+
+class ImportarCronogramaView(LoginRequiredMixin, UserPassesTestMixin, View):
+    template_name = "importacoes/cronograma.html"
+    raise_exception = True
+
+    def test_func(self):
+        return self.request.user.is_staff
+
+    def get(self, request):
+        request.session.pop(CHAVE_SESSAO_CRONOGRAMA, None)
+        return render(
+            request,
+            self.template_name,
+            {
+                "form": ImportarCronogramaForm(),
+                "importacoes": ImportacaoCronograma.objects.select_related(
+                    "contrato", "importado_por"
+                )[:20],
+            },
+        )
+
+    def post(self, request):
+        if request.POST.get("acao") == "confirmar":
+            return self._confirmar(request)
+        return self._prever(request)
+
+    def _prever(self, request):
+        form = ImportarCronogramaForm(request.POST, request.FILES)
+        if not form.is_valid():
+            return self._render_result(request, {"form": form})
+        contrato = form.cleaned_data["contrato"]
+        perfil_modelo = PerfilContrato.perfil_vigente(contrato, timezone.localdate())
+        if perfil_modelo is None:
+            form.add_error("contrato", "O contrato não tem perfil vigente para a data de hoje.")
+            return self._render_result(request, {"form": form})
+        try:
+            arquivo = form.cleaned_data["arquivo"]
+            documentos_previstos = ItemPrevisto.objects.filter(
+                indice__contrato=contrato,
+                indice__vigente=True,
+                excluido=False,
+            ).values_list("documento__identificador_base", flat=True).distinct()
+            previa = gerar_previa_cronograma(
+                arquivo,
+                nome_arquivo=arquivo.name,
+                contrato_id=contrato.pk,
+                perfil_id=perfil_modelo.pk,
+                perfil=perfil_de_dict(perfil_modelo.definicao),
+                documentos_previstos=documentos_previstos,
+            )
+        except (ErroFormatoCronograma, ErroPerfil, ValueError) as erro:
+            return self._render_result(request, {"form": form, "erro": str(erro)})
+
+        request.session[CHAVE_SESSAO_CRONOGRAMA] = {
+            "usuario_id": request.user.pk,
+            "previa": _serializar_previa_cronograma(previa),
+        }
+        return self._render_result(request, {"form": form, "previa": previa})
+
+    def _render_result(self, request, context):
+        template = self.template_name
+        if request.headers.get("HX-Request") == "true":
+            template = "importacoes/_resultado_cronograma.html"
+        return render(request, template, context)
+
+    def _confirmar(self, request):
+        dados = request.session.get(CHAVE_SESSAO_CRONOGRAMA)
+        if not dados or dados.get("usuario_id") != request.user.pk:
+            messages.error(request, "A prévia expirou. Envie o arquivo novamente.")
+            return redirect("importar_cronograma")
+        try:
+            previa = _previsao_cronograma_da_sessao(dados["previa"])
+            contrato = get_object_or_404(Contrato, pk=previa.contrato_id)
+            perfil_modelo = get_object_or_404(
+                PerfilContrato,
+                pk=previa.perfil_id,
+                contrato=contrato,
+            )
+            vigente = PerfilContrato.perfil_vigente(contrato, timezone.localdate())
+            if vigente is None or vigente.pk != perfil_modelo.pk:
+                raise ErroAplicacaoCronograma(
+                    "O perfil vigente mudou. Envie o arquivo e gere outra prévia."
+                )
+            importacao = aplicar_previa_cronograma(
+                previa,
+                contrato=contrato,
+                perfil_modelo=perfil_modelo,
+                usuario=request.user,
+            )
+        except (ErroAplicacaoCronograma, ValueError, KeyError, TypeError) as erro:
+            messages.error(request, str(erro))
+            return redirect("importar_cronograma")
+        request.session.pop(CHAVE_SESSAO_CRONOGRAMA, None)
+        messages.success(
+            request,
+            f"Cronograma importado: {importacao.linhas_validas} previsões atualizadas e "
+            f"{importacao.linhas_recusadas} linhas recusadas.",
+        )
+        return redirect("importar_cronograma")
+
+
+def _serializar_previa_cronograma(previa):
+    return {
+        "contrato_id": previa.contrato_id,
+        "perfil_id": previa.perfil_id,
+        "arquivo_nome": previa.arquivo_nome,
+        "linhas": [
+            {
+                "numero_linha": linha.numero_linha,
+                "codigo": linha.codigo,
+                "identificador_base": linha.identificador_base,
+                "data_prevista": linha.data_prevista.isoformat() if linha.data_prevista else None,
+                "categoria": linha.categoria,
+                "mensagem": linha.mensagem,
+            }
+            for linha in previa.linhas
+        ],
+    }
+
+
+def _previsao_cronograma_da_sessao(dados):
+    from datetime import date
+
+    return PreviaCronograma(
+        contrato_id=dados["contrato_id"],
+        perfil_id=dados["perfil_id"],
+        arquivo_nome=dados["arquivo_nome"],
+        linhas=tuple(
+            LinhaCronograma(
+                numero_linha=linha["numero_linha"],
+                codigo=linha["codigo"],
+                identificador_base=linha["identificador_base"],
+                data_prevista=date.fromisoformat(linha["data_prevista"])
+                if linha["data_prevista"]
+                else None,
+                categoria=linha["categoria"],
+                mensagem=linha["mensagem"],
+            )
+            for linha in dados["linhas"]
+        ),
     )

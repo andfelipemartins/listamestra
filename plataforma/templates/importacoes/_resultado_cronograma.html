@@ -1,0 +1,39 @@
+{% if erro %}<p class="notice notice-error">{{ erro }}</p>{% endif %}
+{% if form.errors %}<div class="notice notice-error">{{ form.errors }}</div>{% endif %}
+{% if previa %}
+<section class="panel">
+  <div class="panel-heading">
+    <div>
+      <h2>Prévia: {{ previa.arquivo_nome }}</h2>
+      <p>Confira os códigos e datas antes de gravar as previsões.</p>
+    </div>
+  </div>
+  <div class="metric-grid">
+    <article class="metric-card"><span>Válidas</span><strong>{{ previa.linhas_validas }}</strong></article>
+    <article class="metric-card"><span>Recusadas</span><strong>{{ previa.linhas_recusadas }}</strong></article>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Linha</th><th>Resultado</th><th>Código</th><th>Data prevista</th><th>Detalhe</th></tr></thead>
+      <tbody>
+        {% for linha in previa.linhas %}
+        <tr>
+          <td>{{ linha.numero_linha }}</td>
+          <td>{% if linha.categoria == "validas" %}Válida{% elif linha.categoria == "codigos_invalidos" %}Código inválido{% elif linha.categoria == "fora_do_id" %}Fora do ID{% else %}Dados inválidos{% endif %}</td>
+          <td>{{ linha.codigo }}</td>
+          <td>{% if linha.data_prevista %}{{ linha.data_prevista|date:"d/m/Y" }}{% endif %}</td>
+          <td>{{ linha.mensagem }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5">Nenhuma linha de cronograma encontrada.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="acao" value="confirmar">
+    <button class="button button-primary" type="submit">Importar {{ previa.linhas_validas }} previsões</button>
+  </form>
+</section>
+{% endif %}

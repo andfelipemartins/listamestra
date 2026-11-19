@@ -150,6 +150,85 @@ class ImportacaoSituacao(models.Model):
         ]
 
 
+class ImportacaoCronograma(models.Model):
+    contrato = models.ForeignKey(
+        Contrato,
+        verbose_name="contrato",
+        on_delete=models.PROTECT,
+        related_name="importacoes_cronograma",
+    )
+    arquivo_nome = models.CharField("nome do arquivo", max_length=255)
+    importado_em = models.DateTimeField("importado em", auto_now_add=True)
+    importado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="importado por",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="importacoes_cronograma",
+    )
+    linhas_validas = models.PositiveIntegerField("linhas válidas", default=0)
+    linhas_recusadas = models.PositiveIntegerField("linhas recusadas", default=0)
+
+    class Meta:
+        verbose_name = "importação de cronograma"
+        verbose_name_plural = "importações de cronograma"
+        ordering = ("-importado_em", "-pk")
+
+    def __str__(self):
+        return f"{self.contrato} — {self.arquivo_nome}"
+
+
+class PrevisaoEmissao(models.Model):
+    contrato = models.ForeignKey(
+        Contrato,
+        verbose_name="contrato",
+        on_delete=models.PROTECT,
+        related_name="previsoes_emissao",
+    )
+    documento = models.ForeignKey(
+        Documento,
+        verbose_name="documento",
+        on_delete=models.PROTECT,
+        related_name="previsoes_emissao",
+    )
+    data_prevista = models.DateField("data prevista")
+    importacao = models.ForeignKey(
+        ImportacaoCronograma,
+        verbose_name="importação de origem",
+        on_delete=models.PROTECT,
+        related_name="previsoes",
+    )
+    criado_em = models.DateTimeField("criado em", auto_now_add=True)
+    history = HistoricalRecords()
+
+    class Meta:
+        verbose_name = "previsão de emissão"
+        verbose_name_plural = "previsões de emissão"
+        ordering = ("data_prevista", "documento__identificador_base")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("contrato", "documento"),
+                name="previsao_emissao_contrato_documento_unica",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        erros = {}
+        if self.contrato_id and self.documento_id:
+            if self.contrato_id != self.documento.contrato_id:
+                erros["documento"] = "O documento precisa pertencer ao contrato da previsão."
+        if self.contrato_id and self.importacao_id:
+            if self.contrato_id != self.importacao.contrato_id:
+                erros["importacao"] = "A importação precisa pertencer ao contrato da previsão."
+        if erros:
+            raise ValidationError(erros)
+
+    def __str__(self):
+        return f"{self.documento} — {self.data_prevista:%d/%m/%Y}"
+
+
 class InconsistenciaImportacao(models.Model):
     importacao_id = models.ForeignKey(
         ImportacaoID,

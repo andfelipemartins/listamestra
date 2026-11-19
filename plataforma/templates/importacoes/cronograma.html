@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}Importar cronograma{% endblock %}
+
+{% block content %}
+<section class="page-heading">
+  <div>
+    <span class="eyebrow">Importações</span>
+    <h1>Importar cronograma</h1>
+    <p>Informe o código do documento e a data prevista. Revisão e versão são apenas referências e serão ignoradas.</p>
+    <p>A emissão real será lida das emissões importadas do PW.</p>
+  </div>
+</section>
+
+{% if messages %}
+  {% for message in messages %}<p class="notice notice-{{ message.tags }}">{{ message }}</p>{% endfor %}
+{% endif %}
+
+<section class="panel">
+  <h2>Arquivo e contrato</h2>
+  <form method="post" enctype="multipart/form-data" hx-post="{% url 'importar_cronograma' %}" hx-target="#resultado-previa-cronograma" hx-swap="innerHTML" hx-encoding="multipart/form-data">
+    {% csrf_token %}
+    <input type="hidden" name="acao" value="prever">
+    {{ form.as_p }}
+    <button class="button button-primary" type="submit">Gerar prévia</button>
+  </form>
+</section>
+
+<div id="resultado-previa-cronograma">
+  {% include "importacoes/_resultado_cronograma.html" %}
+</div>
+
+{% if importacoes %}
+<section class="panel">
+  <h2>Importações recentes</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Contrato</th><th>Arquivo</th><th>Importado em</th><th>Válidas</th><th>Recusadas</th></tr></thead>
+      <tbody>
+        {% for importacao in importacoes %}
+        <tr>
+          <td>{{ importacao.contrato.nome }}</td>
+          <td>{{ importacao.arquivo_nome }}</td>
+          <td>{{ importacao.importado_em|date:"d/m/Y H:i" }}</td>
+          <td>{{ importacao.linhas_validas }}</td>
+          <td>{{ importacao.linhas_recusadas }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

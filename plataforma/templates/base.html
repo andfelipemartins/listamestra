@@ -27,6 +27,7 @@
       <span class="nav-item disabled" aria-disabled="true"><span class="nav-icon">▤</span>Documentos <small>Em breve</small></span>
       {% if user.is_staff %}<a class="nav-item" href="{% url 'importar_id' %}"><span class="nav-icon">⇧</span>Importar ID</a>{% endif %}
       {% if user.is_staff %}<a class="nav-item" href="{% url 'importar_situacao_pw' %}"><span class="nav-icon">⇧</span>Importar situação PW</a>{% endif %}
+      {% if user.is_staff %}<a class="nav-item" href="{% url 'importar_cronograma' %}"><span class="nav-icon">⇧</span>Importar cronograma</a>{% endif %}
       <span class="nav-item disabled" aria-disabled="true"><span class="nav-icon">◇</span>Pendências <small>Em breve</small></span>
       <span class="nav-item disabled" aria-disabled="true"><span class="nav-icon">▧</span>GRDs <small>Em breve</small></span>
       {% if user.is_staff %}<a class="nav-item" href="{% url 'admin:index' %}"><span class="nav-icon">⚙</span>Admin</a>{% else %}<span class="nav-item disabled" aria-disabled="true"><span class="nav-icon">⚙</span>Admin</span>{% endif %}

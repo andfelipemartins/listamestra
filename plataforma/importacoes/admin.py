@@ -2,10 +2,12 @@ from django.contrib import admin
 
 from .models import (
     ImportacaoID,
+    ImportacaoCronograma,
     ImportacaoSituacao,
     InconsistenciaImportacao,
     IndiceDocumentos,
     ItemPrevisto,
+    PrevisaoEmissao,
 )
 
 
@@ -45,6 +47,22 @@ class ImportacaoSituacaoAdmin(admin.ModelAdmin):
     list_filter = ("contrato", "data_extracao")
     search_fields = ("arquivo_nome",)
     readonly_fields = tuple(field.name for field in ImportacaoSituacao._meta.fields)
+
+
+@admin.register(ImportacaoCronograma)
+class ImportacaoCronogramaAdmin(admin.ModelAdmin):
+    list_display = ("contrato", "arquivo_nome", "importado_em", "importado_por", "linhas_validas", "linhas_recusadas")
+    list_filter = ("contrato", "importado_em")
+    search_fields = ("arquivo_nome", "contrato__nome")
+    readonly_fields = tuple(field.name for field in ImportacaoCronograma._meta.fields)
+
+
+@admin.register(PrevisaoEmissao)
+class PrevisaoEmissaoAdmin(admin.ModelAdmin):
+    list_display = ("documento", "contrato", "data_prevista", "importacao", "criado_em")
+    list_filter = ("contrato", "data_prevista")
+    search_fields = ("documento__identificador_base", "documento__titulo", "importacao__arquivo_nome")
+    readonly_fields = ("criado_em",)
 
 
 @admin.register(InconsistenciaImportacao)
