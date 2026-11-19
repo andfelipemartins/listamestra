@@ -10,6 +10,8 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import IntegrityError, transaction
 from django.urls import reverse
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.utils import timezone
 
 from contratos.admin import PerfilContratoAdmin
 from contratos.models import Contrato, PerfilContrato
@@ -101,6 +103,7 @@ def test_edicao_do_perfil_exibe_caixas_e_botao_de_teste(client, django_user_mode
     assert "tipo documental" in response.content.decode()
     assert "sequencial" in response.content.decode()
     assert "Testar códigos" in response.content.decode()
+    assert "Feriados" in response.content.decode()
     perfil_definido = perfil_de_dict(perfil.definicao)
     codigo_exemplo = montar(
         perfil_definido,
@@ -237,3 +240,171 @@ def test_documento_so_pode_ter_um_codigo_por_perfil(contrato):
 
     with pytest.raises(IntegrityError), transaction.atomic():
         CodigoDocumento.objects.create(documento=documento, perfil=perfil, codigo="COD-2")
+
+
+def _url_feriados(perfil):
+    return reverse("admin:contratos_perfilcontrato_importar_feriados", args=(perfil.pk,))
+
+
+def _arquivo_csv(conteudo):
+    return SimpleUploadedFile("feriados.csv", conteudo.encode("utf-8"), content_type="text/csv")
+
+
+def _adicionar_extra(perfil, data, nome):
+    definicao = json_compatibility(perfil.definicao)
+    definicao["prazos"]["feriados"]["extras"].append({"data": data, "nome": nome})
+    perfil.definicao = definicao
+    perfil.save(update_fields=("definicao",))
+
+
+@pytest.mark.django_db
+def test_pagina_feriados_mostra_nacionais_calculados_e_extras(client, django_user_model, contrato):
+    perfil = criar_perfil(contrato)
+    ano = timezone.localdate().year
+    data_extra = date(ano, 6, 10)
+    _adicionar_extra(perfil, data_extra.isoformat(), "Aniversário municipal")
+    administrador = django_user_model.objects.create_superuser(
+        username="admin-feriados", email="feriados@example.com", password="senha-segura"
+    )
+    client.force_login(administrador)
+
+    response = client.get(
+        reverse("admin:contratos_perfilcontrato_feriados", args=(perfil.pk,))
+    )
+
+    assert response.status_code == 200
+    itens = response.context["itens"]
+    assert any(item["data"] == date(ano, 1, 1) and item["origem"] == "Nacional (calculado)" for item in itens)
+    assert any(
+        item["data"] == data_extra
+        and item["nome"] == "Aniversário municipal"
+        and item["origem"] == "Extra do perfil"
+        for item in itens
+    )
+    assert any(item["data"].year == ano + 1 for item in itens)
+
+
+@pytest.mark.django_db
+def test_perfil_sem_prazos_orienta_configurar_antes_da_importacao(
+    client, django_user_model, contrato
+):
+    perfil = criar_perfil(contrato)
+    definicao = json_compatibility(perfil.definicao)
+    definicao.pop("prazos")
+    perfil.definicao = definicao
+    perfil.save(update_fields=("definicao",))
+    administrador = django_user_model.objects.create_superuser(
+        username="admin-sem-prazos", email="sem-prazos@example.com", password="senha-segura"
+    )
+    client.force_login(administrador)
+
+    resposta_feriados = client.get(
+        reverse("admin:contratos_perfilcontrato_feriados", args=(perfil.pk,))
+    )
+    resposta_importacao = client.get(_url_feriados(perfil))
+
+    assert "configure os prazos" in resposta_feriados.content.decode().lower()
+    assert "É preciso configurar a seção de prazos" in resposta_importacao.content.decode()
+    assert "<input type=\"file\"" not in resposta_importacao.content.decode()
+
+
+@pytest.mark.django_db
+def test_importacao_de_feriados_mostra_previa_e_linhas_recusadas(
+    client, django_user_model, contrato
+):
+    perfil = criar_perfil(contrato)
+    administrador = django_user_model.objects.create_superuser(
+        username="admin-previa-feriados", email="previa@example.com", password="senha-segura"
+    )
+    client.force_login(administrador)
+
+    response = client.post(
+        _url_feriados(perfil),
+        {"arquivo": _arquivo_csv("data,nome\n10/06/2027,Aniversário\n99/99/2027,Data impossível\n")},
+    )
+
+    assert response.status_code == 200
+    previa = response.context["previa"]
+    assert previa["validos"] == [{"data": "2027-06-10", "nome": "Aniversário"}]
+    assert len(previa["erros"]) == 1
+    assert previa["erros"][0]["linha"] == 3
+    assert "data inválida" in previa["erros"][0]["mensagem"]
+    assert "Confirmar importação" in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_linha_com_nome_vazio_e_recusada_com_motivo(client, django_user_model, contrato):
+    perfil = criar_perfil(contrato)
+    administrador = django_user_model.objects.create_superuser(
+        username="admin-linha-invalida", email="linha-invalida@example.com", password="senha-segura"
+    )
+    client.force_login(administrador)
+
+    response = client.post(
+        _url_feriados(perfil),
+        {"arquivo": _arquivo_csv("data,nome\n10/06/2027,\n")},
+    )
+
+    assert response.status_code == 200
+    assert response.context["previa"]["validos"] == []
+    erro = response.context["previa"]["erros"][0]
+    assert erro["linha"] == 2
+    assert erro["mensagem"] == "nome vazio"
+    assert "Confirmar importação" not in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_confirmacao_cria_nova_versao_sem_editar_a_vigente(client, django_user_model, contrato):
+    perfil = criar_perfil(contrato)
+    definicao_original = json_compatibility(perfil.definicao)
+    administrador = django_user_model.objects.create_superuser(
+        username="admin-versao-feriados", email="versao@example.com", password="senha-segura"
+    )
+    client.force_login(administrador)
+    url = _url_feriados(perfil)
+
+    previa = client.post(
+        url,
+        {"arquivo": _arquivo_csv("data,nome\n10/06/2027,Aniversário\n")},
+    )
+    assert previa.status_code == 200
+    resposta = client.post(url, {"confirmar": "1"})
+
+    novo_perfil = PerfilContrato.objects.get(contrato=contrato, versao=2)
+    assert resposta.status_code == 302
+    assert PerfilContrato.objects.get(pk=perfil.pk).definicao == definicao_original
+    assert novo_perfil.definicao["prazos"]["feriados"]["extras"][-1] == {
+        "data": "2027-06-10",
+        "nome": "Aniversário",
+    }
+
+
+@pytest.mark.django_db
+def test_duplicatas_sao_ignoradas_ao_atualizar_extras(client, django_user_model, contrato):
+    perfil = criar_perfil(contrato)
+    _adicionar_extra(perfil, "2027-06-10", "Aniversário existente")
+    _adicionar_extra(perfil, "2027-06-10", "Duplicata antiga")
+    administrador = django_user_model.objects.create_superuser(
+        username="admin-duplicata-feriados", email="duplicata@example.com", password="senha-segura"
+    )
+    client.force_login(administrador)
+    url = _url_feriados(perfil)
+
+    previa = client.post(
+        url,
+        {
+            "arquivo": _arquivo_csv(
+                "data,nome\n10/06/2027,Outro nome\n11/06/2027,Novo feriado\n11/06/2027,Repetido\n"
+            )
+        },
+    )
+    assert previa.status_code == 200
+    assert len(previa.context["previa"]["duplicatas"]) == 2
+    client.post(url, {"confirmar": "1"})
+
+    novo_perfil = PerfilContrato.objects.get(contrato=contrato, versao=2)
+    extras = novo_perfil.definicao["prazos"]["feriados"]["extras"]
+    assert extras == [
+        {"data": "2027-06-10", "nome": "Aniversário existente"},
+        {"data": "2027-06-11", "nome": "Novo feriado"},
+    ]

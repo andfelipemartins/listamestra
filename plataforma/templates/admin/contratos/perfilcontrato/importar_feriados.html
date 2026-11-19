@@ -1,0 +1,93 @@
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">Início</a>
+  &rsaquo; <a href="{% url 'admin:contratos_perfilcontrato_changelist' %}">Perfis do contrato</a>
+  &rsaquo; <a href="{{ change_url }}">{{ original }}</a>
+  &rsaquo; <a href="{{ feriados_url }}">Feriados</a>
+  &rsaquo; Importar feriados extras
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  {% if sem_prazos %}
+    <div class="messagelist"><div class="warning">
+      É preciso configurar a seção de prazos do perfil antes de importar feriados extras.
+    </div></div>
+    <p><a class="button" href="{{ change_url }}">Configurar o perfil</a></p>
+  {% else %}
+    <p>Envie um CSV ou XLSX simples com as colunas <strong>data</strong> e <strong>nome</strong>.</p>
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      {{ form.non_field_errors }}
+      <div class="form-row">
+        {{ form.arquivo.errors }}
+        {{ form.arquivo.label_tag }}
+        {{ form.arquivo }}
+        {% if form.arquivo.help_text %}<div class="help">{{ form.arquivo.help_text }}</div>{% endif %}
+      </div>
+      <div class="submit-row">
+        <input type="submit" name="prever" value="Prévia" class="default">
+      </div>
+    </form>
+
+    {% if previa %}
+      <div class="module">
+        <h2>Prévia da planilha</h2>
+        <h3>Linhas válidas</h3>
+        {% if previa.validos %}
+          <table>
+            <thead><tr><th>Data</th><th>Nome</th><th>Resultado</th></tr></thead>
+            <tbody>
+              {% for item in previa.validos %}
+                <tr><td>{{ item.data }}</td><td>{{ item.nome }}</td><td>Válida</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <p>Nenhuma linha válida.</p>
+        {% endif %}
+
+        {% if previa.duplicatas %}
+          <h3>Datas duplicadas, ignoradas</h3>
+          <table>
+            <thead><tr><th>Data</th><th>Nome</th><th>Motivo</th></tr></thead>
+            <tbody>
+              {% for item in previa.duplicatas %}
+                <tr><td>{{ item.data }}</td><td>{{ item.nome }}</td><td>{{ item.motivo }}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% endif %}
+
+        {% if previa.erros %}
+          <h3>Linhas recusadas</h3>
+          <table>
+            <thead><tr><th>Linha</th><th>Motivo</th></tr></thead>
+            <tbody>
+              {% for erro in previa.erros %}
+                <tr><td>{{ erro.linha }}</td><td>{{ erro.mensagem }}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% endif %}
+
+        {% if previa.pode_confirmar %}
+          <form method="post">
+            {% csrf_token %}
+            <div class="submit-row">
+              <button type="submit" name="confirmar" value="1" class="default">Confirmar importação</button>
+            </div>
+          </form>
+        {% endif %}
+      </div>
+    {% endif %}
+  {% endif %}
+
+  <div class="submit-row">
+    <a class="button cancel-link" href="{{ feriados_url }}">Voltar aos feriados</a>
+  </div>
+</div>
+{% endblock %}

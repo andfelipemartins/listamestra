@@ -1,0 +1,48 @@
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">Início</a>
+  &rsaquo; <a href="{% url 'admin:contratos_perfilcontrato_changelist' %}">Perfis do contrato</a>
+  &rsaquo; <a href="{{ change_url }}">{{ original }}</a>
+  &rsaquo; Feriados
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <p>Feriados válidos para {{ anos.0 }} e {{ anos.1 }}, conforme este perfil.</p>
+
+  {% if sem_prazos %}
+    <div class="messagelist"><div class="warning">
+      Este perfil ainda não tem a seção de prazos. Configure os prazos antes de cadastrar feriados extras.
+    </div></div>
+    <p>
+      <a class="button" href="{{ url_importar }}">Importar feriados extras</a>
+      <a class="button" href="{{ change_url }}">Configurar o perfil</a>
+    </p>
+  {% else %}
+    <p><a class="button" href="{{ url_importar }}">Importar feriados extras</a></p>
+    {% if itens %}
+      <table>
+        <thead><tr><th>Data</th><th>Nome</th><th>Origem</th></tr></thead>
+        <tbody>
+          {% for item in itens %}
+            <tr>
+              <td>{{ item.data|date:"d/m/Y" }}</td>
+              <td>{{ item.nome }}</td>
+              <td>{{ item.origem }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p>Nenhum feriado está configurado para esses anos.</p>
+    {% endif %}
+  {% endif %}
+
+  <div class="submit-row">
+    <a class="button cancel-link" href="{{ change_url }}">Voltar ao perfil</a>
+  </div>
+</div>
+{% endblock %}
