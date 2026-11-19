@@ -30,5 +30,6 @@ urlpatterns = [
     path("painel/", include("painel.urls")),
     path("atividade/", include("registro.urls")),
     path("acoes/", include("acoes.urls")),
+    path("documentos/", include("documentos.urls")),
     path("", InicioView.as_view(), name="inicio"),
 ]

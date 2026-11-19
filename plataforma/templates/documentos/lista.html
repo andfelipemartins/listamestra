@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Documentos{% endblock %}
+{% block extra_head %}
+<style>
+  .documentos-filtros { display: grid; gap: 14px; }
+  .documentos-filtros-topo { display: grid; grid-template-columns: minmax(220px, 1.4fr) repeat(3, minmax(150px, 1fr)); gap: 12px; }
+  .documentos-filtros .painel-filtros-grade { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+  .documentos-checks { max-height: 150px; overflow: auto; padding: 7px; border: 1px solid var(--border); border-radius: 7px; }
+  .documentos-checks label { display: flex; gap: 8px; align-items: flex-start; padding: 5px; color: var(--text-primary); font-size: 12px; font-weight: 500; }
+  .documentos-paginacao { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; color: var(--text-secondary); font-size: 12px; }
+  .documentos-paginas { display: flex; flex-wrap: wrap; gap: 5px; }
+  .documentos-paginas a, .documentos-paginas span { min-width: 34px; padding: 7px 9px; border: 1px solid var(--border); border-radius: 6px; text-align: center; }
+  .documentos-paginas .atual { background: var(--selection-bg); color: var(--selection-text); font-weight: 700; }
+  @media (max-width: 767px) { .documentos-filtros-topo { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <div><span class="eyebrow">CONTROLE DOCUMENTAL</span><h1>Documentos</h1><p>Lista e histórico dos documentos do contrato.</p></div>
+</section>
+
+{% if erro %}
+  <div class="notice notice-error">{{ erro }}</div>
+{% elif not contrato %}
+  <div class="panel"><h2>Nenhum contrato disponível</h2><p class="painel-sem-dados">Você ainda não participa de um contrato ativo.</p></div>
+{% else %}
+  <section class="panel" aria-labelledby="filtros-documentos">
+    <div class="panel-heading"><div><h2 id="filtros-documentos">{{ contrato.codigo_interno }} · {{ contrato.nome }}</h2><p>Busque por código ou título e refine pelas caixas configuradas no perfil.</p></div></div>
+    <form class="documentos-filtros" method="get">
+      {% if contratos|length > 1 %}
+      <div class="documentos-filtros-topo">
+        <label class="painel-filtro">Contrato
+          <select name="contrato" onchange="this.form.submit()">
+            {% for opcao in contratos %}<option value="{{ opcao.pk }}" {% if opcao.pk == contrato.pk %}selected{% endif %}>{{ opcao.codigo_interno }} · {{ opcao.nome }}</option>{% endfor %}
+          </select>
+        </label>
+        <label class="painel-filtro">Buscar por código ou título<input type="search" name="q" value="{{ busca }}" placeholder="Digite parte do código ou título"></label>
+        <label class="painel-filtro">Categoria
+          <select name="categoria"><option value="">Todas</option>{% for opcao in categorias %}<option value="{{ opcao.valor }}" {% if categoria_selecionada == opcao.valor %}selected{% endif %}>{{ opcao.rotulo }}</option>{% endfor %}</select>
+        </label>
+        <label class="painel-filtro">Situação vigente
+          <select name="situacao"><option value="">Todas</option>{% for opcao in situacoes %}<option value="{{ opcao.valor }}" {% if situacao_selecionada == opcao.valor %}selected{% endif %}>{{ opcao.rotulo }}</option>{% endfor %}</select>
+        </label>
+      </div>
+      {% else %}
+      <input type="hidden" name="contrato" value="{{ contrato.pk }}">
+      <div class="documentos-filtros-topo">
+        <label class="painel-filtro">Buscar por código ou título<input type="search" name="q" value="{{ busca }}" placeholder="Digite parte do código ou título"></label>
+        <label class="painel-filtro">Categoria
+          <select name="categoria"><option value="">Todas</option>{% for opcao in categorias %}<option value="{{ opcao.valor }}" {% if categoria_selecionada == opcao.valor %}selected{% endif %}>{{ opcao.rotulo }}</option>{% endfor %}</select>
+        </label>
+        <label class="painel-filtro">Situação vigente
+          <select name="situacao"><option value="">Todas</option>{% for opcao in situacoes %}<option value="{{ opcao.valor }}" {% if situacao_selecionada == opcao.valor %}selected{% endif %}>{{ opcao.rotulo }}</option>{% endfor %}</select>
+        </label>
+      </div>
+      {% endif %}
+      {% if filtros_caixas %}
+      <div class="painel-filtros-grade">
+        {% for filtro in filtros_caixas %}
+        <fieldset class="painel-filtro"><legend>{{ filtro.rotulo }}</legend><div class="documentos-checks">
+          {% for opcao in filtro.opcoes %}<label><input type="checkbox" name="caixa_{{ filtro.nome }}" value="{{ opcao.valor }}" {% if opcao.valor in filtro.selecionados %}checked{% endif %}><span>{{ opcao.rotulo }}</span></label>{% endfor %}
+        </div></fieldset>
+        {% endfor %}
+      </div>
+      {% endif %}
+      <div class="painel-filtros-acoes"><button class="button button-primary" type="submit">Filtrar</button><a class="button button-quiet" href="{% url 'documentos_lista' %}?contrato={{ contrato.pk }}">Limpar</a></div>
+    </form>
+  </section>
+
+  <section class="panel" aria-label="Lista de documentos">
+    <div class="panel-heading"><div><h2>{{ total_filtrado }} documento{{ total_filtrado|pluralize:"s" }}</h2><p>Página {{ pagina.number }} de {{ pagina.paginator.num_pages|default:1 }} · até 50 por página.</p></div></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Código</th><th>Título</th><th>Categoria</th><th>Situação vigente</th><th>Última emissão</th><th>Última movimentação</th></tr></thead>
+        <tbody>
+          {% for linha in pagina.object_list %}
+          <tr>
+            <td><a href="{% url 'documento_pasta' contrato.pk linha.documento.pk %}"><strong>{{ linha.codigo }}</strong></a></td>
+            <td>{{ linha.titulo }}</td>
+            <td>{{ linha.categoria }}</td>
+            <td>{{ linha.situacao_grupo.rotulo }}</td>
+            <td>{{ linha.ultima_emissao }}</td>
+            <td>{% if linha.ultima_movimentacao %}{{ linha.ultima_movimentacao|date:"d/m/Y H:i" }}{% else %}—{% endif %}</td>
+          </tr>
+          {% empty %}<tr><td colspan="6" class="painel-sem-dados">Nenhum documento corresponde aos filtros.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if pagina.paginator.num_pages > 1 %}
+    <nav class="documentos-paginacao" aria-label="Páginas da lista de documentos">
+      <span>Exibindo {{ pagina.start_index }}–{{ pagina.end_index }} de {{ total_filtrado }}</span>
+      <div class="documentos-paginas">
+        {% if pagina.has_previous %}<a href="?{% if query_sem_pagina %}{{ query_sem_pagina }}&amp;{% endif %}pagina={{ pagina.previous_page_number }}" aria-label="Página anterior">‹</a>{% endif %}
+        {% for numero in pagina.paginator.page_range %}{% if numero == pagina.number %}<span class="atual" aria-current="page">{{ numero }}</span>{% else %}<a href="?{% if query_sem_pagina %}{{ query_sem_pagina }}&amp;{% endif %}pagina={{ numero }}">{{ numero }}</a>{% endif %}{% endfor %}
+        {% if pagina.has_next %}<a href="?{% if query_sem_pagina %}{{ query_sem_pagina }}&amp;{% endif %}pagina={{ pagina.next_page_number }}" aria-label="Próxima página">›</a>{% endif %}
+      </div>
+    </nav>
+    {% endif %}
+  </section>
+{% endif %}
+{% endblock %}

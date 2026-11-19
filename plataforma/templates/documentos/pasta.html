@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}{{ codigo|default:"Documento" }}{% endblock %}
+{% block extra_head %}
+<style>
+  .pasta-cabecalho { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px; align-items: start; }
+  .pasta-codigo { margin: 8px 0 7px; overflow-wrap: anywhere; font-size: clamp(19px, 3vw, 27px); font-weight: 700; }
+  .pasta-titulo { margin: 0; color: var(--text-secondary); font-size: 14px; line-height: 1.5; }
+  .pasta-destaques { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 17px; }
+  .pasta-destaque { padding: 8px 11px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); font-size: 12px; }
+  .pasta-destaque span { display: block; margin-bottom: 4px; color: var(--text-secondary); font-size: 10px; }
+  .pasta-partes { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 9px; }
+  .pasta-parte { padding: 11px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); }
+  .pasta-parte span, .pasta-parte small { display: block; color: var(--text-secondary); font-size: 10px; }
+  .pasta-parte strong { display: block; margin: 5px 0; overflow-wrap: anywhere; font-size: 13px; }
+  .pasta-linha-timeline { position: relative; display: grid; gap: 14px; margin: 0; padding: 0 0 0 27px; list-style: none; }
+  .pasta-linha-timeline::before { position: absolute; top: 10px; bottom: 12px; left: 8px; width: 2px; background: var(--border); content: ""; }
+  .pasta-emissao { position: relative; padding: 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+  .pasta-emissao::before { position: absolute; top: 21px; left: -25px; width: 12px; height: 12px; border: 2px solid var(--surface); border-radius: 50%; background: var(--accent-solid); box-shadow: 0 0 0 1px var(--border); content: ""; }
+  .pasta-emissao-topo { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; }
+  .pasta-emissao h3 { margin: 0; font-size: 14px; }
+  .pasta-emissao-meta { margin: 6px 0 0; color: var(--text-secondary); font-size: 12px; }
+  .pasta-analises { display: grid; gap: 8px; margin: 14px 0 0; padding: 0; list-style: none; }
+  .pasta-analise { padding: 10px 12px; border-left: 3px solid var(--border); border-radius: 5px; background: var(--surface-raised); font-size: 12px; }
+  .pasta-analise.aprovacao { border-left-color: var(--success-text); background: var(--success-surface); }
+  .pasta-analise small { display: block; margin-top: 4px; color: var(--text-secondary); }
+  .pasta-prazos { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 13px; }
+  .pasta-prazo { padding: 7px 9px; border: 1px solid var(--border); border-radius: 7px; font-size: 11px; }
+  .pasta-atividades { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+  .pasta-atividade { padding: 12px 13px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+  .pasta-atividade-topo { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 5px 12px; font-size: 12px; }
+  .pasta-atividade p { margin: 7px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+  @media (max-width: 767px) { .pasta-cabecalho { grid-template-columns: 1fr; } .pasta-cabecalho .button { justify-self: start; } .pasta-emissao { padding: 13px; } }
+</style>
+{% endblock %}
+{% block content %}
+{% if erro %}
+  <section class="panel"><div class="notice notice-error">{{ erro }}</div><p><a href="{% url 'documentos_lista' %}">Voltar para Documentos</a></p></section>
+{% else %}
+<section class="page-heading pasta-cabecalho">
+  <div>
+    <span class="eyebrow">{{ contrato.codigo_interno }} · PASTA DO DOCUMENTO</span>
+    <h1 class="pasta-codigo">{{ codigo }}</h1>
+    <p class="pasta-titulo">{{ documento.titulo|default:"(sem título)" }}</p>
+    <div class="pasta-destaques">
+      <div class="pasta-destaque"><span>Categoria</span>{{ categoria }}</div>
+      <div class="pasta-destaque"><span>Situação vigente</span>{{ situacao_grupo.rotulo }}{% if situacao %} · {{ situacao }}{% endif %}</div>
+      {% if data_situacao %}<div class="pasta-destaque"><span>Última situação em</span>{{ data_situacao|date:"d/m/Y" }}</div>{% endif %}
+      {% if previsao %}<div class="pasta-destaque"><span>Previsão do cronograma</span>{{ previsao.data_prevista|date:"d/m/Y" }}</div>{% endif %}
+    </div>
+  </div>
+  <a class="button button-quiet" href="{{ url_lista }}">Voltar à lista</a>
+</section>
+
+<section class="panel" aria-labelledby="partes-codigo-titulo">
+  <div class="panel-heading"><div><h2 id="partes-codigo-titulo">Partes do código</h2><p>Significado conforme as caixas do perfil vigente.</p></div></div>
+  <div class="pasta-partes">
+    {% for parte in partes_codigo %}<div class="pasta-parte"><span>{{ parte.rotulo }}</span><strong>{{ parte.valor }}</strong><small>{{ parte.significado }}</small></div>{% empty %}<p class="painel-sem-dados">O perfil não define caixas para este código.</p>{% endfor %}
+  </div>
+</section>
+
+<section class="panel" aria-labelledby="linha-do-tempo-titulo">
+  <div class="panel-heading"><div><h2 id="linha-do-tempo-titulo">Linha do tempo das emissões</h2><p>Uma sequência contínua de emissões e análises; uma reabertura continua a mesma pasta.</p></div></div>
+  {% if linha_tempo %}
+  <ol class="pasta-linha-timeline">
+    {% for item in linha_tempo %}
+    <li class="pasta-emissao">
+      <div class="pasta-emissao-topo"><div><h3>{{ item.rotulo }}</h3><p class="pasta-emissao-meta">Rev {{ item.emissao.revisao }}{% if item.emissao.versao != None %} · Ver {{ item.emissao.versao }}{% endif %} · {{ item.emissao.get_fase_display }}</p></div><strong>{{ item.emissao.data_emissao|date:"d/m/Y" }}</strong></div>
+      {% if item.analises %}
+      <ul class="pasta-analises" aria-label="Análises desta emissão">
+        {% for analise in item.analises %}
+        <li class="pasta-analise {% if analise.aprovacao_que_conta %}aprovacao{% endif %}">
+          <strong>{{ analise.situacao }}</strong>{% if analise.etapa %} · {{ analise.etapa }}{% endif %}
+          <small>{% if analise.data %}{{ analise.data|date:"d/m/Y" }}{% else %}Sem data{% endif %} · {{ analise.origem_rotulo }}{% if analise.aprovacao_que_conta %} · Aprovação que conta{% endif %}</small>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}<p class="painel-sem-dados">Ainda não há análise registrada para esta emissão.</p>{% endif %}
+      {% if item.prazos %}<div class="pasta-prazos" aria-label="Prazos da emissão">{% for prazo in item.prazos %}<div class="pasta-prazo"><strong>{{ prazo.regra.rotulo }}:</strong> {{ prazo.status }} · limite {{ prazo.vencimento|date:"d/m/Y" }}</div>{% endfor %}</div>{% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+  {% else %}<p class="painel-sem-dados">Este documento ainda não tem emissão registrada.</p>{% endif %}
+</section>
+
+<section class="panel" aria-labelledby="atividade-documento-titulo">
+  <div class="panel-heading"><div><h2 id="atividade-documento-titulo">Ações e Atividade</h2><p>Ações registradas e eventos deste documento em ordem cronológica.</p></div></div>
+  <ol class="pasta-atividades">
+    {% for atividade in atividades %}<li class="pasta-atividade"><div class="pasta-atividade-topo"><strong>{{ atividade.titulo }}</strong><time datetime="{{ atividade.data_hora|date:'c' }}">{{ atividade.data_hora|date:"d/m/Y H:i" }}</time></div><p>{{ atividade.resumo }} · {{ atividade.usuario }}{% if atividade.resolvida_em %}<br>Resolvida em {{ atividade.resolvida_em|date:"d/m/Y H:i" }}{% endif %}</p></li>{% empty %}<li class="painel-sem-dados">Nenhuma ação ou evento registrado.</li>{% endfor %}
+  </ol>
+</section>
+{% endif %}
+{% endblock %}
