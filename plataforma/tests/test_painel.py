@@ -109,12 +109,14 @@ def _documento(
     return documento
 
 
-def _emissao_com_status(documento, revisao, situacao, *, fase=Emissao.Fase.PRELIMINAR):
+def _emissao_com_status(
+    documento, revisao, situacao, *, fase=Emissao.Fase.PRELIMINAR, versao=1
+):
     data = timezone.localdate() - timedelta(days=10)
     emissao = Emissao.objects.create(
         documento=documento,
         revisao=str(revisao),
-        versao=1,
+        versao=versao,
         fase=fase,
         data_emissao=data,
         origem=Emissao.Origem.CLIENTE,
@@ -261,14 +263,16 @@ def test_cancelado_fica_fora_da_conta_dos_graficos_e_cartoes(contrato, perfil_mo
 
 
 @pytest.mark.django_db
-def test_grupo_erro_tem_cartao_e_fatia_separados_de_inconsistente(
+def test_grupo_erro_fica_oculto_e_documentos_contam_na_situacao_anterior(
     contrato, perfil_modelo, client, django_user_model
 ):
     usuario = django_user_model.objects.create_user(username="chefia-erros", password="senha")
     Participacao.objects.create(usuario=usuario, contrato=contrato, papel="chefia")
     indice = _indice(contrato, "ID-ERROS")
-    _documento(contrato, indice, 3501, situacao="Em Desenvolvimento")
-    _documento(contrato, indice, 3502, situacao="Erro de Assinatura")
+    doc_nao_aprovado = _documento(contrato, indice, 3501, situacao="Não Aprovado")
+    _emissao_com_status(doc_nao_aprovado, "2", "Erro de Assinatura")
+    doc_aprovado = _documento(contrato, indice, 3502, situacao="Aprovado")
+    _emissao_com_status(doc_aprovado, "2", "Em Desenvolvimento")
     _documento(contrato, indice, 3503, situacao="Inconsistente")
     _documento(contrato, indice, 3504, situacao="Não Conforme")
     client.force_login(usuario)
@@ -292,13 +296,16 @@ def test_grupo_erro_tem_cartao_e_fatia_separados_de_inconsistente(
     }
 
     assert resposta.status_code == 200
-    assert cards["erro"] == 2
+    assert "erro" not in cards
+    assert cards["nao_aprovado"] == 1
+    assert cards["aprovado"] == 1
     assert cards["inconsistente"] == 2
-    assert 'painel-grupo-label">ERRO</span>' in html
+    assert resposta.context["total_documentos_previstos"] == 4
+    assert "ERRO" not in pizza["labels"]
+    assert "ERRO" not in [dataset["label"] for dataset in barras["datasets"]]
+    assert "ERRO" not in html
     assert 'painel-grupo-label">INCONSISTENTE</span>' in html
-    assert "ERRO" in pizza["labels"]
     assert "INCONSISTENTE" in pizza["labels"]
-    assert "ERRO" in [dataset["label"] for dataset in barras["datasets"]]
     assert "INCONSISTENTE" in [dataset["label"] for dataset in barras["datasets"]]
 
 
@@ -357,6 +364,7 @@ def test_indicador_aparece_com_numero_geral_barras_por_recorte_e_linha_de_meta(
     _emissao_com_status(fora, "2", "Não Aprovado")
     _emissao_com_status(fora, "3", "Não Aprovado")
     _emissao_com_status(fora, "4", "Não Aprovado")
+    _emissao_com_status(fora, "5", "Não Aprovado")
     _emissao_com_status(fora, "0", "Aprovado", fase=Emissao.Fase.ORIGINAL)
     client.force_login(usuario)
 
@@ -376,7 +384,7 @@ def test_indicador_aparece_com_numero_geral_barras_por_recorte_e_linha_de_meta(
         "Ragueb Chohfi": 100,
         "São Mateus": 0,
     }
-    assert "<strong>50%</strong> aprovados em até 3 revisões · meta 80%" in re.sub(
+    assert "<strong>50%</strong> aprovados até a revisão 3 · meta 80%" in re.sub(
         r"\s+", " ", html
     )
     assert grafico["labels"] == ["São Mateus", "Ragueb Chohfi"]
@@ -387,6 +395,24 @@ def test_indicador_aparece_com_numero_geral_barras_por_recorte_e_linha_de_meta(
     assert "rotulos-indicador" in html
     assert "Dentro do limite: 1" in html
     assert "Fora do limite: 1" in html
+
+
+@pytest.mark.django_db
+def test_indicador_conta_emissoes_de_versoes_diferentes_na_mesma_revisao(
+    contrato, perfil_modelo
+):
+    indice = _indice(contrato, "ID-INDICADOR-VERSOES")
+    documento = _documento(contrato, indice, 5151, situacao="Não Aprovado")
+    _emissao_com_status(documento, "1", "Não Aprovado", versao=2)
+    _emissao_com_status(documento, "2", "Não Aprovado", versao=1)
+    _emissao_com_status(documento, "2", "Não Aprovado", versao=2)
+    _emissao_com_status(documento, "3", "Aprovado", versao=1)
+
+    dados = carregar_painel(contrato)
+    indicador = dados["indicadores_aprovacao"][0]
+
+    assert Emissao.objects.filter(documento=documento).count() == 5
+    assert (indicador["dentro_limite"], indicador["fora_limite"]) == (0, 1)
 
 
 @pytest.mark.django_db
@@ -425,10 +451,11 @@ def test_indicador_exclui_recortes_sem_base_do_grafico_e_ordena_por_percentual(
         ).group(1)
     )
 
-    assert grafico["labels"] == ["Desenho", "Diagrama", "Relatório técnico"]
-    assert grafico["datasets"][0]["data"] == [0, 0, 100]
+    assert grafico["labels"] == ["Relatório técnico"]
+    assert grafico["datasets"][0]["data"] == [100]
     assert all("Memorial de cálculo" not in rotulo for rotulo in grafico["labels"])
-    assert "Sem documentos na conta: Memorial de cálculo" in html
+    texto = re.sub(r"\s+", " ", html)
+    assert "Sem documentos na conta: Desenho, Diagrama, Memorial de cálculo" in texto
 
 
 @pytest.mark.django_db

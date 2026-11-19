@@ -10,7 +10,7 @@ from core.perfil.indicadores import (
     EmissaoIndicador,
     calcular_indicador_aprovacao,
 )
-from core.perfil.painel import classificar, resumir
+from core.perfil.painel import classificar, resolver_situacao_oculta, resumir
 from contratos.models import PerfilContrato
 from documentos.models import Analise, Documento, Emissao
 from importacoes.models import ImportacaoID, ImportacaoSituacao, ItemPrevisto
@@ -24,6 +24,8 @@ class PainelIndisponivel(ValueError):
 class DocumentoPainel:
     documento: Documento
     situacao: str | None
+    situacao_vigente: str | None
+    situacoes_mais_recentes: tuple[str | None, ...]
 
 
 def carregar_painel(contrato, por=None, filtros=None):
@@ -56,10 +58,19 @@ def carregar_painel(contrato, por=None, filtros=None):
     previstos = {}
     for item in itens:
         previstos.setdefault(item.documento_id, item.documento)
-    todos_documentos = [
-        DocumentoPainel(documento, _situacao_atual(documento))
-        for documento in previstos.values()
-    ]
+    todos_documentos = []
+    for documento in previstos.values():
+        situacao_vigente = _situacao_atual(documento)
+        historico = _historico_situacoes(documento)
+        grupo_atual = classificar(perfil, situacao_vigente)
+        situacao_painel = (
+            resolver_situacao_oculta(perfil, historico)
+            if grupo_atual.oculto_no_painel
+            else situacao_vigente
+        )
+        todos_documentos.append(
+            DocumentoPainel(documento, situacao_painel, situacao_vigente, historico)
+        )
 
     filtros_disponiveis = _filtros_disponiveis(perfil.codigo.campos, todos_documentos)
     filtros_selecionados = _normalizar_filtros(filtros, filtros_disponiveis)
@@ -73,7 +84,9 @@ def carregar_painel(contrato, por=None, filtros=None):
     ]
 
     grupos_fora_painel = {
-        grupo.id: grupo for grupo in perfil.painel.grupos if not grupo.conta_no_avanco
+        grupo.id: grupo
+        for grupo in perfil.painel.grupos
+        if not grupo.conta_no_avanco and not grupo.oculto_no_painel
     }
     contagens_fora_painel = {identificador: 0 for identificador in grupos_fora_painel}
     documentos_em_conta = []
@@ -110,17 +123,22 @@ def carregar_painel(contrato, por=None, filtros=None):
     for indicador in perfil.painel.indicadores:
         documentos_indicador = [
             DocumentoIndicador(
-                grupo_id=classificar(perfil, item.situacao).id,
-                situacao=item.situacao,
+                grupo_id=classificar(perfil, item.situacao_vigente).id,
+                situacao=item.situacao_vigente,
                 emissoes=tuple(
                     EmissaoIndicador(
                         fase=emissao.fase,
                         revisao=emissao.revisao,
                         situacao=_situacao_emissao(emissao),
+                        versao=emissao.versao,
+                        situacoes_mais_recentes=tuple(
+                            analise.situacao for analise in emissao.analises.all()
+                        ),
                     )
                     for emissao in item.documento.emissoes.all()
                 ),
                 recorte=_valor_caixa(item.documento, caixa_selecionada) or "(sem informação)",
+                situacoes_mais_recentes=item.situacoes_mais_recentes,
             )
             for item in documentos_filtrados
         ]
@@ -294,6 +312,19 @@ def _situacao_atual(documento):
         return None
     analise_mais_recente = next(iter(emissao_mais_recente.analises.all()), None)
     return analise_mais_recente.situacao if analise_mais_recente else ""
+
+
+def _historico_situacoes(documento):
+    emissoes = sorted(
+        documento.emissoes.all(),
+        key=lambda emissao: (emissao.data_emissao, emissao.pk),
+        reverse=True,
+    )
+    return tuple(
+        analise.situacao
+        for emissao in emissoes
+        for analise in emissao.analises.all()
+    )
 
 
 def _situacao_emissao(emissao):

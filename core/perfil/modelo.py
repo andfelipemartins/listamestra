@@ -85,6 +85,7 @@ class Grupo:
     estados: tuple[str, ...] = ()
     sem_emissao: bool = False
     conta_no_avanco: bool = True
+    oculto_no_painel: bool = False
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "estados", tuple(str(estado) for estado in self.estados))
@@ -213,10 +214,13 @@ def _painel_de_dict(dados: Any) -> PainelPerfil:
         )
         sem_emissao = item.get("sem_emissao", False)
         conta_no_avanco = item.get("conta_no_avanco", True)
+        oculto_no_painel = item.get("oculto_no_painel", False)
         if not isinstance(sem_emissao, bool):
             raise ErroPerfil(f"'sem_emissao' do grupo '{identificador}' precisa ser booleano.")
         if not isinstance(conta_no_avanco, bool):
             raise ErroPerfil(f"'conta_no_avanco' do grupo '{identificador}' precisa ser booleano.")
+        if not isinstance(oculto_no_painel, bool):
+            raise ErroPerfil(f"'oculto_no_painel' do grupo '{identificador}' precisa ser booleano.")
 
         for estado in estados_grupo:
             chave_estado = _normalizar_situacao(estado)
@@ -235,6 +239,7 @@ def _painel_de_dict(dados: Any) -> PainelPerfil:
                 estados=estados_grupo,
                 sem_emissao=sem_emissao,
                 conta_no_avanco=conta_no_avanco,
+                oculto_no_painel=oculto_no_painel,
             )
         )
 
@@ -337,7 +342,10 @@ def _indicadores_de_dict(dados: Any) -> tuple[IndicadorAprovacao, ...]:
         indicadores.append(
             IndicadorAprovacao(
                 id=identificador,
-                rotulo=_texto_obrigatorio(item.get("rotulo"), f"rótulo do indicador '{identificador}'"),
+                rotulo=_texto_obrigatorio(
+                    item.get("rotulo", f"Aprovados até a Revisão {limite}"),
+                    f"rótulo do indicador '{identificador}'",
+                ),
                 limite_revisoes=limite,
                 meta_percentual=float(meta),
                 rotulo_meta=_texto_obrigatorio(

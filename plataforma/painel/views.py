@@ -111,7 +111,7 @@ def _contexto_painel(contrato, por, filtros=None, *, usuario=None):
             "percentual": round(100 * resumo.contagens.get(grupo.id, 0) / total, 1) if total else 0,
         }
         for grupo in dados["perfil"].painel.grupos
-        if grupo.conta_no_avanco
+        if grupo.conta_no_avanco and not grupo.oculto_no_painel
     ]
     chart_groups = [
         grupo
@@ -127,6 +127,7 @@ def _contexto_painel(contrato, por, filtros=None, *, usuario=None):
                 estados=grupo.estados,
                 sem_emissao=grupo.sem_emissao,
                 conta_no_avanco=grupo.conta_no_avanco,
+                oculto_no_painel=grupo.oculto_no_painel,
             )
     dados["grupo_cards"] = grupo_cards
     dados["percentual_avanco"] = resumo.percentual_avanco

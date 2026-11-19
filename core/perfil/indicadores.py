@@ -8,7 +8,7 @@ from typing import Iterable
 
 from .ciclo import _normalizar_situacao
 from .modelo import IndicadorAprovacao, PerfilContrato
-from .painel import classificar
+from .painel import classificar, resolver_situacao_oculta
 from .series import criar_serie
 
 
@@ -17,6 +17,11 @@ class EmissaoIndicador:
     fase: str
     revisao: str
     situacao: str | None
+    versao: int | str | None = None
+    situacoes_mais_recentes: tuple[str | None, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "situacoes_mais_recentes", tuple(self.situacoes_mais_recentes))
 
 
 @dataclass(frozen=True)
@@ -25,9 +30,11 @@ class DocumentoIndicador:
     situacao: str | None
     emissoes: tuple[EmissaoIndicador, ...]
     recorte: str = ""
+    situacoes_mais_recentes: tuple[str | None, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "emissoes", tuple(self.emissoes))
+        object.__setattr__(self, "situacoes_mais_recentes", tuple(self.situacoes_mais_recentes))
 
 
 @dataclass(frozen=True)
@@ -67,6 +74,14 @@ def calcular_indicador_aprovacao(
         grupo_id = documento.grupo_id.casefold()
         grupo = grupos.get(grupo_id)
         grupo_atual = classificar(perfil, documento.situacao) if documento.situacao else None
+        if grupo_atual and grupo_atual.oculto_no_painel:
+            situacao_efetiva = resolver_situacao_oculta(
+                perfil,
+                documento.situacoes_mais_recentes or (documento.situacao,),
+            )
+            grupo_atual = classificar(perfil, situacao_efetiva)
+            grupo_id = grupo_atual.id.casefold()
+            grupo = grupos.get(grupo_id)
         grupo_sem_emissao = bool(grupo and grupo.sem_emissao) or bool(
             grupo_atual and grupo_atual.sem_emissao
         )
@@ -117,7 +132,7 @@ def _contar_primeiro_ciclo(
         return 0, False
     serie = criar_serie(configuracao.nome, inicio=configuracao.inicio)
     ids_avanco = {identificador.casefold() for identificador in perfil.painel.avanco}
-    revisoes = 0
+    emissoes_preliminares = 0
     aprovado = False
     for emissao in emissoes:
         eh_preliminar_numerica = (
@@ -125,11 +140,19 @@ def _contar_primeiro_ciclo(
             and serie.valida(str(emissao.revisao))
         )
         if eh_preliminar_numerica:
-            revisoes += 1
-        if classificar(perfil, emissao.situacao).id.casefold() in ids_avanco:
+            emissoes_preliminares += 1
+        situacao = emissao.situacao
+        grupo = classificar(perfil, situacao) if situacao else None
+        if grupo and grupo.oculto_no_painel:
+            situacao = resolver_situacao_oculta(
+                perfil,
+                emissao.situacoes_mais_recentes or (emissao.situacao,),
+            )
+            grupo = classificar(perfil, situacao)
+        if grupo and grupo.id.casefold() in ids_avanco:
             aprovado = True
             break
-    return revisoes, aprovado
+    return max(emissoes_preliminares - 1, 0), aprovado
 
 
 def _eh_cancelado(grupo, grupo_atual) -> bool:

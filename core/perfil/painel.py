@@ -50,17 +50,36 @@ def classificar(perfil: PerfilContrato, situacao_vigente: str | None) -> Grupo:
     return _GRUPO_NAO_MAPEADO
 
 
+def resolver_situacao_oculta(
+    perfil: PerfilContrato, situacoes_mais_recentes_primeiro: Iterable[str | None]
+) -> str:
+    """Escolhe o último estado visível anterior a um grupo oculto, ou a situação inicial."""
+    for situacao in situacoes_mais_recentes_primeiro:
+        if situacao is None:
+            continue
+        grupo = classificar(perfil, situacao)
+        if not grupo.oculto_no_painel and grupo.id.casefold() != _GRUPO_IGNORADO.id:
+            return situacao
+    return perfil.analise.inicial
+
+
 def resumir(
     perfil: PerfilContrato, situacoes: Iterable[str | None]
 ) -> ResumoPainel:
     """Conta situações e calcula o avanço sobre o escopo elegível do painel."""
-    contagens = {grupo.id: 0 for grupo in perfil.painel.grupos}
+    grupos_visiveis = tuple(
+        grupo for grupo in perfil.painel.grupos if not grupo.oculto_no_painel
+    )
+    contagens = {grupo.id: 0 for grupo in grupos_visiveis}
     contagens[_GRUPO_NAO_MAPEADO.id] = 0
     estados_sem_mapeamento: dict[str, tuple[str, int]] = {}
     total = 0
 
     for situacao in situacoes:
         grupo = classificar(perfil, situacao)
+        if grupo.oculto_no_painel:
+            situacao = resolver_situacao_oculta(perfil, (situacao,))
+            grupo = classificar(perfil, situacao)
         if grupo.id == _GRUPO_IGNORADO.id:
             continue
         total += 1
@@ -74,11 +93,11 @@ def resumir(
                 1 if anterior is None else anterior[1] + 1,
             )
 
-    grupos = (*perfil.painel.grupos, _GRUPO_NAO_MAPEADO)
+    grupos = (*grupos_visiveis, _GRUPO_NAO_MAPEADO)
     ids_avanco = {identificador.casefold() for identificador in perfil.painel.avanco}
     ids_nao_contam = {
         grupo.id.casefold()
-        for grupo in perfil.painel.grupos
+        for grupo in grupos_visiveis
         if not grupo.conta_no_avanco
     }
     numerador = sum(

@@ -283,7 +283,8 @@ codigo:
     - sep: "-"
     - nome: sequencial
       rotulo: sequencial
-      padrao_regex: "\\d{4}"
+      # MAN-10-201 rev. 04, item 5.2.6: três dígitos até 999; quatro sem zero inicial acima de 999.
+      padrao_regex: "(?:\\d{3}|[1-9]\\d{3})"
   segmentos_identidade: [tipo, linha, trecho, subtrecho, unidade, etapa, classe, sequencial]
   revisao_no_codigo: false
 emissao:
@@ -321,11 +322,11 @@ painel:
       rotulo: INCONSISTENTE
       cor: "#7857a5"
       estados: ["Inconsistente", "Não Conforme"]
-    # D-036: erro de mecânica do PW, distinto da inconsistência de projeto.
+    # D-041: erro de mecânica do PW, distinto de INCONSISTENTE (D-036), oculto para a chefia.
     - id: erro
       rotulo: ERRO
       cor: "#dc2626"
-      # D-036: conta no total, mas não entra em painel.avanco.
+      oculto_no_painel: true
       estados: ["Em Desenvolvimento", "Erro de Assinatura"]
     - id: cancelado
       rotulo: CANCELADO
@@ -335,12 +336,11 @@ painel:
   ignorar: ["Revisão Superada"]
   avanco: [aprovado]
   indicadores:
-    # D-039: estes valores esperam as respostas às perguntas T1–T4 do dono.
+    # D-043/D-044: revisões contam emissões do primeiro ciclo; empacados não entram e a linha se chama Meta.
     - tipo: aprovacao_em_ate_n_revisoes
       id: aprovacao_ate_3_revisoes
-      rotulo: Aprovados em até 3 revisões
       limite_revisoes: 3
       meta_percentual: 80
       rotulo_meta: Meta
-      contar_estourados_sem_aprovacao: true
+      contar_estourados_sem_aprovacao: false
       ciclos: primeira_aprovacao

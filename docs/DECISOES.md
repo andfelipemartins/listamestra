@@ -546,3 +546,83 @@ Aprovado, Não Conforme, Inconsistente, Erro de Assinatura, Cancelado, Revisão 
 - Consequência: o grupo ERRO (D-036) sai do painel da chefia e vai para a tela de ação. A Central
   de Pendências / tela inicial do usuário é onde se ignora, corrige ou pede a correção.
   O recorte exato (o que some do painel, o que conta no total) segue nas perguntas abertas.
+
+## D-041 · Erro fora do painel da chefia; INCONSISTENTE fica
+
+*Origem: S1, S2 · 2026-11-19 · detalha a D-040*
+
+- **Correção do Claude:** a pergunta S1 falava em "cerca de 230 documentos em erro". O número estava
+  errado: foi contado no histórico de análises, não na situação atual. O dono conferiu no ID do PW
+  (`entrada/data.xlsx`): são **4 em Erro de Assinatura** (classes G6 e J2) e **3 em Em
+  Desenvolvimento** (PEs, documentos de qualidade). O painel mostra 4 em ERRO.
+- Os erros são poucos e devem ser resolvidos rápido: a pessoa chega de manhã, vê e resolve. Se houver
+  reunião antes disso, quem cuida avisa. Muitas vezes o erro nem é nosso (erro de assinatura do Metrô
+  num documento que vinha andando normalmente).
+- **Decisão:** o painel da chefia não tem cartão ERRO. Um documento em erro aparece pela **última
+  situação válida antes do erro** (o documento "vinha sendo compatibilizado normalmente" até ali).
+  Sem situação anterior, conta como a situação inicial de análise do perfil. O erro aparece na tela de
+  ação. Regra genérica do perfil (grupo marcado como oculto no painel), sem nada fixo.
+- **S2:** INCONSISTENTE continua no painel da chefia, com cartão, fatia e barra. É erro crítico de
+  projeto (o projetista não seguiu o manual) e é informação útil na reunião.
+
+## D-042 · Próximo Marco: tela de ação e pendências
+
+*Origem: U1, S3, S4 · 2026-11-19*
+
+- **U1:** depois do Marco "Dados reais + painel", vem a **tela de ação e pendências**.
+- **S3:** é um dashboard de controle do contrato em que o usuário participa (com mais de um contrato,
+  ele troca de contrato e a tela acompanha). Visão do dono, em "janelas":
+  - **erros** a corrigir;
+  - **tempo de análise:** o contrato entre a Alya e o Metrô dá X dias para o cliente analisar,
+    contados a partir da emissão identificada;
+  - **tempo de devolução:** nós também temos um prazo para devolver o documento revisado;
+  - **cronograma:** previsão de emissão de documentos (o que está para sair nesta semana);
+  - **revisão:** documentos que precisam ser revisados ou estão em revisão e não foram entregues.
+  - Futuro: os subcontratados. Primeiro só nós controlamos (one-sided).
+- **S4:** por enquanto **todos veem tudo**. Todo mundo precisa saber dos erros e problemas do
+  contrato. Mas precisa haver **registro (log) de quem fez cada coisa**: na lista de documentos com
+  erro, uma coluna mostra quem lançou a informação no sistema. Não é para acusar; é controle, para
+  saber a quem perguntar.
+
+## D-043 · Regra de ouro da revisão no Metrô e o documento como pasta
+
+*Origem: T1, T3 · 2026-11-19 · o dono pediu para gravar isto como regra fixa do perfil Metrô*
+
+- **Série da revisão (Metrô):** cópias em análise com revisão 1, 2, 3, 4… sem fim. Aprovado → **0**.
+  Mexer no aprovado → **A1, A2, A3…**; aprovado → **A**. De novo → **B1, B2…** → **B**; depois
+  **C1…** → **C**, e assim por diante. (O perfil Metrô já tem isso: `preliminar` numérica,
+  `original` zero depois letras, `reabertura` letra + número.)
+- **Rótulo cronológico:** cada nova emissão, seja nova revisão ou nova versão, é uma revisão a mais.
+  Exemplos do dono:
+  - Rev 1 Ver 1 = Emissão Inicial; Rev 1 Ver 2 = Revisão 1; Rev 2 Ver 1 = Revisão 2.
+  - Rev 1 Ver 1 = Emissão Inicial; Rev 2 Ver 1 = Revisão 1; Rev 3 Ver 1 = Revisão 2.
+  - Rev 1 Ver 1 = Emissão Inicial; Rev 2 Ver 1 = Revisão 1; Rev 2 Ver 2 = Revisão 2.
+- **"Aprovado em até 3 revisões"** se lê nesse vocabulário: aprovado até a **Revisão 3**, isto é, até
+  a 4ª emissão do ciclo (Emissão Inicial + 3 revisões).
+- **Documento como pasta (T3):** cada linha do ID gera uma "pasta"; as emissões e análises são as
+  "subpastas". A situação do documento é a da **última atualização** dentro da pasta. Revisão 0 =
+  aprovado. Se precisou revisar o 0 (A1), é como se reiniciasse: o documento volta a estar em análise
+  ou revisão. Isso precisa estar bem definido porque alimenta todos os painéis.
+- O dono reclamou de ter de explicar de novo: esta regra é matriz. Para outro contrato, quem
+  configura precisa conseguir descrever a sua própria regra no perfil com essa mesma clareza.
+
+## D-044 · Indicador do procedimento: leitura simples, linha "Meta"
+
+*Origem: T2, T4 · 2026-11-19 · ajusta a D-039*
+
+- **T2:** não criar classificação à parte para documento empacado sem aprovação. A leitura do gráfico
+  (quais barras ficam abaixo da linha) já mostra o problema de uma disciplina, de um projetista ou da
+  análise. No perfil Metrô, `contar_estourados_sem_aprovacao: false`.
+- **T4:** a linha se chama **Meta**.
+
+## D-045 · Sequencial do Metrô com 3 ou 4 dígitos
+
+*Origem: V1 · 2026-11-19 · corrige uma afirmação errada do Claude*
+
+- A pergunta V1 dizia que o Metrô exige 4 dígitos. **Errado.** O MAN-10-201 rev. 04, item 5.2.6, diz
+  que o sequencial tem três ou quatro dígitos: três até 999, quatro só acima de 999. Então
+  `RT-15.25.00.00-6A9-701` é válido.
+- O dono lembrou que os projetos básicos do Metrô usam muito 001, 002, e que as faixas 1000, 1500,
+  1700 e 2000 foram indicação do cliente.
+- **Regra para o Claude:** antes de afirmar uma regra do cliente numa pergunta, rechecar o MAN e os
+  dados reais.

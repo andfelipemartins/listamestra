@@ -79,7 +79,7 @@ h1 { margin: 9px 0 8px; font-size: clamp(25px, 3vw, 32px); font-weight: 650; let
 .table-wrap { width: 100%; overflow-x: auto; margin: 12px 0 18px; }
 .table-wrap table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .table-wrap th, .table-wrap td { padding: 10px 11px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
-.table-wrap th { color: #607286; background: #f8fafc; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.table-wrap th { color: var(--muted); background: var(--canvas); font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .table-wrap td { max-width: 420px; overflow-wrap: anywhere; }
 .notice { padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; font-size: 12px; line-height: 1.5; }
 .notice-error, .notice-errorlist { border-color: #f0c8c5; background: #fff5f4; color: #9b3e37; }

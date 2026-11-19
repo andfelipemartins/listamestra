@@ -21,6 +21,7 @@ from .indicadores import (
     ResultadoIndicadorAprovacao,
     calcular_indicador_aprovacao,
 )
+from .painel import resolver_situacao_oculta
 
 __all__ = [
     "ErroPerfil",
@@ -39,5 +40,6 @@ __all__ = [
     "carregar_perfil",
     "carregar_yaml",
     "calcular_indicador_aprovacao",
+    "resolver_situacao_oculta",
     "perfil_de_dict",
 ]

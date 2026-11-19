@@ -82,11 +82,34 @@ def test_metro_interpreta_classe_e_subclasse_com_rotulo(metro):
 
 
 def test_metro_aceita_classe_a7_provisoria(metro):
-    resultado = interpretar(metro, "RT-15.00.00.00-6A7-0001")
+    resultado = interpretar(metro, "RT-15.00.00.00-6A7-001")
 
     assert isinstance(resultado, CodigoInterpretado)
     assert resultado.segmentos["classe"] == "A7"
     assert resultado.significados["classe"] == "Qualidade (a confirmar)"
+
+
+@pytest.mark.parametrize(
+    "codigo",
+    [
+        "RT-15.25.00.00-6A9-701",
+        "RT-15.25.00.00-6A9-1001",
+    ],
+)
+def test_metro_aceita_sequencial_de_tres_digitos_ou_quatro_sem_zero_inicial(metro, codigo):
+    assert isinstance(interpretar(metro, codigo), CodigoInterpretado)
+
+
+@pytest.mark.parametrize(
+    "codigo",
+    [
+        "RT-15.25.00.00-6A9-0701",
+        "RT-15.25.00.00-6A9-12345",
+        "RT-15.25.00.00-6A9-70",
+    ],
+)
+def test_metro_rejeita_sequencial_fora_das_regras_do_manual(metro, codigo):
+    assert isinstance(interpretar(metro, codigo), ErroCodigo)
 
 
 def test_metro_rejeita_classe_que_nao_consta_nas_tabelas(metro):

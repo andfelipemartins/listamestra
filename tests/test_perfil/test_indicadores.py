@@ -2,6 +2,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+import yaml
 
 from core.perfil import (
     DocumentoIndicador,
@@ -44,7 +45,7 @@ def test_aprovacao_na_copia_3_fica_dentro_do_limite(metro):
     assert resultado.geral.percentual == 100
 
 
-def test_aprovacao_na_copia_4_fica_fora_do_limite(metro):
+def test_aprovacao_na_quarta_emissao_fica_dentro_do_limite(metro):
     documento = _documento(
         "aprovado",
         [
@@ -58,8 +59,71 @@ def test_aprovacao_na_copia_4_fica_fora_do_limite(metro):
         metro, metro.painel.indicadores[0], [documento]
     )
 
+    assert (resultado.geral.dentro_limite, resultado.geral.fora_limite) == (1, 0)
+    assert resultado.geral.percentual == 100
+
+
+def test_emissoes_com_mesma_revisao_e_versoes_diferentes_contam_como_revisoes(metro):
+    documento = _documento(
+        "aprovado",
+        [
+            EmissaoIndicador("preliminar", "1", "Não Aprovado", versao=1),
+            EmissaoIndicador("preliminar", "1", "Não Aprovado", versao=2),
+            EmissaoIndicador("preliminar", "2", "Não Aprovado", versao=1),
+            EmissaoIndicador("preliminar", "2", "Aprovado", versao=2),
+        ],
+        "Aprovado",
+    )
+
+    resultado = calcular_indicador_aprovacao(
+        metro, metro.painel.indicadores[0], [documento]
+    )
+
+    assert (resultado.geral.dentro_limite, resultado.geral.fora_limite) == (1, 0)
+
+
+def test_quinta_emissao_aprovada_excede_limite_de_tres_revisoes(metro):
+    documento = _documento(
+        "aprovado",
+        [
+            EmissaoIndicador("preliminar", "1", "Não Aprovado", versao=1),
+            EmissaoIndicador("preliminar", "1", "Não Aprovado", versao=2),
+            EmissaoIndicador("preliminar", "2", "Não Aprovado", versao=1),
+            EmissaoIndicador("preliminar", "2", "Não Aprovado", versao=2),
+            EmissaoIndicador("preliminar", "3", "Aprovado", versao=1),
+        ],
+        "Aprovado",
+    )
+
+    resultado = calcular_indicador_aprovacao(
+        metro, metro.painel.indicadores[0], [documento]
+    )
+
     assert (resultado.geral.dentro_limite, resultado.geral.fora_limite) == (0, 1)
-    assert resultado.geral.percentual == 0
+
+
+def test_indicador_resolve_situacao_oculta_pela_historica_valida(metro):
+    documento = DocumentoIndicador(
+        "erro",
+        "Erro de Assinatura",
+        (
+            EmissaoIndicador(
+                "preliminar",
+                "1",
+                "Erro de Assinatura",
+                situacoes_mais_recentes=("Erro de Assinatura", "Aprovado"),
+            ),
+        ),
+        "25",
+        situacoes_mais_recentes=("Erro de Assinatura", "Aprovado"),
+    )
+
+    resultado = calcular_indicador_aprovacao(
+        metro, metro.painel.indicadores[0], [documento]
+    )
+
+    assert resultado.geral.dentro_limite == 1
+    assert resultado.geral.fora_limite == 0
 
 
 def test_nao_aprovado_na_copia_5_so_entra_com_opcao_ligada(metro):
@@ -70,7 +134,11 @@ def test_nao_aprovado_na_copia_5_so_entra_com_opcao_ligada(metro):
     )
     indicador = metro.painel.indicadores[0]
 
-    ligado = calcular_indicador_aprovacao(metro, indicador, [documento])
+    ligado = calcular_indicador_aprovacao(
+        metro,
+        replace(indicador, contar_estourados_sem_aprovacao=True),
+        [documento],
+    )
     desligado = calcular_indicador_aprovacao(
         metro, replace(indicador, contar_estourados_sem_aprovacao=False), [documento]
     )
@@ -206,3 +274,21 @@ def test_perfil_sem_indicadores_continua_valido():
     spobras = carregar_yaml(ROOT / "core" / "perfil" / "exemplos" / "spobras.yaml")
 
     assert spobras.painel.indicadores == ()
+
+
+def test_rotulo_padrao_do_indicador_usa_o_limite_do_perfil():
+    perfil = carregar_yaml(ROOT / "core" / "perfil" / "exemplos" / "metro.yaml")
+
+    assert perfil.painel.indicadores[0].rotulo == "Aprovados até a Revisão 3"
+    assert perfil.painel.indicadores[0].contar_estourados_sem_aprovacao is False
+
+
+def test_rotulo_declarado_no_perfil_prevalece_sobre_o_rotulo_gerado():
+    caminho = ROOT / "core" / "perfil" / "exemplos" / "metro.yaml"
+    with caminho.open(encoding="utf-8") as arquivo:
+        dados = yaml.safe_load(arquivo)
+    dados["painel"]["indicadores"][0]["rotulo"] = "Qualidade da primeira aprovação"
+
+    perfil = perfil_de_dict(dados)
+
+    assert perfil.painel.indicadores[0].rotulo == "Qualidade da primeira aprovação"

@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from core.perfil.modelo import ErroPerfil, carregar_yaml, perfil_de_dict
-from core.perfil.painel import classificar, resumir
+from core.perfil.painel import classificar, resolver_situacao_oculta, resumir
 
 
 ROOT = Path(__file__).parents[2]
@@ -55,6 +55,30 @@ def test_classificacao_ignora_maiusculas_acentos_e_espacos_extras(metro):
     assert classificar(metro, "  nao   aprovado  ").id == "nao_aprovado"
 
 
+def test_situacao_oculta_usa_ultima_situacao_anterior_valida(metro):
+    situacao = resolver_situacao_oculta(
+        metro, ["Erro de Assinatura", "Não Aprovado", "Em Análise"]
+    )
+
+    assert situacao == "Não Aprovado"
+    assert classificar(metro, situacao).id == "nao_aprovado"
+
+
+def test_situacao_oculta_sem_anterior_volta_ao_estado_inicial(metro):
+    situacao = resolver_situacao_oculta(metro, ["Em Desenvolvimento"])
+
+    assert situacao == metro.analise.inicial
+    assert classificar(metro, situacao).id == "em_analise"
+
+
+def test_situacao_oculta_pula_estados_ignorados(metro):
+    situacao = resolver_situacao_oculta(
+        metro, ["Em Desenvolvimento", "Revisão Superada", "Aprovado"]
+    )
+
+    assert situacao == "Aprovado"
+
+
 def test_estado_desconhecido_vai_para_grupo_nao_mapeado(metro):
     grupo = classificar(metro, "Aguardando validação local")
 
@@ -81,17 +105,15 @@ def test_resumo_conta_grupos_e_calcula_avanco_excluindo_cancelados_e_ignorados(m
         "aprovado",
         "nao_aprovado",
         "inconsistente",
-        "erro",
         "cancelado",
         "nao_mapeado",
     ]
     assert resumo.contagens == {
         "a_emitir": 1,
-        "em_analise": 1,
+        "em_analise": 2,
         "aprovado": 1,
         "nao_aprovado": 1,
         "inconsistente": 0,
-        "erro": 1,
         "cancelado": 1,
         "nao_mapeado": 0,
     }
@@ -129,6 +151,10 @@ def test_resumo_lista_situacoes_nao_mapeadas_com_contagem_normalizada(metro):
         (
             lambda p: p["grupos"].append({"id": "a_emitir", "rotulo": "Duplicado"}),
             "Id de grupo repetido",
+        ),
+        (
+            lambda p: p["grupos"][0].update(oculto_no_painel="sim"),
+            "oculto_no_painel.*booleano",
         ),
         (
             lambda p: p.update(avanco=["fantasma"]),
@@ -170,3 +196,4 @@ def test_painel_spobras_usa_situacoes_do_manual():
     assert classificar(spobras, "APROVADO COM RESSALVAS").id == "aprovado"
     assert classificar(spobras, "A REVISAR").id == "nao_aprovado"
     assert classificar(spobras, "CANCELADO").id == "cancelado"
+    assert all(not grupo.oculto_no_painel for grupo in spobras.painel.grupos)
