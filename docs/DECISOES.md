@@ -626,3 +626,133 @@ Aprovado, Não Conforme, Inconsistente, Erro de Assinatura, Cancelado, Revisão 
   1700 e 2000 foram indicação do cliente.
 - **Regra para o Claude:** antes de afirmar uma regra do cliente numa pergunta, rechecar o MAN e os
   dados reais.
+
+## D-046 · Linhas defeituosas da extração do PW: avisar e reextrair, não descartar
+
+*Origem: V2 · 2026-11-19*
+
+- As 8 linhas que sobraram (4 com data no lugar do título e 4 desenhos do 23.17.84 com colunas
+  deslocadas) são **bug da exportação do PW** ("Export Table Data"), não documentos a descartar.
+- O dono contornou filtrando no PW só as disciplinas com erro e exportando de novo; o resultado saiu
+  certo e está em `entrada/Correção de bug Extração ID PW.xlsx` (ver pergunta Z1).
+- **Decisão:** o sistema deve **indicar que a planilha veio defeituosa** para a pessoa reextrair e
+  corrigir. Não precisa de botão "descartar" ou "ignorar" para esse caso. A planilha de correção é
+  mesclada às informações já importadas.
+
+## D-047 · Ciclo do documento é um só, linear; a aprovação conta uma vez
+
+*Origem: W1 · 2026-11-19 · complementa a D-043*
+
+- Para o dono, o ciclo é um só: se depois do 0 veio A1, o ciclo que parecia fechado reabriu. A
+  "pasta" do documento ganha novas subpastas até aprovar de novo; vale a situação da mais recente.
+- **Medição:** no contrato, o DE é medido 40% na emissão e 60% na aprovação. A reabertura **não é
+  cobrada de novo** do Metrô. Logo, aprovação é uma só por documento.
+- **Leitura do Claude (o dono pediu opinião):** isso é compatível com o indicador atual. O indicador
+  "aprovado em até N revisões" mede até a primeira aprovação (a única que conta), e a reabertura muda
+  a situação do documento (volta a "em revisão/análise") sem gerar uma segunda aprovação na conta.
+  Não há ciclos separados.
+
+## D-048 · Prazos do Metrô: 15 dias úteis a partir da emissão no PW
+
+*Origem: X1, X2, X3 · 2026-11-19 · fonte: PE-ENG-001 (70.579), anexado pelo dono na X1*
+
+- **Prazo do cliente (X1):** PE-ENG-001 item 5.3.2 (p. 9): o Metrô tem **no máximo 15 dias úteis**,
+  conforme o contrato, para comunicar o resultado da análise via PW.
+- **Início da contagem (X3):** a **data de emissão no PW**.
+- **Nosso prazo de devolução (X2):** o dono disse que está na mesma cláusula. O texto do PE só remete
+  ao **Anexo 1** (item 5.6, p. 11), que é imagem e não foi lido automaticamente. Pendente (pergunta
+  X7).
+- **Indicador de prazo (PE item 5.6):** satisfatório quando, em média, **80% ou mais** dos prazos são
+  cumpridos. O PE item 5.5 confirma a meta de qualidade: aprovação em até 3 revisões.
+- Os prazos vêm do procedimento específico de cada empreendimento: entram no **perfil do contrato**,
+  nada fixo.
+
+## D-049 · Cronograma por planilha simples
+
+*Origem: X4 · 2026-11-19*
+
+- A previsão de emissão entra por **planilha**: código do documento, revisão e versão iniciais (só
+  para referência; a primeira emissão é sempre Rev 1 / Ver 1) e a **data de emissão** (prevista ou
+  real). Copiar e colar no Excel e importar.
+- Futuro: importar exportação do MS Project.
+
+## D-050 · Registro (log) de tudo, auditável
+
+*Origem: X5 · 2026-11-19 · amplia a S4/D-042*
+
+- Para ser uma ferramenta séria, **toda alteração é registrada**: importações e reprocessamentos,
+  tratamento de erro, mudança no perfil, edição de documento (inclusive do ID, que é documentação
+  fixa: título, classe…), emissões, análises e mudanças de situação, atualização do ID e da extração
+  do PW.
+- Modelo: o histórico do SharePoint ("fulano excluiu tal coisa"). Um resumo na lista e mais detalhes
+  ao clicar no item.
+
+## D-051 · "Pedir correção ao cliente": registra e gera texto de e-mail
+
+*Origem: X6 · 2026-11-19*
+
+- O botão registra o pedido e oferece um **texto de e-mail** para copiar (padrão). É opcional: o dono
+  muitas vezes nem escreve, porque o projeto está aprovado e a obra segue, mas outros empreendimentos
+  podem precisar.
+- Futuro: com a IA integrada (D-035), o texto pode ser redigido por ela.
+
+## D-052 · Retorno do painel (Y1): Marco "Dados reais + painel" não aprovado, vira ajustes
+
+*Origem: Y1 · 2026-11-19 · conferido pelo Claude no PE-ENG-001 e no `plataforma/dev.sqlite3`*
+
+- **Meta errada no indicador das revisões:** o PE-ENG-001 item 5.5 só diz que é satisfatória a
+  aprovação **em até 3 revisões**, sem percentual. O 80% é do item 5.6 (**prazos**). O erro foi do
+  Claude. O gráfico das revisões passa a mostrar quantos documentos aprovaram em 1, 2, 3, 4, 5+
+  revisões, com a linha tracejada "Meta" no limite de 3. O 80% vai para o indicador de prazo (D-055).
+- **Total 1106 × 827 (diagnóstico):** o previsto é a união dos IDs vigentes (D-031/D-032). Dos 1110
+  documentos, 817 vêm da extração do PW; **281 vêm só do ID-15.25.00.00-6A9-1501** (faixa 2000,
+  nenhum no PW; só 4 dos 293 "só nos IDs formais" têm emissão) e 12 dos IDs 1001/1002. Esse é o
+  excesso. Decisão do 100% em aberto (pergunta AA1).
+- **Avanço de 23,5% = aprovados / total.** O escritório mede mais alto. Fórmula em aberto (AA2).
+- **Layout:** o topo (nome, sair) e o menu da esquerda ficam **sempre visíveis** ao rolar. As cores
+  atuais têm contraste ruim (filtro com letra azul em fundo branco, importações, caixas de formulário
+  do importar ID). Refazer o esquema de cores com contraste legível em toda a plataforma.
+- **Filtros:** hoje o filtro aplica antes do botão "Aplicar". Decisão do Claude, para confirmar
+  (AA3): aplicar na hora, como a tabela dinâmica do Excel, sem botão "Aplicar"; clicar de novo
+  desmarca; "Limpar" continua.
+- **Cartões por categoria:** além do total, mostrar o total separado por categoria (civil, sistemas,
+  arquitetura, qualidade…), como na Lista Mestra (coluna MODALIDADE). A categoria vem do perfil.
+- **Linhas recusadas (W1, W2, F6-1009/1010):** conferido no `ID PW.xlsx`. As linhas 53 e 54 têm
+  Name `…6F6-1009`/`-1010`, mas o atributo Sequencial é 1006/1007; as linhas 137 e 138 têm Name
+  `DE-…6W1-1001`/`DE-…6W2-1002`, mas Sigla RT (os registros corretos `RT-…` estão nas linhas 592 e
+  593). A recusa está certa, mas a mensagem "linha deslocada" está errada: é **atributo do PW que
+  diverge do Name**. A mensagem deve dizer qual campo e os dois valores.
+
+## D-053 · Arquivo de correção é só análise; o sistema avisa e a pessoa reextrai
+
+*Origem: Z1 · 2026-11-19 · complementa a D-046*
+
+- `entrada/Correção de bug Extração ID PW.xlsx` serviu só para confirmar o bug. Não é importado.
+- Na prática: o sistema aponta as linhas defeituosas; a pessoa corrige na planilha (ou pede à IA) e
+  importa de novo pela tela. As linhas recusadas somem quando a nova importação traz a linha certa.
+
+## D-054 · Prazos pelo contrato (cláusula 25.1.2), não pelo PE
+
+*Origem: X7, X10 · 2026-11-19 · texto do contrato colado pelo dono*
+
+- **Cliente:** 25.1.2.1, o Metrô analisa em no máximo **15 dias úteis** (manuais de operação,
+  manutenção, software e treinamento: 30 dias). A contagem começa na data de emissão no PW (X3).
+- **Nós:** 25.1.2.3, devolver o documento revisado em no máximo **15 dias (corridos)** a partir do
+  Relatório de Verificação, ou seja, da data da análise do cliente.
+- O PE parece errado nesse ponto (o dono notou). Os prazos e o tipo de dia (úteis ou corridos) ficam
+  no **perfil do contrato**, com exceções por tipo de documento.
+
+## D-055 · Dias úteis: feriados obrigatórios, sem digitação manual
+
+*Origem: X8 · 2026-11-19*
+
+- Saem da conta sábados, domingos e feriados **obrigatórios**. Os nacionais o sistema calcula sozinho
+  (fixos e móveis); estaduais e municipais entram por planilha simples (data, nome) no perfil. Nada
+  de cadastrar dia a dia no calendário.
+
+## D-056 · Cronograma só com a data prevista; indicador de prazo no painel
+
+*Origem: X9, X10 · 2026-11-19*
+
+- A planilha de cronograma traz o código e a **data prevista**. A real vem da extração do PW.
+- O indicador de prazo (80%, PE 5.6) entra no **painel da chefia**, com linha "Meta" em 80%.
