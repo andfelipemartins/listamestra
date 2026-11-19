@@ -7,10 +7,22 @@ from django.utils import timezone
 
 from core.perfil.feriados import feriados_acervo, feriados_nacionais
 from core.perfil.painel import classificar
-from core.perfil.prazos import avaliar as avaliar_prazo, indicador as resumir_prazos
+from core.perfil.prazos import (
+    avaliar as avaliar_prazo,
+    contar_atrasos_por_faixa,
+    indicador as resumir_prazos,
+)
 from documentos.models import Analise
 from importacoes.cronograma import comparar_previsoes_cronograma
 from importacoes.models import PrevisaoEmissao
+
+
+_CORES_FAIXAS_ATRASO = (
+    "var(--success-border)",
+    "var(--warning-border)",
+    "var(--indicador-alerta)",
+    "var(--danger-border)",
+)
 
 
 @dataclass(frozen=True)
@@ -128,12 +140,17 @@ def calcular_indicadores_prazo(
                 avaliacoes.append(registro_prazo.avaliacao)
                 por_recorte[valor].append(registro_prazo.avaliacao)
 
-        geral = _resumo_prazo(avaliacoes)
+        faixas_atraso = (
+            regra.faixas_atraso
+            if regra.faixas_atraso is not None
+            else prazos.faixas_atraso
+        )
+        geral = _resumo_prazo(avaliacoes, faixas_atraso)
         recortes = []
         for valor, rotulo in sorted(
             recortes_documentos.items(), key=lambda item: item[1].casefold()
         ):
-            resumo = _resumo_prazo(por_recorte[valor])
+            resumo = _resumo_prazo(por_recorte[valor], faixas_atraso)
             recortes.append({"valor": valor, "rotulo": rotulo, **resumo})
         indicadores.append(
             {
@@ -248,8 +265,39 @@ def _analise_no_grupo(perfil, regra, analise):
     return grupo.casefold() in {valor.casefold() for valor in regra.so_quando_grupo}
 
 
-def _resumo_prazo(avaliacoes):
+def _resumo_prazo(avaliacoes, faixas_atraso=None):
+    avaliacoes = list(avaliacoes)
     resumo = resumir_prazos(avaliacoes)
+    contagens_faixas = contar_atrasos_por_faixa(avaliacoes, faixas_atraso or ())
+    base_faixas = sum(contagem.total for contagem in contagens_faixas)
+    faixas_exibicao = []
+    limite_anterior = 0
+    for indice, contagem in enumerate(contagens_faixas):
+        faixa = contagem.faixa
+        if faixa.ate_dias is None:
+            intervalo = (
+                f"Mais de {limite_anterior} dias"
+                if limite_anterior
+                else "Qualquer atraso"
+            )
+        elif limite_anterior:
+            intervalo = f"{limite_anterior + 1} a {faixa.ate_dias} dias"
+        else:
+            intervalo = f"Até {faixa.ate_dias} dias"
+        if faixa.ate_dias is not None:
+            limite_anterior = faixa.ate_dias
+        faixas_exibicao.append(
+            {
+                "rotulo": faixa.rotulo,
+                "ate_dias": faixa.ate_dias,
+                "intervalo": intervalo,
+                "entregues_com_atraso": contagem.entregues_com_atraso,
+                "abertos_vencidos": contagem.abertos_vencidos,
+                "total": contagem.total,
+                "percentual": contagem.total * 100.0 / base_faixas if base_faixas else 0,
+                "cor": _CORES_FAIXAS_ATRASO[min(indice, len(_CORES_FAIXAS_ATRASO) - 1)],
+            }
+        )
     return {
         "percentual": resumo.percentual_cumprido if resumo.base else None,
         "tem_dados": bool(resumo.base),
@@ -260,6 +308,7 @@ def _resumo_prazo(avaliacoes):
             avaliacao is not None and avaliacao.situacao == "aberto_atrasado"
             for avaliacao in avaliacoes
         ),
+        "faixas_atraso": faixas_exibicao,
     }
 
 

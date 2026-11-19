@@ -155,6 +155,12 @@ class ExcecaoPrazo:
 
 
 @dataclass(frozen=True)
+class FaixaAtraso:
+    ate_dias: int | None
+    rotulo: str
+
+
+@dataclass(frozen=True)
 class RegraPrazo:
     id: str
     rotulo: str
@@ -165,10 +171,13 @@ class RegraPrazo:
     excecoes: tuple[ExcecaoPrazo, ...] = ()
     so_quando_grupo: tuple[str, ...] = ()
     meta_percentual: float | None = None
+    faixas_atraso: tuple[FaixaAtraso, ...] | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "excecoes", tuple(self.excecoes))
         object.__setattr__(self, "so_quando_grupo", tuple(self.so_quando_grupo))
+        if self.faixas_atraso is not None:
+            object.__setattr__(self, "faixas_atraso", tuple(self.faixas_atraso))
 
 
 @dataclass(frozen=True)
@@ -193,9 +202,12 @@ class PrazosPerfil:
     meta_percentual: float
     regras: tuple[RegraPrazo, ...]
     meta_cronograma: float | None = None
+    faixas_atraso: tuple[FaixaAtraso, ...] | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "regras", tuple(self.regras))
+        if self.faixas_atraso is not None:
+            object.__setattr__(self, "faixas_atraso", tuple(self.faixas_atraso))
 
 
 def _painel_minimo() -> PainelPerfil:
@@ -566,6 +578,7 @@ def _prazos_de_dict(dados: Any) -> PrazosPerfil | None:
     meta_cronograma = _meta_percentual_prazo(
         dados.get("meta_cronograma", meta), "prazos.meta_cronograma", permite_none=True
     )
+    faixas_atraso = _faixas_atraso_prazo(dados.get("faixas_atraso"), "prazos.faixas_atraso")
 
     regras_dados = dados.get("regras")
     if not isinstance(regras_dados, (list, tuple)):
@@ -581,6 +594,9 @@ def _prazos_de_dict(dados: Any) -> PrazosPerfil | None:
             item.get("meta_percentual", meta),
             f"meta_percentual de '{identificador}'",
             permite_none=True,
+        )
+        faixas_atraso_regra = _faixas_atraso_prazo(
+            item.get("faixas_atraso"), f"faixas_atraso de '{identificador}'"
         )
         chave_id = identificador.casefold()
         if chave_id in ids:
@@ -611,6 +627,7 @@ def _prazos_de_dict(dados: Any) -> PrazosPerfil | None:
                 excecoes=excecoes,
                 so_quando_grupo=grupos,
                 meta_percentual=meta_regra,
+                faixas_atraso=faixas_atraso_regra,
             )
         )
     return PrazosPerfil(
@@ -618,7 +635,43 @@ def _prazos_de_dict(dados: Any) -> PrazosPerfil | None:
         meta,
         tuple(regras),
         meta_cronograma,
+        faixas_atraso,
     )
+
+
+def _faixas_atraso_prazo(dados: Any, campo: str) -> tuple[FaixaAtraso, ...] | None:
+    if dados is None:
+        return None
+    if not isinstance(dados, (list, tuple)):
+        raise ErroPerfil(f"'{campo}' precisa ser uma lista.")
+
+    faixas: list[FaixaAtraso] = []
+    ultimo_limite = 0
+    limite_sem_fim_visto = False
+    for posicao, item in enumerate(dados, start=1):
+        campo_faixa = f"{campo}[{posicao}]"
+        if not isinstance(item, Mapping):
+            raise ErroPerfil(f"{campo_faixa} precisa ser um objeto.")
+        if "ate_dias" not in item:
+            raise ErroPerfil(f"{campo_faixa} precisa informar 'ate_dias'.")
+        ate_dias = item.get("ate_dias")
+        if ate_dias is None:
+            if posicao != len(dados):
+                raise ErroPerfil(f"'ate_dias: null' só pode aparecer na última faixa de '{campo}'.")
+            limite_sem_fim_visto = True
+        else:
+            if isinstance(ate_dias, bool) or not isinstance(ate_dias, int) or ate_dias < 1:
+                raise ErroPerfil(f"'ate_dias' em {campo_faixa} precisa ser inteiro maior ou igual a 1 ou null.")
+            if limite_sem_fim_visto or ate_dias <= ultimo_limite:
+                raise ErroPerfil(f"Os limites de '{campo}' precisam ser crescentes.")
+            ultimo_limite = ate_dias
+        faixas.append(
+            FaixaAtraso(
+                ate_dias=ate_dias,
+                rotulo=_texto_obrigatorio(item.get("rotulo"), f"rótulo em {campo_faixa}"),
+            )
+        )
+    return tuple(faixas)
 
 
 def _meta_percentual_prazo(valor: Any, campo: str, *, permite_none: bool = False) -> float | None:

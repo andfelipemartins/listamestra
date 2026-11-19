@@ -370,6 +370,12 @@ prazos:
   # PE-ENG-001, item 5.6: indicador satisfatório quando 80% ou mais dos prazos são cumpridos.
   meta_percentual: 80
   meta_cronograma: 80
+  # Faixas provisórias até confirmação do dono na pergunta AD1 (D-065).
+  faixas_atraso:
+    - {ate_dias: 5, rotulo: Leve}
+    - {ate_dias: 30, rotulo: Moderado}
+    - {ate_dias: 60, rotulo: Grave}
+    - {ate_dias: null, rotulo: Crítico}
   regras:
     # Contrato, cláusula 25.1.2.1: o Metrô analisa em até 15 dias úteis desde a emissão no PW.
     - id: analise_cliente

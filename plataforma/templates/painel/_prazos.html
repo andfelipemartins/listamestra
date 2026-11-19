@@ -27,6 +27,20 @@
       </div>
       {% if indicador.meta_percentual != None %}<p class="painel-indicador-legenda" style="margin-top:7px; text-align:left">Linha tracejada: Meta {{ indicador.meta_percentual|floatformat:0 }}%</p>{% endif %}
 
+      {% if indicador.faixas_atraso %}
+      <div style="margin-top:16px">
+        <p class="painel-indicador-geral" style="text-align:left; margin-bottom:7px"><strong style="font-size:inherit">Atrasos por faixa</strong></p>
+        <div class="painel-progresso" role="img" aria-label="Distribuição dos atrasos: {% for faixa in indicador.faixas_atraso %}{{ faixa.rotulo }} ({{ faixa.intervalo }}): {{ faixa.total }}; {% endfor %}" style="display:flex; height:16px; margin-top:0">
+          {% for faixa in indicador.faixas_atraso %}<span aria-hidden="true" style="width:{{ faixa.percentual|unlocalize }}%; flex:0 0 {{ faixa.percentual|unlocalize }}%; background:{{ faixa.cor }}; border-radius:0"></span>{% endfor %}
+        </div>
+        <ul style="margin:8px 0 0; padding-left:20px; color:var(--text-secondary); font-size:12px">
+          {% for faixa in indicador.faixas_atraso %}
+          <li><strong>{{ faixa.rotulo }}</strong> ({{ faixa.intervalo }}): Entregues com atraso: {{ faixa.entregues_com_atraso }}; abertos vencidos: {{ faixa.abertos_vencidos }}.</li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
       <details class="painel-dados-tabulares" {% if forloop.first %}open{% endif %}>
         <summary>Números por {{ rotulo_caixa }}</summary>
         <div class="table-wrap"><table>

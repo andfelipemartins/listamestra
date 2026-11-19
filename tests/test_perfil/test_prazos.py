@@ -6,7 +6,13 @@ import yaml
 
 from core.perfil.feriados import feriados_nacionais
 from core.perfil.modelo import ErroPerfil, carregar_yaml, perfil_de_dict
-from core.perfil.prazos import AvaliacaoPrazo, avaliar, indicador, vencimento
+from core.perfil.prazos import (
+    AvaliacaoPrazo,
+    avaliar,
+    contar_atrasos_por_faixa,
+    indicador,
+    vencimento,
+)
 
 
 ROOT = Path(__file__).parents[2]
@@ -85,6 +91,74 @@ def test_perfil_metro_carrega_prazos_configurados():
     assert perfil.prazos.regras[1].meta_percentual == 80
     assert perfil.prazos.regras[1].tipo_dia == "corridos"
     assert perfil.prazos.regras[1].so_quando_grupo == ("nao_aprovado", "inconsistente")
+    assert [
+        (faixa.ate_dias, faixa.rotulo) for faixa in perfil.prazos.faixas_atraso
+    ] == [(5, "Leve"), (30, "Moderado"), (60, "Grave"), (None, "Crítico")]
+
+
+def test_contagem_por_faixa_separa_atrasos_entregues_e_abertos_nos_limites():
+    perfil = carregar_yaml(ROOT / "core" / "perfil" / "exemplos" / "metro.yaml")
+    dias = (1, 5, 6, 30, 31, 60, 61)
+    avaliacoes = [
+        *(AvaliacaoPrazo("atrasado", date(2026, 1, 1), atraso) for atraso in dias),
+        *(AvaliacaoPrazo("aberto_atrasado", date(2026, 1, 1), atraso) for atraso in dias),
+        AvaliacaoPrazo("no_prazo", date(2026, 1, 1), 0),
+        AvaliacaoPrazo("aberto_no_prazo", date(2026, 1, 1), 0),
+    ]
+
+    contagens = contar_atrasos_por_faixa(avaliacoes, perfil.prazos.faixas_atraso)
+
+    assert [
+        (faixa.entregues_com_atraso, faixa.abertos_vencidos, faixa.total)
+        for faixa in contagens
+    ] == [(2, 2, 4), (2, 2, 4), (2, 2, 4), (1, 1, 2)]
+
+
+def test_faixas_especificas_da_regra_substituem_as_gerais():
+    with (ROOT / "core" / "perfil" / "exemplos" / "metro.yaml").open(encoding="utf-8") as arquivo:
+        dados = yaml.safe_load(arquivo)
+    dados["prazos"]["regras"][1]["faixas_atraso"] = [
+        {"ate_dias": 10, "rotulo": "Curto"},
+        {"ate_dias": None, "rotulo": "Longo"},
+    ]
+
+    perfil = perfil_de_dict(dados)
+
+    assert perfil.prazos.regras[0].faixas_atraso is None
+    assert [
+        (faixa.ate_dias, faixa.rotulo)
+        for faixa in perfil.prazos.regras[1].faixas_atraso
+    ] == [(10, "Curto"), (None, "Longo")]
+
+
+@pytest.mark.parametrize(
+    ("faixas", "mensagem"),
+    [
+        ([{"ate_dias": 5, "rotulo": "Leve"}, {"ate_dias": 5, "rotulo": "Grave"}], "crescentes"),
+        ([{"ate_dias": 5, "rotulo": "Leve"}, {"ate_dias": None, "rotulo": "Sem limite"}, {"ate_dias": 30, "rotulo": "Depois"}], "última faixa"),
+        ([{"ate_dias": 5, "rotulo": "   "}], "rótulo"),
+        ([{"ate_dias": True, "rotulo": "Leve"}], "inteiro"),
+        ([{"rotulo": "Leve"}], "ate_dias"),
+    ],
+)
+def test_validacao_rejeita_faixas_de_atraso_invalidas(faixas, mensagem):
+    with (ROOT / "core" / "perfil" / "exemplos" / "metro.yaml").open(encoding="utf-8") as arquivo:
+        dados = yaml.safe_load(arquivo)
+    dados["prazos"]["faixas_atraso"] = faixas
+
+    with pytest.raises(ErroPerfil, match=mensagem):
+        perfil_de_dict(dados)
+
+
+def test_perfil_antigo_sem_faixas_de_atraso_continua_valido():
+    with (ROOT / "core" / "perfil" / "exemplos" / "metro.yaml").open(encoding="utf-8") as arquivo:
+        dados = yaml.safe_load(arquivo)
+    dados["prazos"].pop("faixas_atraso")
+
+    perfil = perfil_de_dict(dados)
+
+    assert perfil.prazos.faixas_atraso is None
+    assert all(regra.faixas_atraso is None for regra in perfil.prazos.regras)
 
 
 def test_meta_especifica_da_regra_substitui_o_padrao():

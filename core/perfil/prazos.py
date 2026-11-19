@@ -22,6 +22,17 @@ class ResultadoIndicadorPrazo:
     base: int
 
 
+@dataclass(frozen=True)
+class ContagemFaixaAtraso:
+    faixa: Any
+    entregues_com_atraso: int
+    abertos_vencidos: int
+
+    @property
+    def total(self) -> int:
+        return self.entregues_com_atraso + self.abertos_vencidos
+
+
 def vencimento(
     inicio: date,
     dias: int,
@@ -98,6 +109,37 @@ def indicador(avaliacoes: Iterable[AvaliacaoPrazo | Mapping[str, Any] | None]) -
     base = dentro + fora
     percentual = dentro * 100.0 / base if base else 0.0
     return ResultadoIndicadorPrazo(percentual, dentro, fora, base)
+
+
+def contar_atrasos_por_faixa(
+    avaliacoes: Iterable[AvaliacaoPrazo | Mapping[str, Any] | None],
+    faixas: Iterable[Any],
+) -> tuple[ContagemFaixaAtraso, ...]:
+    """Separa atrasos concluídos e abertos nas faixas configuradas pelo perfil."""
+    faixas = tuple(faixas or ())
+    entregues = [0] * len(faixas)
+    abertos = [0] * len(faixas)
+    limites = [_valor(faixa, "ate_dias") for faixa in faixas]
+
+    for avaliacao in avaliacoes:
+        if avaliacao is None:
+            continue
+        situacao = _valor(avaliacao, "situacao")
+        if situacao not in {"atrasado", "aberto_atrasado"}:
+            continue
+        dias_atraso = _valor(avaliacao, "dias_atraso")
+        for indice, limite in enumerate(limites):
+            if limite is None or dias_atraso <= limite:
+                if situacao == "atrasado":
+                    entregues[indice] += 1
+                else:
+                    abertos[indice] += 1
+                break
+
+    return tuple(
+        ContagemFaixaAtraso(faixa, entregues[indice], abertos[indice])
+        for indice, faixa in enumerate(faixas)
+    )
 
 
 def _dias_da_regra(regra: Any, sigla: str | None) -> int:
