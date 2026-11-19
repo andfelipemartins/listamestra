@@ -765,3 +765,59 @@ Aprovado, Não Conforme, Inconsistente, Erro de Assinatura, Cancelado, Revisão 
   descuido no preenchimento. No perfil Metrô: ARQUITETURA = B3, B7 e N3.
 - A categoria segue a classe na grande maioria dos casos, mas a regra fica configurável no perfil (classe e sigla
   combinadas), porque há exceções, como a A9, que é de qualidade (PE, MQ) ou de ATO (RT, ID).
+
+## D-058 · O 100% é por fase; hoje conta só o ID cadastrado no PW
+
+*Origem: AA1 · 2026-11-19*
+
+- O contrato da Linha 15 tem **duas fases**: na fase 1, a Alya faz os projetos executivos e a obra; na fase 2, só os
+  documentos executivos. Por isso existem IDs diferentes: o **ID-15.25.00.00-6A9-1501** (faixa 2000) é da fase 2 e vai
+  ser cadastrado no PW mais tarde.
+- **Por enquanto, o 100% é só o ID cadastrado no PW** (a extração do ID do PW). Os IDs em Excel ficam de consulta.
+- Generalização: cada ID pertence a uma **fase/escopo** configurável, e o painel pode mostrar o 100% de cada fase
+  (filtro), além do total. Quem configura decide quais fontes contam no previsto.
+
+## D-059 · Avanço = aprovados ÷ total; a medição 40/60 não entra
+
+*Origem: AA2 · 2026-11-19 · corrige a leitura da D-047*
+
+- O 40% na emissão e 60% na aprovação é só a **medição para o cliente**, não o progresso. Progresso = aprovados ÷
+  total previsto. A impressão do escritório (perto de 70%) provavelmente era outra leitura; com o total corrigido, o
+  sistema mostra o número real.
+
+## D-060 · Filtros: aplicam na hora e aparecem numa barra com "×"
+
+*Origem: AA3 · 2026-11-19*
+
+- Sem botão "Aplicar". Clicar aplica; clicar de novo tira. Uma **barra horizontal** mostra os filtros ativos, cada um
+  com um "×" para tirar só ele, e um botão **"Limpar todos"**.
+
+## D-061 · Manuais: 30 dias úteis
+
+*Origem: AA5, AA6 · 2026-11-19*
+
+- MM, MO, MP, MQ e MU têm **30 dias úteis** de análise do Metrô (cláusula 25.1.2.1). A sigla de treinamento ainda não
+  foi achada (o dono vai olhar o MAN de qualidade).
+
+## D-062 · Nosso prazo de devolução só nos não aprovados
+
+*Origem: AA7 · 2026-11-19*
+
+- Disparam os 15 dias: Não Aprovado, Inconsistente e Não Conforme. Aprovado com comentário não dispara.
+
+## D-063 · Meta de 80% vale para o cronograma e para a nossa devolução
+
+*Origem: AA8 · 2026-11-19*
+
+- O prazo de análise do Metrô aparece, mas **sem meta** (é do cliente). A meta passa a ser por regra de prazo no perfil.
+
+## D-064 · Feriados num acervo por região
+
+*Origem: AA9 · 2026-11-19*
+
+- Feriados de São Paulo pré-carregados no perfil Metrô: 25/01 (municipal, São Paulo), 09/07 (estadual, SP) e Corpus
+  Christi (municipal, São Paulo).
+- Visão do dono: os feriados viram um **acervo** do programa. Quem configura escolhe a **região do contrato** (UF e
+  município) e os feriados vêm sozinhos; o que alguém cadastrar fica no acervo para os próximos contratos. Mudança de
+  lei é esporádica e se ajusta à mão.
+- **Lembretes do dono** (pedido na AA5): o que ele adiou fica numa lista no painel para ser cobrado.
