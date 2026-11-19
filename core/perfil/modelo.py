@@ -95,11 +95,24 @@ class PainelPerfil:
     grupos: tuple[Grupo, ...]
     ignorar: tuple[str, ...] = ()
     avanco: tuple[str, ...] = ()
+    indicadores: tuple[IndicadorAprovacao, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "grupos", tuple(self.grupos))
         object.__setattr__(self, "ignorar", tuple(self.ignorar))
         object.__setattr__(self, "avanco", tuple(self.avanco))
+        object.__setattr__(self, "indicadores", tuple(self.indicadores))
+
+
+@dataclass(frozen=True)
+class IndicadorAprovacao:
+    id: str
+    rotulo: str
+    limite_revisoes: int
+    meta_percentual: float
+    rotulo_meta: str
+    contar_estourados_sem_aprovacao: bool
+    ciclos: str
 
 
 def _painel_minimo() -> PainelPerfil:
@@ -272,7 +285,69 @@ def _painel_de_dict(dados: Any) -> PainelPerfil:
             )
         ids_avanco.add(chave_id)
 
-    return PainelPerfil(grupos=tuple(grupos), ignorar=ignorar, avanco=avanco)
+    indicadores = _indicadores_de_dict(dados.get("indicadores", ()))
+    return PainelPerfil(
+        grupos=tuple(grupos), ignorar=ignorar, avanco=avanco, indicadores=indicadores
+    )
+
+
+def _indicadores_de_dict(dados: Any) -> tuple[IndicadorAprovacao, ...]:
+    if not isinstance(dados, (list, tuple)):
+        raise ErroPerfil("'painel.indicadores' precisa ser uma lista.")
+
+    indicadores: list[IndicadorAprovacao] = []
+    ids: set[str] = set()
+    for posicao, item in enumerate(dados, start=1):
+        campo = f"painel.indicadores[{posicao}]"
+        if not isinstance(item, Mapping):
+            raise ErroPerfil(f"{campo} precisa ser um objeto.")
+        tipo = item.get("tipo")
+        if tipo != "aprovacao_em_ate_n_revisoes":
+            raise ErroPerfil(
+                f"Tipo de indicador inválido em {campo}: '{tipo}'. "
+                "O tipo suportado é 'aprovacao_em_ate_n_revisoes'."
+            )
+
+        identificador = _texto_obrigatorio(item.get("id"), f"id em {campo}")
+        chave_id = identificador.casefold()
+        if chave_id in ids:
+            raise ErroPerfil(f"Id de indicador repetido em 'painel.indicadores': '{identificador}'.")
+        ids.add(chave_id)
+
+        limite = item.get("limite_revisoes")
+        if isinstance(limite, bool) or not isinstance(limite, int) or limite < 1:
+            raise ErroPerfil(f"'limite_revisoes' de '{identificador}' precisa ser inteiro maior ou igual a 1.")
+        meta = item.get("meta_percentual")
+        if isinstance(meta, bool) or not isinstance(meta, (int, float)) or not 0 <= meta <= 100:
+            raise ErroPerfil(f"'meta_percentual' de '{identificador}' precisa ser um número entre 0 e 100.")
+        contar_estourados = item.get("contar_estourados_sem_aprovacao")
+        if not isinstance(contar_estourados, bool):
+            raise ErroPerfil(
+                f"'contar_estourados_sem_aprovacao' de '{identificador}' precisa ser booleano."
+            )
+
+        ciclos = item.get("ciclos")
+        if ciclos == "cada_ciclo":
+            raise ErroPerfil("O modo de ciclos 'cada_ciclo' ainda não suportado.")
+        if ciclos != "primeira_aprovacao":
+            raise ErroPerfil(
+                f"'ciclos' de '{identificador}' precisa ser 'primeira_aprovacao'."
+            )
+
+        indicadores.append(
+            IndicadorAprovacao(
+                id=identificador,
+                rotulo=_texto_obrigatorio(item.get("rotulo"), f"rótulo do indicador '{identificador}'"),
+                limite_revisoes=limite,
+                meta_percentual=float(meta),
+                rotulo_meta=_texto_obrigatorio(
+                    item.get("rotulo_meta"), f"rótulo da meta do indicador '{identificador}'"
+                ),
+                contar_estourados_sem_aprovacao=contar_estourados,
+                ciclos=ciclos,
+            )
+        )
+    return tuple(indicadores)
 
 
 def _estrutura_de_dict(dados: Any) -> EstruturaCodigo:

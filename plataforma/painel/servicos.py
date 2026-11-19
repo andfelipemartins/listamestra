@@ -5,6 +5,11 @@ from django.db.models import F, Prefetch
 from django.utils import timezone
 
 from core.perfil import ErroPerfil, perfil_de_dict
+from core.perfil.indicadores import (
+    DocumentoIndicador,
+    EmissaoIndicador,
+    calcular_indicador_aprovacao,
+)
 from core.perfil.painel import classificar, resumir
 from contratos.models import PerfilContrato
 from documentos.models import Analise, Documento, Emissao
@@ -101,6 +106,53 @@ def carregar_painel(contrato, por=None, filtros=None):
     caixa_selecionada = por if por in nomes_caixas else caixas[0].nome
     definicao_caixa = next(caixa for caixa in caixas if caixa.nome == caixa_selecionada)
 
+    indicadores_aprovacao = []
+    for indicador in perfil.painel.indicadores:
+        documentos_indicador = [
+            DocumentoIndicador(
+                grupo_id=classificar(perfil, item.situacao).id,
+                situacao=item.situacao,
+                emissoes=tuple(
+                    EmissaoIndicador(
+                        fase=emissao.fase,
+                        revisao=emissao.revisao,
+                        situacao=_situacao_emissao(emissao),
+                    )
+                    for emissao in item.documento.emissoes.all()
+                ),
+                recorte=_valor_caixa(item.documento, caixa_selecionada) or "(sem informação)",
+            )
+            for item in documentos_filtrados
+        ]
+        resultado = calcular_indicador_aprovacao(perfil, indicador, documentos_indicador)
+        recortes_indicador = []
+        for valor, contagem in resultado.por_recorte.items():
+            rotulo = (definicao_caixa.valores or {}).get(valor, valor)
+            recortes_indicador.append(
+                {
+                    "valor": valor,
+                    "rotulo": rotulo,
+                    "percentual": contagem.percentual,
+                    "tem_dados": contagem.percentual is not None,
+                    "dentro_limite": contagem.dentro_limite,
+                    "fora_limite": contagem.fora_limite,
+                    "base": contagem.base,
+                }
+            )
+        indicadores_aprovacao.append(
+            {
+                "configuracao": indicador,
+                "percentual": resultado.geral.percentual,
+                "tem_dados": resultado.geral.percentual is not None,
+                "dentro_limite": resultado.geral.dentro_limite,
+                "fora_limite": resultado.geral.fora_limite,
+                "base": resultado.geral.base,
+                "recortes": sorted(
+                    recortes_indicador, key=lambda linha: linha["rotulo"].casefold()
+                ),
+            }
+        )
+
     por_valor = {}
     for item in documentos_em_conta:
         bruto = _valor_caixa(item.documento, caixa_selecionada)
@@ -167,6 +219,7 @@ def carregar_painel(contrato, por=None, filtros=None):
         "quantidade_filtros_ativos": sum(len(item["valores"]) for item in filtros_ativos),
         "recortes": recortes,
         "grupos_recorte": grupos_recorte,
+        "indicadores_aprovacao": indicadores_aprovacao,
     }
 
 
@@ -241,6 +294,11 @@ def _situacao_atual(documento):
         return None
     analise_mais_recente = next(iter(emissao_mais_recente.analises.all()), None)
     return analise_mais_recente.situacao if analise_mais_recente else ""
+
+
+def _situacao_emissao(emissao):
+    analise_mais_recente = next(iter(emissao.analises.all()), None)
+    return analise_mais_recente.situacao if analise_mais_recente else None
 
 
 def _valor_caixa(documento, nome):

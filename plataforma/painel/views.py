@@ -175,4 +175,13 @@ def _contexto_painel(contrato, por, filtros=None, *, usuario=None):
             for indice, grupo in enumerate(dados["grupos_recorte"])
         ],
     }
+    for indice, indicador in enumerate(dados["indicadores_aprovacao"], start=1):
+        configuracao = indicador["configuracao"]
+        indicador["script_id"] = f"dados-indicador-{indice}"
+        indicador["grafico"] = {
+            "labels": [item["rotulo"] for item in indicador["recortes"]],
+            "datasets": [{"data": [item["percentual"] for item in indicador["recortes"]]}],
+            "metaPercentual": configuracao.meta_percentual,
+            "rotuloMeta": configuracao.rotulo_meta,
+        }
     return dados

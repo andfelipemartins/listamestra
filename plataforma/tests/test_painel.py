@@ -109,6 +109,26 @@ def _documento(
     return documento
 
 
+def _emissao_com_status(documento, revisao, situacao, *, fase=Emissao.Fase.PRELIMINAR):
+    data = timezone.localdate() - timedelta(days=10)
+    emissao = Emissao.objects.create(
+        documento=documento,
+        revisao=str(revisao),
+        versao=1,
+        fase=fase,
+        data_emissao=data,
+        origem=Emissao.Origem.CLIENTE,
+    )
+    Analise.objects.create(
+        emissao=emissao,
+        etapa="Análise do cliente",
+        situacao=situacao,
+        origem=Analise.Origem.IMPORTADO_PW,
+        data_analise=data + timedelta(days=1),
+    )
+    return emissao
+
+
 @pytest.mark.django_db
 def test_servico_resume_uniao_status_recorte_fonte_e_fora_do_id(contrato, perfil_modelo):
     primeira = _indice(contrato, "ID-A")
@@ -318,6 +338,71 @@ def test_filtro_combina_com_recorte_de_barras(contrato, perfil_modelo):
         "São Mateus": 1,
         "Ragueb Chohfi": 1,
     }
+
+
+@pytest.mark.django_db
+def test_indicador_aparece_com_numero_geral_barras_por_recorte_e_linha_de_meta(
+    contrato, perfil_modelo, client, django_user_model
+):
+    usuario = django_user_model.objects.create_user(username="chefia-indicador", password="senha")
+    Participacao.objects.create(usuario=usuario, contrato=contrato, papel="chefia")
+    indice = _indice(contrato, "ID-INDICADOR")
+
+    dentro = _documento(contrato, indice, 5101, trecho="25", situacao="Não Aprovado")
+    _emissao_com_status(dentro, "2", "Não Aprovado")
+    _emissao_com_status(dentro, "3", "Não Aprovado")
+    _emissao_com_status(dentro, "0", "Aprovado", fase=Emissao.Fase.ORIGINAL)
+
+    fora = _documento(contrato, indice, 5102, trecho="23", situacao="Não Aprovado")
+    _emissao_com_status(fora, "2", "Não Aprovado")
+    _emissao_com_status(fora, "3", "Não Aprovado")
+    _emissao_com_status(fora, "4", "Não Aprovado")
+    _emissao_com_status(fora, "0", "Aprovado", fase=Emissao.Fase.ORIGINAL)
+    client.force_login(usuario)
+
+    dados = carregar_painel(contrato, por="trecho")
+    resposta = client.get(reverse("painel", args=(contrato.pk,)), {"por": "trecho"})
+    html = resposta.content.decode()
+    indicador = dados["indicadores_aprovacao"][0]
+    grafico = json.loads(
+        re.search(
+            r'<script id="dados-indicador-1" type="application/json">(.*?)</script>', html
+        ).group(1)
+    )
+
+    assert indicador["tem_dados"] is True
+    assert indicador["percentual"] == pytest.approx(50)
+    assert {item["rotulo"]: item["percentual"] for item in indicador["recortes"]} == {
+        "Ragueb Chohfi": 100,
+        "São Mateus": 0,
+    }
+    assert "<strong>50%</strong> aprovados em até 3 revisões · meta 80%" in re.sub(
+        r"\s+", " ", html
+    )
+    assert grafico["labels"] == ["Ragueb Chohfi", "São Mateus"]
+    assert grafico["datasets"][0]["data"] == [100, 0]
+    assert grafico["metaPercentual"] == 80
+    assert "linha-meta-indicador" in html
+    assert "setLineDash([6, 5])" in html
+    assert "rotulos-indicador" in html
+    assert "Dentro do limite: 1" in html
+    assert "Fora do limite: 1" in html
+
+
+@pytest.mark.django_db
+def test_perfil_sem_indicador_nao_mostra_bloco_no_painel(
+    contrato, perfil_modelo, client, django_user_model
+):
+    perfil_modelo.definicao["painel"].pop("indicadores", None)
+    perfil_modelo.save(update_fields=("definicao",))
+    usuario = django_user_model.objects.create_user(username="chefia-sem-indicador", password="senha")
+    Participacao.objects.create(usuario=usuario, contrato=contrato, papel="chefia")
+    client.force_login(usuario)
+
+    resposta = client.get(reverse("painel", args=(contrato.pk,)))
+
+    assert resposta.status_code == 200
+    assert "painel-indicador" not in resposta.content.decode()
 
 
 @pytest.mark.django_db

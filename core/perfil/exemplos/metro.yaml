@@ -334,3 +334,13 @@ painel:
   # Revisão Superada é somente histórica, nunca a situação vigente.
   ignorar: ["Revisão Superada"]
   avanco: [aprovado]
+  indicadores:
+    # D-039: estes valores esperam as respostas às perguntas T1–T4 do dono.
+    - tipo: aprovacao_em_ate_n_revisoes
+      id: aprovacao_ate_3_revisoes
+      rotulo: Aprovados em até 3 revisões
+      limite_revisoes: 3
+      meta_percentual: 80
+      rotulo_meta: Meta
+      contar_estourados_sem_aprovacao: true
+      ciclos: primeira_aprovacao
