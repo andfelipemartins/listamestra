@@ -12,6 +12,7 @@ class ImportarIDForm(forms.Form):
     arquivo = forms.FileField(label="Arquivo Excel (.xlsx)")
     codigo_id = forms.CharField(label="Código do ID", max_length=250, required=False)
     revisao = forms.CharField(label="Revisão", max_length=100, required=False)
+    fase = forms.CharField(label="Fase", max_length=100, required=False)
 
     def clean_arquivo(self):
         arquivo = self.cleaned_data["arquivo"]

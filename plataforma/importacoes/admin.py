@@ -19,8 +19,18 @@ class ItemPrevistoInline(admin.TabularInline):
 
 @admin.register(IndiceDocumentos)
 class IndiceDocumentosAdmin(admin.ModelAdmin):
-    list_display = ("codigo", "revisao", "fonte", "contrato", "importado_em", "vigente")
-    list_filter = ("fonte", "vigente", "contrato")
+    list_display = (
+        "codigo",
+        "revisao",
+        "fase",
+        "conta_no_previsto",
+        "fonte",
+        "contrato",
+        "importado_em",
+        "vigente",
+    )
+    list_editable = ("fase", "conta_no_previsto")
+    list_filter = ("fase", "conta_no_previsto", "fonte", "vigente", "contrato")
     search_fields = ("codigo", "arquivo_nome", "contrato__nome")
     readonly_fields = ("importado_em",)
     inlines = (ItemPrevistoInline,)

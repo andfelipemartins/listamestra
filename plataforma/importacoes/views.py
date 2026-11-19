@@ -554,6 +554,7 @@ class ImportarIDView(LoginRequiredMixin, UserPassesTestMixin, View):
             "fonte": previa.fonte,
             "codigo_indice": previa.codigo_indice,
             "revisao": previa.revisao,
+            "fase": form.cleaned_data["fase"].strip(),
             "arquivo_nome": previa.arquivo_nome,
             "formato": previa.formato,
             "linhas": [linha.__dict__ for linha in previa.linhas],
@@ -599,6 +600,12 @@ class ImportarIDView(LoginRequiredMixin, UserPassesTestMixin, View):
                 perfil_modelo=perfil_modelo,
                 usuario=request.user,
             )
+            fase = dados.get("fase", "").strip()
+            if fase and indice.fase != fase:
+                indice.fase = fase
+                indice._history_user = request.user
+                indice._change_reason = f"importacao_id:{indice.pk}:fase"
+                indice.save(update_fields=("fase",))
         except (ErroAplicacaoID, ValueError, KeyError, TypeError) as erro:
             messages.error(request, str(erro))
             return redirect("importar_id")

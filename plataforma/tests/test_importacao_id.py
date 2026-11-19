@@ -564,6 +564,9 @@ def test_tela_staff_mostra_previa_htmx_e_confirma_importacao(client, contrato, p
         password="senha-segura",
     )
     client.force_login(administrador)
+    formulario = client.get(reverse("importar_id"))
+    assert formulario.status_code == 200
+    assert b'name="fase"' in formulario.content
     arquivo = criar_excel_id([{"titulo": "Documento na tela", "sequencial": "1001"}])
     upload = SimpleUploadedFile("ID-TESTE-1.xlsx", arquivo.read(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
@@ -574,6 +577,7 @@ def test_tela_staff_mostra_previa_htmx_e_confirma_importacao(client, contrato, p
             "contrato": str(contrato.pk),
             "codigo_id": "ID-TESTE",
             "revisao": "1",
+            "fase": "Fase 1",
             "arquivo": upload,
         },
         HTTP_HX_REQUEST="true",
@@ -587,6 +591,8 @@ def test_tela_staff_mostra_previa_htmx_e_confirma_importacao(client, contrato, p
 
     assert resposta.status_code == 200
     assert IndiceDocumentos.objects.get().importado_por == administrador
+    assert IndiceDocumentos.objects.get().fase == "Fase 1"
+    assert IndiceDocumentos.objects.get().conta_no_previsto is True
     assert ItemPrevisto.objects.count() == 1
     assert b"importado com 1 linhas v\xc3\xa1lidas" in resposta.content
 

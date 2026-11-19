@@ -19,6 +19,8 @@ class IndiceDocumentos(models.Model):
     )
     codigo = models.CharField("código do ID", max_length=250)
     revisao = models.CharField("revisão", max_length=100)
+    fase = models.CharField("fase", max_length=100, blank=True)
+    conta_no_previsto = models.BooleanField("conta no previsto", default=True)
     fonte = models.CharField("fonte", max_length=20, choices=Fonte.choices)
     arquivo_nome = models.CharField("nome do arquivo", max_length=255)
     importado_em = models.DateTimeField("importado em")
