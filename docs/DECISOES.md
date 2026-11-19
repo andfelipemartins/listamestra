@@ -500,3 +500,13 @@ Aprovado, Não Conforme, Inconsistente, Erro de Assinatura, Cancelado, Revisão 
   projeto. Ficam num **grupo próprio, ERRO**, com um cartão separado no painel.
 - Consequência: no perfil Metrô, os dois estados saem de EM ANÁLISE e vão para o grupo ERRO, que
   continua contando no total (exige ação), como INCONSISTENTE. Block-022.
+
+## D-037 · Push do produto liberado também para a checagem agendada
+
+*Origem: R1 · 2026-11-19 (respondida às 01:35Z; registrado pela checagem agendada das 01:56Z) · complementa a regra de push automático da ESTEIRA*
+
+- A checagem agendada não conseguia fazer o `git push` porque a permissão pedia alguém presente.
+- O dono escolheu liberar o push ("essas coisas precisam acontecer mais automáticas").
+- A regra `ask` de `git push` saiu do `.claude/settings.local.json`; o push normal passou a rodar
+  sem aprovação. Force-push continua pedindo confirmação.
+- A ESTEIRA.md já registra isso (seção "Duas sessões, um repositório").
