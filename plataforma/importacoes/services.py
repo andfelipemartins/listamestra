@@ -31,7 +31,7 @@ def aplicar_previa(
         raise ErroAplicacaoID("O perfil vigente mudou. Gere uma nova prévia antes de confirmar.")
     problemáticas = [
         linha for linha in previa.linhas
-        if linha.categoria in {"codigos_invalidos", "linhas_ilegiveis"}
+        if linha.categoria in {"codigos_invalidos", "atributos_divergentes", "linhas_ilegiveis"}
     ]
     linhas_validas = [linha for linha in previa.linhas if linha.identificador_base]
     if not linhas_validas and not problemáticas:
@@ -126,6 +126,21 @@ def aplicar_previa(
                 mensagem=linha.mensagem or "Linha não importada por ser inválida.",
                 dados_linha=linha.dados_linha or {},
             )
+        codigos_importados = {
+            linha.codigo.strip().upper()
+            for linha in linhas_validas
+            if linha.codigo.strip()
+        }
+        if codigos_importados:
+            recusas_anteriores = InconsistenciaImportacao.objects.filter(
+                importacao_id__contrato=contrato,
+                importacao_id__indice__fonte=previa.fonte,
+                resolvida_em__isnull=True,
+            ).exclude(importacao_id=importacao)
+            for inconsistencia in recusas_anteriores:
+                if inconsistencia.codigo_lido.strip().upper() in codigos_importados:
+                    inconsistencia.resolvida_em = agora
+                    inconsistencia.save(update_fields=("resolvida_em",))
 
     documentos_incluidos = set()
     for linha in linhas_validas:
@@ -205,10 +220,30 @@ def aplicar_previa(
 
     if reprocessamento:
         numeros_validos = {linha.numero_linha for linha in linhas_validas}
+        linhas_por_numero = {linha.numero_linha: linha for linha in previa.linhas}
         for inconsistencia in inconsistencias_existentes:
-            if inconsistencia.numero_linha in numeros_validos and inconsistencia.resolvida_em is None:
+            linha = linhas_por_numero.get(inconsistencia.numero_linha)
+            if linha is None or inconsistencia.resolvida_em is not None:
+                continue
+            if inconsistencia.numero_linha in numeros_validos:
                 inconsistencia.resolvida_em = agora
                 inconsistencia.save(update_fields=("resolvida_em",))
+                continue
+            campos = {
+                "codigo_lido": linha.codigo,
+                "categoria": linha.categoria,
+                "campo_falhou": linha.campo_falhou,
+                "caixa_falhou": linha.caixa_falhou or linha.campo_falhou,
+                "mensagem": linha.mensagem or "Linha não importada por ser inválida.",
+                "dados_linha": linha.dados_linha or {},
+            }
+            alterados = []
+            for nome, valor in campos.items():
+                if getattr(inconsistencia, nome) != valor:
+                    setattr(inconsistencia, nome, valor)
+                    alterados.append(nome)
+            if alterados:
+                inconsistencia.save(update_fields=alterados)
     elif not problemáticas:
         itens_removidos = indice.itens.exclude(documento_id__in=documentos_incluidos).select_related("documento")
         for item in itens_removidos:

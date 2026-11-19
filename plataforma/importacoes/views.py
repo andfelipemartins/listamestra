@@ -6,6 +6,7 @@ from django.utils import timezone
 from django.views import View
 
 from core.perfil import ErroPerfil, perfil_de_dict
+from core.perfil.codigo import ErroCodigo, interpretar
 from contas.models import Usuario
 from contratos.models import Contrato, Participacao, PerfilContrato
 from documentos.models import Analise, Documento, Emissao
@@ -33,6 +34,7 @@ from .situacao_pw import (
     HistoricoTruncadoPW,
     MudancaSituacaoPW,
     aplicar_previa_situacao_pw,
+    gerar_previa_linhas_recusadas_situacao_pw,
     gerar_previa_situacao_pw,
 )
 
@@ -63,17 +65,29 @@ class LinhasRecusadasView(LoginRequiredMixin, View):
         dados_sessao = request.session.get(CHAVE_SESSAO_REPROCESSAMENTO)
         previa = None
         importacao_previa = None
+        tipo_previa = "id"
+        codigos_reprocessados = []
         if (
             dados_sessao
             and dados_sessao.get("usuario_id") == request.user.pk
             and dados_sessao.get("contrato_id") == self.contrato.pk
         ):
-            previa = _previsao_da_sessao(dados_sessao)
-            importacao_previa = get_object_or_404(
-                ImportacaoID.objects.select_related("indice"),
-                pk=dados_sessao["importacao_id"],
-                contrato=self.contrato,
-            )
+            tipo_previa = dados_sessao.get("tipo", "id")
+            if tipo_previa == "situacao_pw":
+                previa = _previsao_situacao_da_sessao(dados_sessao["previa"])
+                importacao_previa = get_object_or_404(
+                    ImportacaoSituacao,
+                    pk=dados_sessao["importacao_id"],
+                    contrato=self.contrato,
+                )
+                codigos_reprocessados = dados_sessao.get("codigos_reprocessados", [])
+            else:
+                previa = _previsao_da_sessao(dados_sessao)
+                importacao_previa = get_object_or_404(
+                    ImportacaoID.objects.select_related("indice"),
+                    pk=dados_sessao["importacao_id"],
+                    contrato=self.contrato,
+                )
         return render(
             request,
             self.template_name,
@@ -81,13 +95,19 @@ class LinhasRecusadasView(LoginRequiredMixin, View):
                 self.contrato,
                 previa=previa,
                 importacao_previa=importacao_previa,
+                tipo_previa=tipo_previa,
+                codigos_reprocessados=codigos_reprocessados,
             ),
         )
 
     def post(self, request, contrato_id):
         acao = request.POST.get("acao")
         if acao == "confirmar_reprocessamento":
+            if request.session.get(CHAVE_SESSAO_REPROCESSAMENTO, {}).get("tipo") == "situacao_pw":
+                return self._confirmar_situacao(request)
             return self._confirmar(request)
+        if request.POST.get("importacao_situacao_id"):
+            return self._prever_situacao(request)
         return self._prever(request)
 
     def _prever(self, request):
@@ -121,6 +141,7 @@ class LinhasRecusadasView(LoginRequiredMixin, View):
             return redirect("linhas_recusadas", contrato_id=self.contrato.pk)
 
         request.session[CHAVE_SESSAO_REPROCESSAMENTO] = {
+            "tipo": "id",
             "usuario_id": request.user.pk,
             "contrato_id": self.contrato.pk,
             "perfil_id": perfil_modelo.pk,
@@ -136,7 +157,89 @@ class LinhasRecusadasView(LoginRequiredMixin, View):
         return render(
             request,
             self.template_name,
-            _contexto_recusadas(self.contrato, previa=previa, importacao_previa=importacao),
+            _contexto_recusadas(
+                self.contrato,
+                previa=previa,
+                importacao_previa=importacao,
+                tipo_previa="id",
+            ),
+        )
+
+    def _prever_situacao(self, request):
+        importacao = get_object_or_404(
+            ImportacaoSituacao,
+            pk=request.POST.get("importacao_situacao_id"),
+            contrato=self.contrato,
+        )
+        inconsistencias = list(
+            importacao.inconsistencias.filter(resolvida_em__isnull=True).order_by("numero_linha", "pk")
+        )
+        perfil_modelo = PerfilContrato.perfil_vigente(self.contrato, timezone.localdate())
+        if perfil_modelo is None:
+            messages.error(request, "O contrato não tem perfil vigente para a data de hoje.")
+            return redirect("linhas_recusadas", contrato_id=self.contrato.pk)
+
+        try:
+            perfil = perfil_de_dict(perfil_modelo.definicao)
+            dados_existentes = _dados_existentes_situacao(self.contrato)
+            com_dados = [item for item in inconsistencias if item.dados_linha]
+            if com_dados:
+                previa = gerar_previa_linhas_recusadas_situacao_pw(
+                    com_dados,
+                    nome_arquivo=importacao.arquivo_nome,
+                    contrato_id=self.contrato.pk,
+                    perfil_id=perfil_modelo.pk,
+                    perfil=perfil,
+                    data_extracao=importacao.data_extracao,
+                    **dados_existentes,
+                )
+            else:
+                previa = PreviaSituacaoPW(
+                    contrato_id=self.contrato.pk,
+                    perfil_id=perfil_modelo.pk,
+                    data_extracao=importacao.data_extracao,
+                    arquivo_nome=importacao.arquivo_nome,
+                    documentos=(),
+                )
+
+            codigos_reprocessados = {
+                documento.codigo_base
+                for documento in previa.documentos
+            }
+            codigos_reprocessados.update(
+                documento.identificador_base
+                for documento in previa.documentos
+            )
+            for item in inconsistencias:
+                if item.dados_linha or not item.codigo_lido:
+                    continue
+                interpretado = interpretar(perfil, item.codigo_lido)
+                if not isinstance(interpretado, ErroCodigo):
+                    codigos_reprocessados.add(item.codigo_lido)
+        except (ErroFormatoSituacaoPW, ErroPerfil, ValueError) as erro:
+            messages.error(request, str(erro))
+            return redirect("linhas_recusadas", contrato_id=self.contrato.pk)
+
+        request.session[CHAVE_SESSAO_REPROCESSAMENTO] = {
+            "tipo": "situacao_pw",
+            "usuario_id": request.user.pk,
+            "contrato_id": self.contrato.pk,
+            "perfil_id": perfil_modelo.pk,
+            "importacao_id": importacao.pk,
+            "inconsistencias_ids": [item.pk for item in inconsistencias],
+            "codigos_reprocessados": sorted(codigos_reprocessados),
+            "previa": _serializar_previa_situacao(previa),
+        }
+        return render(
+            request,
+            self.template_name,
+            _contexto_recusadas(
+                self.contrato,
+                previa=previa,
+                importacao_previa=importacao,
+                tipo_previa="situacao_pw",
+                codigos_reprocessados=codigos_reprocessados,
+            ),
         )
 
     def _confirmar(self, request):
@@ -191,10 +294,72 @@ class LinhasRecusadasView(LoginRequiredMixin, View):
         )
         return redirect("linhas_recusadas", contrato_id=self.contrato.pk)
 
+    def _confirmar_situacao(self, request):
+        dados = request.session.get(CHAVE_SESSAO_REPROCESSAMENTO)
+        if (
+            not dados
+            or dados.get("usuario_id") != request.user.pk
+            or dados.get("contrato_id") != self.contrato.pk
+        ):
+            messages.error(request, "A prévia expirou. Gere uma nova prévia das linhas recusadas.")
+            return redirect("linhas_recusadas", contrato_id=self.contrato.pk)
+        try:
+            previa = _previsao_situacao_da_sessao(dados["previa"])
+            importacao = get_object_or_404(
+                ImportacaoSituacao,
+                pk=dados["importacao_id"],
+                contrato=self.contrato,
+            )
+            perfil_modelo = get_object_or_404(
+                PerfilContrato,
+                pk=dados["perfil_id"],
+                contrato=self.contrato,
+            )
+            vigente = PerfilContrato.perfil_vigente(self.contrato, timezone.localdate())
+            if vigente is None or vigente.pk != perfil_modelo.pk:
+                raise ValueError("O perfil vigente mudou. Gere uma nova prévia.")
+            inconsistencias = list(
+                InconsistenciaImportacao.objects.filter(
+                    pk__in=dados["inconsistencias_ids"],
+                    importacao_situacao=importacao,
+                    resolvida_em__isnull=True,
+                )
+            )
+            if len(inconsistencias) != len(dados["inconsistencias_ids"]):
+                raise ValueError("As linhas recusadas não pertencem mais à importação original.")
+            aplicar_previa_situacao_pw(
+                previa,
+                contrato=self.contrato,
+                perfil_modelo=perfil_modelo,
+                usuario=request.user,
+                inconsistencias_existentes=inconsistencias,
+                codigos_reprocessados=dados.get("codigos_reprocessados", ()),
+            )
+        except (ErroPerfil, ValueError, KeyError, TypeError) as erro:
+            messages.error(request, str(erro))
+            return redirect("linhas_recusadas", contrato_id=self.contrato.pk)
+        request.session.pop(CHAVE_SESSAO_REPROCESSAMENTO, None)
+        resolvidas = InconsistenciaImportacao.objects.filter(
+            pk__in=dados["inconsistencias_ids"],
+            resolvida_em__isnull=False,
+        ).count()
+        pendentes = len(dados["inconsistencias_ids"]) - resolvidas
+        messages.success(
+            request,
+            f"{resolvidas} linhas reavaliadas pelo perfil vigente; {pendentes} continuam recusadas.",
+        )
+        return redirect("linhas_recusadas", contrato_id=self.contrato.pk)
 
-def _contexto_recusadas(contrato, *, previa=None, importacao_previa=None):
-    importacoes = []
-    query = (
+
+def _contexto_recusadas(
+    contrato,
+    *,
+    previa=None,
+    importacao_previa=None,
+    tipo_previa="id",
+    codigos_reprocessados=(),
+):
+    consulta_id = (
         ImportacaoID.objects.filter(
             contrato=contrato,
             inconsistencias__resolvida_em__isnull=True,
@@ -203,66 +368,111 @@ def _contexto_recusadas(contrato, *, previa=None, importacao_previa=None):
         .distinct()
         .order_by("-importado_em", "-pk")
     )
-    for importacao in query:
+    importacoes = []
+    for importacao in consulta_id:
         inconsistencias = list(
             importacao.inconsistencias.filter(resolvida_em__isnull=True).order_by("numero_linha", "pk")
         )
-        grupos = {}
-        for inconsistencia in inconsistencias:
-            valor = _valor_recusado(inconsistencia)
-            chave = (
-                inconsistencia.categoria,
-                inconsistencia.caixa_falhou,
-                valor,
-            )
-            if chave not in grupos:
-                motivo = inconsistencia.caixa_falhou or _rotulo_recusa(inconsistencia.categoria)
-                if valor:
-                    motivo = f"{motivo} = {valor}"
-                grupos[chave] = {"motivo": motivo, "linhas": []}
-            grupos[chave]["linhas"].append(inconsistencia)
-        importacoes.append(
-            {
-                "importacao": importacao,
-                "inconsistencias": inconsistencias,
-                "grupos": list(grupos.values()),
-            }
+        importacoes.append({
+            "importacao": importacao,
+            "inconsistencias": inconsistencias,
+            "grupos": _grupos_recusadas(inconsistencias, importacao.indice.fonte),
+        })
+
+    consulta_situacao = (
+        ImportacaoSituacao.objects.filter(
+            contrato=contrato,
+            inconsistencias__resolvida_em__isnull=True,
         )
+        .distinct()
+        .order_by("-importado_em", "-pk")
+    )
+    importacoes_situacao = []
+    for importacao in consulta_situacao:
+        inconsistencias = list(
+            importacao.inconsistencias.filter(resolvida_em__isnull=True).order_by("numero_linha", "pk")
+        )
+        importacoes_situacao.append({
+            "importacao": importacao,
+            "inconsistencias": inconsistencias,
+                "grupos": _grupos_recusadas(inconsistencias, "situacao_pw"),
+        })
+
+    codigos_reprocessados = set(codigos_reprocessados)
+    if previa and tipo_previa == "situacao_pw":
+        codigos_reprocessados.update(documento.codigo_base for documento in previa.documentos)
+        codigos_reprocessados.update(documento.identificador_base for documento in previa.documentos)
+        validas = 0
+        linhas_fora = len(previa.linhas_invalidas)
+        if importacao_previa:
+            abertas = list(importacao_previa.inconsistencias.filter(resolvida_em__isnull=True))
+            aceitas = [
+                item for item in abertas
+                if item.codigo_lido.strip().upper()
+                in {codigo.strip().upper() for codigo in codigos_reprocessados}
+            ]
+            validas = len(aceitas)
+            linhas_fora = max(linhas_fora, len(abertas) - len(aceitas))
+    else:
+        validas = previa.linhas_validas if previa else 0
+        linhas_fora = previa.linhas_fora if previa else 0
+
     return {
         "contrato": contrato,
         "importacoes": importacoes,
-        "total_recusadas": sum(len(item["inconsistencias"]) for item in importacoes),
+        "importacoes_situacao": importacoes_situacao,
+        "total_recusadas": sum(
+            len(item["inconsistencias"])
+            for item in (*importacoes, *importacoes_situacao)
+        ),
         "previa": previa,
         "importacao_previa": importacao_previa,
-        "linhas_validas": previa.linhas_validas if previa else 0,
-        "linhas_fora": previa.linhas_fora if previa else 0,
+        "tipo_previa": tipo_previa,
+        "linhas_validas": validas,
+        "linhas_fora": linhas_fora,
+        "codigos_reprocessados": sorted(codigos_reprocessados),
     }
 
 
-def _valor_recusado(inconsistencia):
-    formato_id = inconsistencia.importacao_id.indice.fonte
-    dados = inconsistencia.dados_linha or {}
-    cabecalho = None
-    if formato_id in FORMATOS_ID:
-        cabecalho = FORMATOS_ID[formato_id]["cabecalhos_segmentos"].get(
-            inconsistencia.campo_falhou
-        )
-        if cabecalho is None and inconsistencia.campo_falhou in {"codigo", "name"}:
-            cabecalho = FORMATOS_ID[formato_id]["cabecalho_codigo"]
-    if cabecalho is None:
-        return ""
-    normalizado = " ".join(cabecalho.strip().split()).casefold()
-    for nome, valor in dados.items():
-        if " ".join(nome.strip().split()).casefold() == normalizado:
-            return str(valor).strip() if valor is not None else ""
-    return ""
+def _grupos_recusadas(inconsistencias, origem):
+    grupos = {}
+    for inconsistencia in inconsistencias:
+        categoria = inconsistencia.categoria
+        if not categoria:
+            categoria = "codigos_invalidos" if origem == "situacao_pw" else "linhas_ilegiveis"
+        if categoria not in grupos:
+            grupos[categoria] = {
+                "categoria": categoria,
+                "titulo": _rotulo_recusa(categoria, origem),
+                "instrucao": _instrucao_recusa(categoria, origem),
+                "linhas": [],
+            }
+        grupos[categoria]["linhas"].append(inconsistencia)
+    return list(grupos.values())
 
 
-def _rotulo_recusa(categoria):
+def _rotulo_recusa(categoria, origem=""):
+    if categoria == "linhas_ilegiveis":
+        if origem == IndiceDocumentos.Fonte.EXTRACAO_PW:
+            return "Extração defeituosa do PW"
+        return "Linha ilegível"
     return {
-        "linhas_ilegiveis": "Linha ilegível",
+        "atributos_divergentes": "Atributo do PW divergente do Name",
         "codigos_invalidos": "Código inválido",
+        "dados_invalidos": "Dados do PW inválidos",
     }.get(categoria, "Linha recusada")
+
+
+def _instrucao_recusa(categoria, origem=""):
+    if categoria == "linhas_ilegiveis":
+        if origem == IndiceDocumentos.Fonte.EXTRACAO_PW:
+            return "Reextraia essa disciplina e importe de novo."
+        return "Corrija os dados na planilha e importe de novo."
+    return {
+        "atributos_divergentes": "Corrija o atributo no PW ou reextraia a planilha e importe de novo.",
+        "codigos_invalidos": "Corrija o código na planilha ou no PW e importe de novo.",
+        "dados_invalidos": "Corrija os dados na planilha ou no PW e importe de novo.",
+    }.get(categoria, "Corrija a linha na planilha ou no PW e importe de novo.")
 
 
 class ImportarIDView(LoginRequiredMixin, UserPassesTestMixin, View):
@@ -435,31 +645,7 @@ class ImportarSituacaoPWView(LoginRequiredMixin, UserPassesTestMixin, View):
                 perfil_id=perfil_modelo.pk,
                 perfil=perfil_de_dict(perfil_modelo.definicao),
                 data_extracao=data_extracao,
-                documentos_existentes={
-                    identificador: {"titulo": titulo}
-                    for identificador, titulo in Documento.objects.filter(contrato=contrato).values_list(
-                        "identificador_base", "titulo"
-                    )
-                },
-                identificadores_previstos=list(ItemPrevisto.objects.filter(
-                    indice__contrato=contrato,
-                    indice__vigente=True,
-                    excluido=False,
-                ).values_list("documento__identificador_base", flat=True)),
-                emissoes_existentes=list(Emissao.objects.filter(
-                    documento__contrato=contrato
-                ).values_list("documento__identificador_base", "revisao", "versao")),
-                analises_existentes=list(Analise.objects.filter(
-                    emissao__documento__contrato=contrato
-                ).values_list(
-                    "emissao__documento__identificador_base",
-                    "emissao__revisao",
-                    "emissao__versao",
-                    "situacao",
-                    "data_analise",
-                    "origem",
-                )),
-                situacoes_vigentes=_situacoes_vigentes(contrato),
+                **_dados_existentes_situacao(contrato),
             )
         except (ErroFormatoSituacaoPW, ErroPerfil, ValueError) as erro:
             return self._render_result(request, {"form": form, "erro": str(erro)})
@@ -526,6 +712,36 @@ class ImportarSituacaoPWView(LoginRequiredMixin, UserPassesTestMixin, View):
             f"{importacao.linhas_invalidas} linhas inválidas registradas.",
         )
         return redirect("importar_situacao_pw")
+
+
+def _dados_existentes_situacao(contrato):
+    return {
+        "documentos_existentes": {
+            identificador: {"titulo": titulo}
+            for identificador, titulo in Documento.objects.filter(contrato=contrato).values_list(
+                "identificador_base", "titulo"
+            )
+        },
+        "identificadores_previstos": list(ItemPrevisto.objects.filter(
+            indice__contrato=contrato,
+            indice__vigente=True,
+            excluido=False,
+        ).values_list("documento__identificador_base", flat=True)),
+        "emissoes_existentes": list(Emissao.objects.filter(
+            documento__contrato=contrato
+        ).values_list("documento__identificador_base", "revisao", "versao")),
+        "analises_existentes": list(Analise.objects.filter(
+            emissao__documento__contrato=contrato
+        ).values_list(
+            "emissao__documento__identificador_base",
+            "emissao__revisao",
+            "emissao__versao",
+            "situacao",
+            "data_analise",
+            "origem",
+        )),
+        "situacoes_vigentes": _situacoes_vigentes(contrato),
+    }
 
 
 def _situacoes_vigentes(contrato):

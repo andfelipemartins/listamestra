@@ -56,6 +56,7 @@ CATEGORIAS = (
     "ja_existentes",
     "titulos_divergentes",
     "codigos_invalidos",
+    "atributos_divergentes",
     "linhas_ilegiveis",
     "excluidos",
 )
@@ -64,6 +65,7 @@ ROTULOS_CATEGORIA = {
     "ja_existentes": "Já existente",
     "titulos_divergentes": "Título divergente",
     "codigos_invalidos": "Código inválido",
+    "atributos_divergentes": "Atributo divergente do Name",
     "linhas_ilegiveis": "Linha ilegível",
     "excluidos": "Excluído",
 }
@@ -312,12 +314,22 @@ def _classificar_linha(*, numero_linha, dados, formato, indices, perfil, existen
     codigo = str(codigo_bruto).strip() if not _vazio(codigo_bruto) else ""
     titulo = str(titulo_bruto).strip() if not _vazio(titulo_bruto) else ""
     excluido = _interpretar_excluido(dados.get(excluido_coluna))
+    if formato_id == "extracao_pw" and (excluido is None or not titulo):
+        return LinhaPrevia(
+            numero_linha, codigo, titulo, bool(excluido), "linhas_ilegiveis",
+            mensagem=_mensagem_extracao_defeituosa(),
+        )
     if excluido is None or not titulo:
         return LinhaPrevia(
             numero_linha, codigo, titulo, bool(excluido), "linhas_ilegiveis",
             mensagem="Linha sem título ou com marca de excluído ilegível.",
         )
 
+    if formato_id == "extracao_pw" and not codigo:
+        return LinhaPrevia(
+            numero_linha, codigo, titulo, excluido, "linhas_ilegiveis",
+            mensagem=_mensagem_extracao_defeituosa(),
+        )
     if not codigo:
         codigo, erro_composicao = _montar_codigo_das_caixas(dados, formato, indices, perfil)
         if erro_composicao:
@@ -338,7 +350,11 @@ def _classificar_linha(*, numero_linha, dados, formato, indices, perfil, existen
             numero_linha, codigo, titulo, excluido, categoria,
             campo_falhou=resultado.segmento or "",
             caixa_falhou=caixa,
-            mensagem=resultado.mensagem,
+            mensagem=(
+                _mensagem_extracao_defeituosa()
+                if formato_id == "extracao_pw"
+                else resultado.mensagem
+            ),
         )
 
     if formato_id == "extracao_pw":
@@ -346,27 +362,37 @@ def _classificar_linha(*, numero_linha, dados, formato, indices, perfil, existen
             dados, formato, indices, perfil
         )
         if erro_composicao:
-            campo, caixa, mensagem = erro_composicao
+            campo, caixa, _ = erro_composicao
             return LinhaPrevia(
                 numero_linha, codigo, titulo, excluido, "linhas_ilegiveis",
-                campo_falhou=campo, caixa_falhou=caixa, mensagem=mensagem,
+                campo_falhou=campo,
+                caixa_falhou=caixa,
+                mensagem=_mensagem_extracao_defeituosa(),
             )
         resultado_caixas = interpretar(perfil, codigo_das_caixas)
         if isinstance(resultado_caixas, ErroCodigo):
-            caixa = next(
-                (campo.rotulo for campo in perfil.codigo.campos if campo.nome == resultado_caixas.segmento),
-                resultado_caixas.segmento or "formato do código",
+            divergencias = _divergencias_dos_atributos(
+                dados, formato, indices, perfil, resultado.segmentos
             )
             return LinhaPrevia(
-                numero_linha, codigo, titulo, excluido, "linhas_ilegiveis",
+                numero_linha, codigo, titulo, excluido,
+                "atributos_divergentes" if divergencias else "linhas_ilegiveis",
                 campo_falhou=resultado_caixas.segmento or "",
-                caixa_falhou=caixa,
-                mensagem="As caixas do código estão deslocadas ou não correspondem ao campo Name.",
+                caixa_falhou=resultado_caixas.segmento or "",
+                mensagem=_mensagem_atributos_divergentes(divergencias)
+                if divergencias
+                else _mensagem_extracao_defeituosa(),
             )
         if dict(resultado_caixas.segmentos) != dict(resultado.segmentos):
+            divergencias = _divergencias_dos_atributos(
+                dados, formato, indices, perfil, resultado.segmentos
+            )
             return LinhaPrevia(
-                numero_linha, codigo, titulo, excluido, "linhas_ilegiveis",
-                mensagem="As caixas do código não correspondem ao campo Name; linha deslocada.",
+                numero_linha, codigo, titulo, excluido,
+                "atributos_divergentes" if divergencias else "linhas_ilegiveis",
+                mensagem=_mensagem_atributos_divergentes(divergencias)
+                if divergencias
+                else _mensagem_extracao_defeituosa(),
             )
 
     if excluido:
@@ -443,6 +469,49 @@ def _montar_codigo_das_caixas(dados, formato, indices, perfil):
         partes_codigo.append(valor)
         separador_pendente = None
     return "".join(partes_codigo), None
+
+
+def _divergencias_dos_atributos(dados, formato, indices, perfil, segmentos_name):
+    divergencias = []
+    for campo in perfil.codigo.campos:
+        cabecalho = formato["cabecalhos_segmentos"].get(campo.nome)
+        if cabecalho is None:
+            continue
+        chave = _normalizar_cabecalho(cabecalho)
+        if chave not in indices:
+            continue
+        valor_bruto = dados.get(chave)
+        if _vazio(valor_bruto):
+            continue
+        valor = str(valor_bruto).strip().upper()
+        if isinstance(valor_bruto, (int, float)) and int(valor_bruto) == valor_bruto:
+            largura = _largura_numerica(campo.padrao_regex)
+            if largura:
+                valor = str(int(valor_bruto)).zfill(largura)
+        esperado = segmentos_name.get(campo.nome)
+        if esperado is None or valor == str(esperado).strip().upper():
+            continue
+        rotulo_coluna = str(cabecalho).rstrip(":")
+        rotulo_campo = campo.rotulo.casefold()
+        divergencias.append((rotulo_campo, esperado, rotulo_coluna, valor))
+    return divergencias
+
+
+def _mensagem_atributos_divergentes(divergencias):
+    if not divergencias:
+        return ""
+    partes = [
+        f"No PW, o Name diz {rotulo} {esperado}, mas a coluna {coluna} diz {valor}."
+        for rotulo, esperado, coluna, valor in divergencias
+    ]
+    return " ".join((*partes, "Corrija o atributo no PW ou reextraia."))
+
+
+def _mensagem_extracao_defeituosa():
+    return (
+        "A linha veio defeituosa da extração do PW (colunas fora do lugar). "
+        "Reextraia essa disciplina e importe de novo."
+    )
 
 
 def _valor_coluna(valores, indices, cabecalho):

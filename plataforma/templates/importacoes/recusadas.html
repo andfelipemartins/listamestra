@@ -20,13 +20,17 @@
 <section class="panel" id="previa-reprocessamento">
   <div class="panel-heading">
     <div>
+      {% if tipo_previa == "situacao_pw" %}
+      <span class="eyebrow">Prévia · Situação do PW</span>
+      {% else %}
       <span class="eyebrow">Prévia · {{ importacao_previa.indice.codigo }}</span>
+      {% endif %}
       <h2>Reprocessar com o perfil vigente</h2>
-      <p>{{ previa.arquivo_nome }} · {{ previa.linhas|length }} linhas recusadas reavaliadas</p>
+      <p>{{ previa.arquivo_nome }}</p>
     </div>
   </div>
   <p><strong>{{ linhas_validas }} agora são válidas</strong>; {{ linhas_fora }} continuam recusadas.</p>
-  {% if previa.linhas %}
+  {% if tipo_previa == "id" and previa.linhas %}
   <div class="table-wrap">
     <table>
       <thead><tr><th>Linha</th><th>Código</th><th>Resultado</th><th>Mensagem</th></tr></thead>
@@ -42,6 +46,30 @@
       </tbody>
     </table>
   </div>
+  {% endif %}
+  {% if tipo_previa == "situacao_pw" %}
+    {% if codigos_reprocessados and not previa.documentos %}
+    <p class="notice">O perfil atual aceita estes códigos, mas a importação antiga não guardou os dados de emissão. Importe uma nova extração do PW para registrar a situação.</p>
+    <ul>{% for codigo in codigos_reprocessados %}<li>{{ codigo }}</li>{% endfor %}</ul>
+    {% endif %}
+    {% if previa.documentos %}
+    <h3>Códigos aceitos pelo perfil</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Código base</th><th>Título</th><th>Emissões novas</th></tr></thead>
+      <tbody>{% for documento in previa.documentos %}
+        <tr><td>{{ documento.codigo_base }}</td><td>{{ documento.titulo }}</td><td>{{ documento.emissoes|length }}</td></tr>
+      {% endfor %}</tbody>
+    </table></div>
+    {% endif %}
+    {% if previa.linhas_invalidas %}
+    <h3>Linhas que continuam recusadas</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Linha</th><th>Código lido</th><th>Mensagem</th></tr></thead>
+      <tbody>{% for linha in previa.linhas_invalidas %}
+        <tr><td>{{ linha.numero_linha }}</td><td>{{ linha.codigo }}</td><td>{{ linha.mensagem }}</td></tr>
+      {% endfor %}</tbody>
+    </table></div>
+    {% endif %}
   {% endif %}
   <form method="post">
     {% csrf_token %}
@@ -69,7 +97,8 @@
   <p>{{ item.inconsistencias|length }} linha{{ item.inconsistencias|length|pluralize }} recusada{{ item.inconsistencias|length|pluralize }}.</p>
   {% for grupo in item.grupos %}
   <details class="recusadas-grupo">
-    <summary>{{ grupo.motivo }} — {{ grupo.linhas|length }} linha{{ grupo.linhas|length|pluralize }}</summary>
+    <summary>{{ grupo.titulo }} — {{ grupo.linhas|length }} linha{{ grupo.linhas|length|pluralize }}</summary>
+    <p>{{ grupo.instrucao }}</p>
     <div class="table-wrap">
       <table>
         <thead><tr><th>Linha</th><th>Código lido</th><th>Mensagem</th></tr></thead>
@@ -83,7 +112,42 @@
   </details>
   {% endfor %}
 </section>
-{% empty %}
-  {% if not previa %}<section class="panel"><p class="painel-sem-dados">Não há linhas recusadas pendentes neste contrato.</p></section>{% endif %}
 {% endfor %}
+
+{% for item in importacoes_situacao %}
+<section class="panel">
+  <div class="panel-heading">
+    <div>
+      <span class="eyebrow">Importação de situação do PW · {{ item.importacao.data_extracao|date:"d/m/Y" }}</span>
+      <h2>{{ item.importacao.arquivo_nome }}</h2>
+      <p>Importada em {{ item.importacao.importado_em|date:"d/m/Y H:i" }}</p>
+    </div>
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="importacao_situacao_id" value="{{ item.importacao.pk }}">
+      <button class="button button-primary" type="submit">Reprocessar com o perfil vigente</button>
+    </form>
+  </div>
+  <p>{{ item.inconsistencias|length }} linha{{ item.inconsistencias|length|pluralize }} recusada{{ item.inconsistencias|length|pluralize }}.</p>
+  {% for grupo in item.grupos %}
+  <details class="recusadas-grupo">
+    <summary>{{ grupo.titulo }} — {{ grupo.linhas|length }} linha{{ grupo.linhas|length|pluralize }}</summary>
+    <p>{{ grupo.instrucao }}</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Linha</th><th>Código lido</th><th>Mensagem</th></tr></thead>
+        <tbody>
+          {% for linha in grupo.linhas %}
+          <tr><td>{{ linha.numero_linha }}</td><td>{{ linha.codigo_lido|default:"—" }}</td><td>{{ linha.mensagem }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
+  {% endfor %}
+</section>
+{% endfor %}
+{% if not importacoes and not importacoes_situacao and not previa %}
+<section class="panel"><p class="painel-sem-dados">Não há linhas recusadas pendentes neste contrato.</p></section>
+{% endif %}
 {% endblock %}

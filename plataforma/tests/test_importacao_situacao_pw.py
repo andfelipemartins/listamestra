@@ -323,3 +323,74 @@ def test_tela_staff_preve_e_confirma_importacao_pw(client, contrato, perfil_mode
     assert Documento.objects.filter(contrato=contrato, fora_do_id=True).count() == 1
     assert ImportacaoSituacao.objects.filter(contrato=contrato).count() == 1
     assert Analise.objects.filter(emissao__documento__contrato=contrato).count() == 1
+
+
+@pytest.mark.django_db
+def test_reprocessa_recusa_situacao_com_perfil_vigente_e_resolve(contrato, perfil_modelo, client, django_user_model):
+    definicao_antiga = _json_compatibility(yaml.safe_load(METRO.read_text(encoding="utf-8")))
+    definicao_metro = _json_compatibility(yaml.safe_load(METRO.read_text(encoding="utf-8")))
+    classe = next(
+        campo for campo in definicao_antiga["codigo"]["segmentos"]
+        if campo.get("nome") == "classe"
+    )
+    classe["valores"].pop("A7")
+    sequencial = next(
+        campo for campo in definicao_antiga["codigo"]["segmentos"]
+        if campo.get("nome") == "sequencial"
+    )
+    sequencial["padrao_regex"] = r"\d{4}"
+    perfil_modelo.definicao = definicao_antiga
+    perfil_modelo.save(update_fields=["definicao"])
+
+    codigo_a7 = "DE-15.25.00.00-6A7-1001"
+    codigo_701 = "DE-15.25.00.00-6A1-701"
+    previa = previa_para(
+        criar_excel_pw([
+            _linha(codigo_a7, "1", 1, "Em Análise", "01/02/2025", ""),
+            _linha(codigo_701, "1", 1, "Em Análise", "02/02/2025", ""),
+        ]),
+        contrato,
+        perfil_modelo,
+    )
+    importacao = aplicar_previa_situacao_pw(
+        previa,
+        contrato=contrato,
+        perfil_modelo=perfil_modelo,
+    )
+    recusas = list(importacao.inconsistencias.order_by("numero_linha"))
+    assert len(recusas) == 2
+    assert all(item.categoria == "codigos_invalidos" and item.dados_linha for item in recusas)
+    assert all(item.resolvida_em is None for item in recusas)
+
+    perfil_atual = PerfilContrato.objects.create(
+        contrato=contrato,
+        versao=2,
+        vigencia_inicio=date(2026, 11, 19),
+        definicao=definicao_metro,
+    )
+    classe_atual = next(
+        campo for campo in perfil_atual.definicao["codigo"]["segmentos"]
+        if campo.get("nome") == "classe"
+    )
+    assert "A7" in classe_atual["valores"]
+
+    administrador = django_user_model.objects.create_superuser(
+        username="admin-reprocessa-situacao",
+        email="admin-reprocessa-situacao@example.com",
+        password="senha-segura",
+    )
+    client.force_login(administrador)
+    url = reverse("linhas_recusadas", args=(contrato.pk,))
+
+    resposta = client.post(url, {"importacao_situacao_id": importacao.pk})
+
+    assert resposta.status_code == 200
+    assert b"2 agora s\xc3\xa3o v\xc3\xa1lidas" in resposta.content
+    resposta = client.post(url, {"acao": "confirmar_reprocessamento"}, follow=True)
+
+    assert resposta.status_code == 200
+    for recusa in recusas:
+        recusa.refresh_from_db()
+        assert recusa.resolvida_em is not None
+    assert Documento.objects.filter(contrato=contrato).count() == 2
+    assert Emissao.objects.filter(documento__contrato=contrato, revisao="1", versao=1).count() == 2

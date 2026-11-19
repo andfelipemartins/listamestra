@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import date, datetime
+from io import BytesIO
 from pathlib import Path
 from typing import BinaryIO, Iterable, Mapping
 import re
@@ -11,7 +12,7 @@ import unicodedata
 import warnings
 from zipfile import BadZipFile
 
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
 from openpyxl.utils.datetime import from_excel
 from openpyxl.utils.exceptions import InvalidFileException
 
@@ -114,6 +115,8 @@ class LinhaInvalidaPW:
     caixa_falhou: str
     mensagem: str
     fora_do_id: bool = False
+    categoria: str = "dados_invalidos"
+    dados_linha: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -257,6 +260,8 @@ def gerar_previa_situacao_pw(
                         caixa,
                         interpretado.mensagem,
                         fora_do_id=_normalizar_codigo(codigo) not in previstos,
+                        categoria="codigos_invalidos",
+                        dados_linha=_dados_linha_recusada(dados, partes),
                     )
                 )
                 continue
@@ -272,6 +277,8 @@ def gerar_previa_situacao_pw(
                         caixa,
                         f"{caixa} vazio ou inválido.",
                         fora_do_id=_normalizar_codigo(codigo) not in previstos,
+                        categoria="dados_invalidos",
+                        dados_linha=_dados_linha_recusada(dados, partes),
                     )
                 )
                 continue
@@ -284,6 +291,8 @@ def gerar_previa_situacao_pw(
                         "Data Real da Emissão",
                         "A data de emissão está vazia ou inválida.",
                         fora_do_id=_normalizar_codigo(codigo) not in previstos,
+                        categoria="dados_invalidos",
+                        dados_linha=_dados_linha_recusada(dados, partes),
                     )
                 )
                 continue
@@ -405,7 +414,100 @@ def gerar_previa_situacao_pw(
         workbook.close()
 
 
-def aplicar_previa_situacao_pw(previa: PreviaSituacaoPW, *, contrato, perfil_modelo, usuario=None):
+def gerar_previa_linhas_recusadas_situacao_pw(
+    inconsistencias,
+    *,
+    nome_arquivo: str,
+    contrato_id: int,
+    perfil_id: int,
+    perfil,
+    data_extracao: date,
+    documentos_existentes: Mapping[str, Mapping[str, object]] | None = None,
+    identificadores_previstos: Iterable[str] = (),
+    emissoes_existentes: Iterable[tuple[str, str, int | None]] = (),
+    analises_existentes: Iterable[tuple[str, str, int | None, str, date | None, str]] = (),
+    situacoes_vigentes: Mapping[str, str] | None = None,
+) -> PreviaSituacaoPW:
+    """Reinterpreta linhas recusadas do PW com os valores guardados na importação."""
+    inconsistencias = list(inconsistencias)
+    linhas = [
+        inconsistencia.dados_linha
+        for inconsistencia in inconsistencias
+        if inconsistencia.dados_linha
+    ]
+    if not linhas:
+        raise ErroFormatoSituacaoPW("As linhas antigas não guardam dados suficientes para reprocessar.")
+
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.append([*COLUNAS_CAIXAS.values(), *COLUNAS_OBRIGATORIAS.values()])
+    for dados in linhas:
+        worksheet.append([
+            dados.get(nome)
+            for nome in (*COLUNAS_CAIXAS.keys(), *COLUNAS_OBRIGATORIAS.keys())
+        ])
+    arquivo = BytesIO()
+    workbook.save(arquivo)
+    workbook.close()
+    arquivo.seek(0)
+    previa = gerar_previa_situacao_pw(
+        arquivo,
+        nome_arquivo=nome_arquivo,
+        contrato_id=contrato_id,
+        perfil_id=perfil_id,
+        perfil=perfil,
+        data_extracao=data_extracao,
+        documentos_existentes=documentos_existentes,
+        identificadores_previstos=identificadores_previstos,
+        emissoes_existentes=emissoes_existentes,
+        analises_existentes=analises_existentes,
+        situacoes_vigentes=situacoes_vigentes,
+    )
+    numeros_originais = [
+        inconsistencia.numero_linha
+        for inconsistencia in inconsistencias
+        if inconsistencia.dados_linha
+    ]
+    numeros_reprocessados = {
+        indice + 2: numero
+        for indice, numero in enumerate(numeros_originais)
+    }
+    return replace(
+        previa,
+        linhas_invalidas=tuple(
+            replace(
+                linha,
+                numero_linha=numeros_reprocessados.get(linha.numero_linha, linha.numero_linha),
+            )
+            for linha in previa.linhas_invalidas
+        ),
+    )
+
+
+def _dados_linha_recusada(dados, partes):
+    return {
+        nome: _valor_json(valor)
+        for nome, valor in {**partes, **dados}.items()
+    }
+
+
+def _valor_json(valor):
+    if isinstance(valor, (date, datetime)):
+        return valor.isoformat()
+    if valor is None or isinstance(valor, (str, int, float, bool)):
+        return valor
+    return str(valor)
+
+
+def aplicar_previa_situacao_pw(
+    previa: PreviaSituacaoPW,
+    *,
+    contrato,
+    perfil_modelo,
+    usuario=None,
+    inconsistencias_existentes=None,
+    codigos_reprocessados=(),
+):
     """Grava a prévia, com transação, emissão/analise idempotentes e inconsistências rastreáveis."""
     from django.db import transaction
     from django.utils import timezone
@@ -413,37 +515,111 @@ def aplicar_previa_situacao_pw(previa: PreviaSituacaoPW, *, contrato, perfil_mod
     from documentos.models import Analise, CodigoDocumento, Documento, Emissao
     from .models import ImportacaoSituacao, InconsistenciaImportacao
 
+    reprocessamento = inconsistencias_existentes is not None
+    inconsistencias_existentes = list(inconsistencias_existentes or ())
     if previa.contrato_id != contrato.pk or perfil_modelo.contrato_id != contrato.pk:
         raise ValueError("A prévia, o perfil e o contrato precisam ser os mesmos.")
     if previa.perfil_id != perfil_modelo.pk:
         raise ValueError("O perfil vigente mudou. Gere uma nova prévia antes de confirmar.")
 
     with transaction.atomic():
-        importacao, _ = ImportacaoSituacao.objects.update_or_create(
-            contrato=contrato,
-            data_extracao=previa.data_extracao,
-            arquivo_nome=previa.arquivo_nome,
-            defaults={
-                "importado_por": usuario,
-                "importado_em": timezone.now(),
-                "documentos": len(previa.documentos),
-                "emissoes": previa.emissoes_novas,
-                "analises_explicitas": previa.analises_explicitas,
-                "analises_deduzidas": previa.analises_deduzidas,
-                "historicos_truncados": len(previa.historicos_truncados),
-                "fora_do_id": previa.documentos_fora_do_id,
-                "linhas_invalidas": len(previa.linhas_invalidas),
-            },
-        )
-        importacao.inconsistencias.all().delete()
-        for linha in previa.linhas_invalidas:
-            InconsistenciaImportacao.objects.create(
-                importacao_situacao=importacao,
-                numero_linha=linha.numero_linha,
-                codigo_lido=linha.codigo,
-                caixa_falhou=linha.caixa_falhou,
-                mensagem=linha.mensagem,
+        chave_importacao = {
+            "contrato": contrato,
+            "data_extracao": previa.data_extracao,
+            "arquivo_nome": previa.arquivo_nome,
+        }
+        if reprocessamento:
+            importacao = ImportacaoSituacao.objects.filter(**chave_importacao).first()
+            if importacao is None or any(
+                item.importacao_situacao_id != importacao.pk
+                for item in inconsistencias_existentes
+            ):
+                raise ValueError("As linhas recusadas não pertencem à importação de situação desta prévia.")
+        else:
+            importacao, _ = ImportacaoSituacao.objects.update_or_create(
+                **chave_importacao,
+                defaults={
+                    "importado_por": usuario,
+                    "importado_em": timezone.now(),
+                    "documentos": len(previa.documentos),
+                    "emissoes": previa.emissoes_novas,
+                    "analises_explicitas": previa.analises_explicitas,
+                    "analises_deduzidas": previa.analises_deduzidas,
+                    "historicos_truncados": len(previa.historicos_truncados),
+                    "fora_do_id": previa.documentos_fora_do_id,
+                    "linhas_invalidas": len(previa.linhas_invalidas),
+                },
             )
+
+        codigos_validos = {
+            _normalizar_codigo(codigo)
+            for codigo in codigos_reprocessados
+            if _normalizar_codigo(codigo)
+        }
+        for documento in previa.documentos:
+            codigos_validos.add(_normalizar_codigo(documento.codigo_base))
+            codigos_validos.add(_normalizar_codigo(documento.identificador_base))
+        if codigos_validos:
+            abertas = InconsistenciaImportacao.objects.filter(
+                importacao_situacao__contrato=contrato,
+                resolvida_em__isnull=True,
+            )
+            agora = timezone.now()
+            for inconsistencia in abertas:
+                if _normalizar_codigo(inconsistencia.codigo_lido) in codigos_validos:
+                    inconsistencia.resolvida_em = agora
+                    inconsistencia.save(update_fields=("resolvida_em",))
+
+        if reprocessamento:
+            linhas_invalidas = {
+                _normalizar_codigo(linha.codigo): linha
+                for linha in previa.linhas_invalidas
+                if _normalizar_codigo(linha.codigo)
+            }
+            for inconsistencia in inconsistencias_existentes:
+                if inconsistencia.resolvida_em is not None:
+                    continue
+                linha = linhas_invalidas.get(_normalizar_codigo(inconsistencia.codigo_lido))
+                if linha is None:
+                    continue
+                campos = {
+                    "categoria": linha.categoria,
+                    "caixa_falhou": linha.caixa_falhou,
+                    "mensagem": linha.mensagem,
+                    "dados_linha": linha.dados_linha or {},
+                }
+                alterados = []
+                for nome, valor in campos.items():
+                    if getattr(inconsistencia, nome) != valor:
+                        setattr(inconsistencia, nome, valor)
+                        alterados.append(nome)
+                if alterados:
+                    inconsistencia.save(update_fields=alterados)
+
+        if not reprocessamento:
+            existentes_abertas = {
+                (item.numero_linha, _normalizar_codigo(item.codigo_lido)): item
+                for item in importacao.inconsistencias.filter(resolvida_em__isnull=True)
+            }
+            for linha in previa.linhas_invalidas:
+                chave = (linha.numero_linha, _normalizar_codigo(linha.codigo))
+                inconsistencia = existentes_abertas.pop(chave, None)
+                if inconsistencia is None:
+                    InconsistenciaImportacao.objects.create(
+                        importacao_situacao=importacao,
+                        numero_linha=linha.numero_linha,
+                        codigo_lido=linha.codigo,
+                        categoria=linha.categoria,
+                        caixa_falhou=linha.caixa_falhou,
+                        mensagem=linha.mensagem,
+                        dados_linha=linha.dados_linha or {},
+                    )
+                    continue
+                inconsistencia.categoria = linha.categoria
+                inconsistencia.caixa_falhou = linha.caixa_falhou
+                inconsistencia.mensagem = linha.mensagem
+                inconsistencia.dados_linha = linha.dados_linha or {}
+                inconsistencia.save(update_fields=("categoria", "caixa_falhou", "mensagem", "dados_linha"))
 
         for item in previa.documentos:
             documento = Documento.objects.filter(

@@ -172,6 +172,7 @@ def test_previa_classifica_linhas_e_aponta_a_caixa_invalida(contrato, perfil_mod
         "ja_existentes": 1,
         "titulos_divergentes": 1,
         "codigos_invalidos": 1,
+        "atributos_divergentes": 0,
         "linhas_ilegiveis": 0,
         "excluidos": 1,
     }
@@ -295,8 +296,10 @@ def test_recusas_ficam_agrupadas_por_caixa_e_valor_e_exigem_acesso(contrato, per
 
     assert resposta.status_code == 200
     html = resposta.content.decode()
-    assert "classe e subclasse = A7 — 2 linhas" in html
+    assert "Código inválido — 2 linhas" in html
     assert "Linha ilegível — 1 linha" in html
+    assert "Corrija o código na planilha ou no PW e importe de novo." in html
+    assert "Descartar" not in html
     assert "ID-RECUSAS" in html
     assert "importada em" in html
 
@@ -480,7 +483,7 @@ def test_detecta_extracao_pw_e_usa_data_como_revisao(contrato, perfil_modelo):
 
 
 @pytest.mark.django_db
-def test_linha_com_caixas_pw_deslocadas_vira_ilegivel(contrato, perfil_modelo):
+def test_linha_com_atributo_pw_divergente_aponta_coluna(contrato, perfil_modelo):
     previa = previa_para(
         criar_excel_id(
             [
@@ -499,8 +502,9 @@ def test_linha_com_caixas_pw_deslocadas_vira_ilegivel(contrato, perfil_modelo):
         data=date(2026, 11, 18),
     )
 
-    assert previa.contagens["linhas_ilegiveis"] == 1
-    assert "deslocada" in previa.linhas[0].mensagem
+    assert previa.contagens["atributos_divergentes"] == 1
+    assert "Name diz classe e subclasse A1" in previa.linhas[0].mensagem
+    assert "diz B1" in previa.linhas[0].mensagem
 
 
 @pytest.mark.django_db
@@ -536,3 +540,73 @@ def test_tela_staff_mostra_previa_htmx_e_confirma_importacao(client, contrato, p
     assert IndiceDocumentos.objects.get().importado_por == administrador
     assert ItemPrevisto.objects.count() == 1
     assert b"importado com 1 linhas v\xc3\xa1lidas" in resposta.content
+
+
+@pytest.mark.django_db
+def test_extracao_pw_separa_linha_defeituosa_de_atributos_divergentes(contrato, perfil_modelo):
+    codigo = "DE-15.25.00.00-6A1-1009"
+    previa = previa_para(
+        criar_excel_id(
+            [
+                {"titulo": "Documento com Name inválido", "codigo": "19/11/2026"},
+                {"titulo": "", "codigo": codigo, "tipo": ""},
+                {"titulo": "Sigla divergente", "codigo": codigo, "tipo": "RT", "sequencial": "1009"},
+                {"titulo": "Sequencial divergente", "codigo": codigo, "sequencial": "1006"},
+            ],
+            formato="extracao_pw",
+        ),
+        contrato,
+        perfil_modelo,
+    )
+
+    assert [linha.categoria for linha in previa.linhas] == [
+        "linhas_ilegiveis",
+        "linhas_ilegiveis",
+        "atributos_divergentes",
+        "atributos_divergentes",
+    ]
+    assert previa.linhas[0].mensagem == (
+        "A linha veio defeituosa da extração do PW (colunas fora do lugar). "
+        "Reextraia essa disciplina e importe de novo."
+    )
+    assert previa.linhas[1].mensagem == previa.linhas[0].mensagem
+    assert previa.linhas[2].mensagem == (
+        "No PW, o Name diz tipo documental DE, mas a coluna Sigla diz RT. "
+        "Corrija o atributo no PW ou reextraia."
+    )
+    assert previa.linhas[3].mensagem == (
+        "No PW, o Name diz sequencial 1009, mas a coluna Sequencial diz 1006. "
+        "Corrija o atributo no PW ou reextraia."
+    )
+
+
+@pytest.mark.django_db
+def test_importacao_correta_resolve_recusa_pw_anterior_com_mesmo_codigo(contrato, perfil_modelo):
+    codigo = "DE-15.25.00.00-6A1-1009"
+    previa_incorreta = previa_para(
+        criar_excel_id(
+            [{"titulo": "Documento de teste", "codigo": codigo, "sequencial": "1006"}],
+            formato="extracao_pw",
+        ),
+        contrato,
+        perfil_modelo,
+        codigo="ID-PW-CORRECAO",
+    )
+    indice = aplicar_previa(previa_incorreta, contrato=contrato, perfil_modelo=perfil_modelo)
+    recusa = InconsistenciaImportacao.objects.get(importacao_id__indice=indice)
+    assert recusa.categoria == "atributos_divergentes"
+    assert recusa.resolvida_em is None
+
+    previa_correta = previa_para(
+        criar_excel_id(
+            [{"titulo": "Documento de teste", "codigo": codigo, "sequencial": "1009"}],
+            formato="extracao_pw",
+        ),
+        contrato,
+        perfil_modelo,
+        codigo="ID-PW-CORRECAO",
+    )
+    aplicar_previa(previa_correta, contrato=contrato, perfil_modelo=perfil_modelo)
+
+    recusa.refresh_from_db()
+    assert recusa.resolvida_em is not None

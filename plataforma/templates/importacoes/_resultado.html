@@ -13,12 +13,16 @@
   <p class="notice">{{ previa.linhas_validas }} linhas serão importadas, {{ previa.linhas_fora }} ficarão de fora (ver lista).</p>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Linha</th><th>Categoria</th><th>Código</th><th>Título</th><th>Excluído</th><th>Caixa / detalhe</th></tr></thead>
+      <thead><tr><th>Linha</th><th>Categoria e próximo passo</th><th>Código</th><th>Título</th><th>Excluído</th><th>Detalhe</th></tr></thead>
       <tbody>
       {% for linha in previa.linhas %}
         <tr>
           <td>{{ linha.numero_linha }}</td>
-          <td>{{ linha.categoria_display }}</td>
+          <td>
+            {{ linha.categoria_display }}
+            {% if linha.categoria == "atributos_divergentes" %}<br><small>Corrija o atributo no PW ou reextraia.</small>{% endif %}
+            {% if linha.categoria == "linhas_ilegiveis" and previa.formato == "extracao_pw" %}<br><small>Reextraia a disciplina e importe de novo.</small>{% endif %}
+          </td>
           <td>{{ linha.codigo }}</td>
           <td>{{ linha.titulo }}</td>
           <td>{% if linha.excluido %}Sim{% else %}Não{% endif %}</td>
