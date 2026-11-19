@@ -1,17 +1,20 @@
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import date, timedelta
 from math import ceil
 
 from django.db.models import F, Prefetch
 from django.utils import timezone
 
 from core.perfil import ErroPerfil, perfil_de_dict
+from core.perfil.feriados import feriados_nacionais
 from core.perfil.indicadores import (
     DocumentoIndicador,
     EmissaoIndicador,
     calcular_indicador_aprovacao,
 )
 from core.perfil.painel import classificar, resolver_situacao_oculta, resumir
+from core.perfil.prazos import avaliar as avaliar_prazo, indicador as resumir_prazos
 from contratos.models import PerfilContrato
 from documentos.models import Analise, Documento, Emissao
 from importacoes.models import ImportacaoID, ImportacaoSituacao, ItemPrevisto
@@ -31,7 +34,8 @@ class DocumentoPainel:
 
 def carregar_painel(contrato, por=None, filtros=None):
     """Monta o resumo e os recortes do painel conforme o perfil vigente."""
-    perfil_modelo = PerfilContrato.perfil_vigente(contrato, timezone.localdate())
+    hoje = timezone.localdate()
+    perfil_modelo = PerfilContrato.perfil_vigente(contrato, hoje)
     if perfil_modelo is None:
         raise PainelIndisponivel("Este contrato ainda não tem um perfil vigente.")
     try:
@@ -119,6 +123,14 @@ def carregar_painel(contrato, por=None, filtros=None):
     nomes_caixas = {caixa.nome for caixa in caixas}
     caixa_selecionada = por if por in nomes_caixas else caixas[0].nome
     definicao_caixa = next(caixa for caixa in caixas if caixa.nome == caixa_selecionada)
+
+    indicadores_prazo, analises_deduzidas_sem_data = _calcular_indicadores_prazo(
+        perfil,
+        documentos_filtrados,
+        caixa_selecionada,
+        definicao_caixa,
+        hoje,
+    )
 
     indicadores_aprovacao = []
     for indicador in perfil.painel.indicadores:
@@ -246,7 +258,191 @@ def carregar_painel(contrato, por=None, filtros=None):
         "recortes": recortes,
         "grupos_recorte": grupos_recorte,
         "indicadores_aprovacao": indicadores_aprovacao,
+        "indicadores_prazo": indicadores_prazo,
+        "analises_deduzidas_sem_data": analises_deduzidas_sem_data,
     }
+
+
+def _calcular_indicadores_prazo(perfil, documentos, caixa_selecionada, definicao_caixa, hoje):
+    prazos = perfil.prazos
+    if prazos is None or not prazos.regras:
+        return [], 0
+
+    feriados = _feriados_prazo(prazos, documentos, hoje)
+    indicadores = []
+    analises_sem_data = set()
+    recortes_documentos = {}
+    for item in documentos:
+        valor = _valor_caixa(item.documento, caixa_selecionada) or "(sem informação)"
+        recortes_documentos.setdefault(
+            valor, (definicao_caixa.valores or {}).get(valor, valor)
+        )
+
+    for regra in prazos.regras:
+        avaliacoes = []
+        por_recorte = {valor: [] for valor in recortes_documentos}
+        for item in documentos:
+            registro, sem_data = _avaliacoes_da_regra(
+                perfil, regra, item.documento, hoje, feriados
+            )
+            analises_sem_data.update(sem_data)
+            valor = _valor_caixa(item.documento, caixa_selecionada) or "(sem informação)"
+            for avaliacao in registro:
+                avaliacoes.append(avaliacao)
+                por_recorte[valor].append(avaliacao)
+
+        geral = _resumo_prazo(avaliacoes)
+        recortes = []
+        for valor, rotulo in sorted(
+            recortes_documentos.items(), key=lambda item: item[1].casefold()
+        ):
+            resumo = _resumo_prazo(por_recorte[valor])
+            recortes.append({"valor": valor, "rotulo": rotulo, **resumo})
+        indicadores.append(
+            {
+                "regra": regra,
+                **geral,
+                "recortes": recortes,
+            }
+        )
+
+    return indicadores, len(analises_sem_data)
+
+
+def _avaliacoes_da_regra(perfil, regra, documento, hoje, feriados):
+    emissoes = sorted(
+        documento.emissoes.all(), key=lambda emissao: (emissao.data_emissao, emissao.pk)
+    )
+    analises_sem_data = set()
+    avaliacoes = []
+    sigla = _valor_caixa(documento, "tipo") or documento.tipo
+
+    if regra.inicio == "emissao" and regra.fim == "analise":
+        for emissao in emissoes:
+            analises = list(emissao.analises.all())
+            elegiveis = [
+                analise
+                for analise in analises
+                if _analise_no_grupo(perfil, regra, analise)
+            ]
+            analises_sem_data.update(
+                analise.pk
+                for analise in elegiveis
+                if analise.origem == Analise.Origem.DEDUZIDO_PW
+                and analise.data_analise is None
+            )
+            datadas = [analise for analise in elegiveis if analise.data_analise is not None]
+            if datadas:
+                analise_final = max(
+                    datadas, key=lambda analise: (analise.data_analise, analise.pk)
+                )
+                data_fim = analise_final.data_analise
+                grupo = classificar(perfil, analise_final.situacao).id
+            elif not analises and not regra.so_quando_grupo:
+                data_fim = None
+                grupo = None
+            else:
+                continue
+            avaliacao = avaliar_prazo(
+                regra,
+                emissao.data_emissao,
+                data_fim,
+                hoje,
+                sigla=sigla,
+                grupo=grupo,
+                feriados=feriados,
+            )
+            if avaliacao is not None:
+                avaliacoes.append(avaliacao)
+
+    elif regra.inicio == "analise" and regra.fim == "proxima_emissao":
+        for indice, emissao in enumerate(emissoes):
+            analises = [
+                analise
+                for analise in emissao.analises.all()
+                if _analise_no_grupo(perfil, regra, analise)
+            ]
+            analises_sem_data.update(
+                analise.pk
+                for analise in analises
+                if analise.origem == Analise.Origem.DEDUZIDO_PW
+                and analise.data_analise is None
+            )
+            datadas = [analise for analise in analises if analise.data_analise is not None]
+            if not datadas:
+                continue
+            analise_revisao = max(
+                datadas, key=lambda analise: (analise.data_analise, analise.pk)
+            )
+            proxima_emissao = emissoes[indice + 1] if indice + 1 < len(emissoes) else None
+            avaliacao = avaliar_prazo(
+                regra,
+                analise_revisao.data_analise,
+                proxima_emissao.data_emissao if proxima_emissao else None,
+                hoje,
+                sigla=sigla,
+                grupo=classificar(perfil, analise_revisao.situacao).id,
+                feriados=feriados,
+            )
+            if avaliacao is not None:
+                avaliacoes.append(avaliacao)
+
+    return avaliacoes, analises_sem_data
+
+
+def _analise_no_grupo(perfil, regra, analise):
+    if not regra.so_quando_grupo:
+        return True
+    grupo = classificar(perfil, analise.situacao).id
+    return grupo.casefold() in {valor.casefold() for valor in regra.so_quando_grupo}
+
+
+def _resumo_prazo(avaliacoes):
+    resumo = resumir_prazos(avaliacoes)
+    return {
+        "percentual": resumo.percentual_cumprido if resumo.base else None,
+        "tem_dados": bool(resumo.base),
+        "dentro": resumo.dentro,
+        "fora": resumo.fora,
+        "base": resumo.base,
+        "atrasos_abertos": sum(
+            avaliacao is not None and avaliacao.situacao == "aberto_atrasado"
+            for avaliacao in avaliacoes
+        ),
+    }
+
+
+def _feriados_prazo(prazos, documentos, hoje):
+    extras = {feriado.data for feriado in prazos.feriados.extras}
+    if not prazos.feriados.nacionais:
+        return extras
+
+    max_dias = max(
+        (
+            dias
+            for regra in prazos.regras
+            for dias in (regra.dias, *(excecao.dias for excecao in regra.excecoes))
+        ),
+        default=0,
+    )
+    datas_inicio = [hoje]
+    for item in documentos:
+        for emissao in item.documento.emissoes.all():
+            datas_inicio.append(emissao.data_emissao)
+            datas_inicio.extend(
+                analise.data_analise
+                for analise in emissao.analises.all()
+                if analise.data_analise is not None
+            )
+
+    anos = set()
+    dias_calendario = max_dias * 2 + 14
+    for inicio in datas_inicio:
+        ano_final = min(9999, (inicio + timedelta(days=dias_calendario)).year)
+        anos.update(range(inicio.year, ano_final + 1))
+    return extras.union(
+        data for ano in anos for data in feriados_nacionais(ano)
+    )
 
 
 def _filtros_disponiveis(caixas, documentos):

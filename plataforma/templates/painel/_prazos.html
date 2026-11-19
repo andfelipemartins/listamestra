@@ -1,0 +1,50 @@
+<section class="panel painel-indicador" aria-labelledby="painel-prazos-titulo">
+  <div class="painel-indicador-topo">
+    <div>
+      <span class="eyebrow">ACOMPANHAMENTO EXECUTIVO</span>
+      <h2 id="painel-prazos-titulo">Prazos</h2>
+      <p class="painel-indicador-geral">Cumprimento das regras configuradas no perfil vigente</p>
+    </div>
+    <p class="painel-indicador-legenda">Meta: {{ perfil.prazos.meta_percentual|floatformat:0 }}%</p>
+  </div>
+
+  <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap:12px">
+    {% for indicador in indicadores_prazo %}
+    <article class="painel-indicador" style="margin-top:0" aria-labelledby="painel-prazo-titulo-{{ forloop.counter }}">
+      <div class="painel-indicador-topo">
+        <div>
+          <h3 id="painel-prazo-titulo-{{ forloop.counter }}">{{ indicador.regra.rotulo }}</h3>
+          <p class="painel-indicador-geral">
+            {% if indicador.tem_dados %}<strong>{{ indicador.percentual|floatformat:1 }}%</strong> no prazo{% else %}<strong>Sem dados</strong> para calcular{% endif %}
+          </p>
+        </div>
+        <p class="painel-indicador-legenda">Dentro: {{ indicador.dentro }} · Fora: {{ indicador.fora }} · Base: {{ indicador.base }} · Atrasos em aberto: {{ indicador.atrasos_abertos }}</p>
+      </div>
+
+      <div class="painel-progresso" role="progressbar" aria-label="{{ indicador.regra.rotulo }} no prazo" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{% if indicador.tem_dados %}{{ indicador.percentual|floatformat:0 }}{% else %}0{% endif %}" style="position:relative; height:14px; overflow:visible; margin-top:14px">
+        <span style="width:{% if indicador.tem_dados %}{{ indicador.percentual }}{% else %}0{% endif %}%; background:var(--chart-green)"></span>
+        <i aria-hidden="true" style="position:absolute; top:-4px; bottom:-4px; left:{{ perfil.prazos.meta_percentual }}%; border-left:2px dashed var(--indicador-meta)"></i>
+      </div>
+      <p class="painel-indicador-legenda" style="margin-top:7px; text-align:left">Linha tracejada: Meta {{ perfil.prazos.meta_percentual|floatformat:0 }}%</p>
+
+      <details class="painel-dados-tabulares" {% if forloop.first %}open{% endif %}>
+        <summary>Números por {{ rotulo_caixa }}</summary>
+        <div class="table-wrap"><table>
+          <thead><tr><th>{{ rotulo_caixa }}</th><th>No prazo</th><th>Dentro</th><th>Fora</th><th>Base</th><th>Atrasos em aberto</th></tr></thead>
+          <tbody>
+            {% for recorte in indicador.recortes %}
+            <tr>
+              <th scope="row">{{ recorte.rotulo }}</th>
+              <td>{% if recorte.tem_dados %}{{ recorte.percentual|floatformat:1 }}%{% else %}—{% endif %}</td>
+              <td>{{ recorte.dentro }}</td><td>{{ recorte.fora }}</td><td>{{ recorte.base }}</td><td>{{ recorte.atrasos_abertos }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table></div>
+      </details>
+    </article>
+    {% endfor %}
+  </div>
+
+  {% if analises_deduzidas_sem_data %}<p class="painel-indicador-legenda" style="margin-top:12px; text-align:left">Análises deduzidas sem data excluídas dos prazos: {{ analises_deduzidas_sem_data }}.</p>{% endif %}
+</section>

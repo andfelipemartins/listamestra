@@ -398,7 +398,7 @@ def test_indicador_mostra_distribuicao_vertical_e_linha_meta_no_limite(
     assert "var(--blue)" in html
     assert "var(--indicador-alerta)" in html
     assert "Meta</th>" not in html
-    assert "80%" not in html
+    assert "Meta: 80%" in html
     assert "Dentro do limite: 1" in html
     assert "Fora do limite: 1" in html
 
@@ -492,6 +492,7 @@ def test_perfil_sem_indicador_nao_mostra_bloco_no_painel(
     contrato, perfil_modelo, client, django_user_model
 ):
     perfil_modelo.definicao["painel"].pop("indicadores", None)
+    perfil_modelo.definicao.pop("prazos", None)
     perfil_modelo.save(update_fields=("definicao",))
     usuario = django_user_model.objects.create_user(username="chefia-sem-indicador", password="senha")
     Participacao.objects.create(usuario=usuario, contrato=contrato, papel="chefia")
@@ -501,6 +502,146 @@ def test_perfil_sem_indicador_nao_mostra_bloco_no_painel(
 
     assert resposta.status_code == 200
     assert "painel-indicador" not in resposta.content.decode()
+    assert "Prazos" not in resposta.content.decode()
+
+
+@pytest.mark.django_db
+def test_indicador_prazos_cliente_usa_dias_uteis_feriados_e_filtros(
+    contrato, perfil_modelo, monkeypatch
+):
+    hoje = date(2026, 12, 30)
+    monkeypatch.setattr("painel.servicos.timezone.localdate", lambda: hoje)
+    perfil_modelo.definicao["prazos"]["feriados"]["extras"] = [
+        {"data": "2026-11-23", "nome": "Feriado municipal"}
+    ]
+    perfil_modelo.save(update_fields=("definicao",))
+    indice = _indice(contrato, "ID-PRAZOS-CLIENTE")
+    documentos = [
+        _documento(contrato, indice, 5401, tipo="DE"),
+        _documento(contrato, indice, 5402, tipo="DE"),
+        _documento(contrato, indice, 5403, tipo="MC"),
+    ]
+    for documento, fim in zip(
+        documentos,
+        (date(2026, 12, 14), date(2026, 12, 15), date(2026, 12, 15)),
+    ):
+        emissao = Emissao.objects.create(
+            documento=documento,
+            revisao="1",
+            versao=1,
+            fase=Emissao.Fase.PRELIMINAR,
+            data_emissao=date(2026, 11, 19),
+            origem=Emissao.Origem.CLIENTE,
+        )
+        Analise.objects.create(
+            emissao=emissao,
+            etapa="Análise do cliente",
+            situacao="Não Aprovado",
+            origem=Analise.Origem.IMPORTADO_PW,
+            data_analise=fim,
+        )
+
+    dados = carregar_painel(contrato, por="tipo", filtros={"tipo": "DE"})
+    indicador = next(
+        item for item in dados["indicadores_prazo"] if item["regra"].id == "analise_cliente"
+    )
+
+    assert indicador["dentro"] == 1
+    assert indicador["fora"] == 1
+    assert indicador["base"] == 2
+    assert indicador["percentual"] == 50
+    assert {item["rotulo"]: item["base"] for item in indicador["recortes"]} == {
+        "Desenho": 2
+    }
+    assert dados["analises_deduzidas_sem_data"] == 0
+
+
+@pytest.mark.django_db
+def test_indicador_prazos_devolucao_usa_analise_proxima_emissao_e_abertos(
+    contrato, perfil_modelo, monkeypatch, client, django_user_model
+):
+    hoje = date(2026, 12, 10)
+    monkeypatch.setattr("painel.servicos.timezone.localdate", lambda: hoje)
+    indice = _indice(contrato, "ID-PRAZOS-DEVOLUCAO")
+    concluido = _documento(contrato, indice, 5501, tipo="DE")
+    analise = Emissao.objects.create(
+        documento=concluido,
+        revisao="1",
+        versao=1,
+        fase=Emissao.Fase.PRELIMINAR,
+        data_emissao=date(2026, 11, 1),
+        origem=Emissao.Origem.CLIENTE,
+    )
+    Analise.objects.create(
+        emissao=analise,
+        etapa="Análise do cliente",
+        situacao="Não Aprovado",
+        origem=Analise.Origem.IMPORTADO_PW,
+        data_analise=date(2026, 11, 19),
+    )
+    Emissao.objects.create(
+        documento=concluido,
+        revisao="2",
+        versao=1,
+        fase=Emissao.Fase.PRELIMINAR,
+        data_emissao=date(2026, 12, 5),
+        origem=Emissao.Origem.CLIENTE,
+    )
+
+    aberto = _documento(contrato, indice, 5502, tipo="MC")
+    emissao_aberta = Emissao.objects.create(
+        documento=aberto,
+        revisao="1",
+        versao=1,
+        fase=Emissao.Fase.PRELIMINAR,
+        data_emissao=date(2026, 11, 1),
+        origem=Emissao.Origem.CLIENTE,
+    )
+    Analise.objects.create(
+        emissao=emissao_aberta,
+        etapa="Análise do cliente",
+        situacao="Não Aprovado",
+        origem=Analise.Origem.IMPORTADO_PW,
+        data_analise=date(2026, 11, 20),
+    )
+
+    sem_data = _documento(contrato, indice, 5503, tipo="DE")
+    emissao_sem_data = Emissao.objects.create(
+        documento=sem_data,
+        revisao="1",
+        versao=1,
+        fase=Emissao.Fase.PRELIMINAR,
+        data_emissao=date(2026, 11, 1),
+        origem=Emissao.Origem.CLIENTE,
+    )
+    Analise.objects.create(
+        emissao=emissao_sem_data,
+        etapa="Análise do cliente",
+        situacao="Não Aprovado",
+        origem=Analise.Origem.DEDUZIDO_PW,
+        data_analise=None,
+    )
+
+    dados = carregar_painel(contrato, por="tipo")
+    indicador = next(
+        item for item in dados["indicadores_prazo"] if item["regra"].id == "devolucao_nossa"
+    )
+    usuario = django_user_model.objects.create_user(username="chefia-prazos", password="senha")
+    Participacao.objects.create(usuario=usuario, contrato=contrato, papel="chefia")
+    client.force_login(usuario)
+    resposta = client.get(reverse("painel", args=(contrato.pk,)), {"por": "tipo"})
+
+    assert indicador["dentro"] == 0
+    assert indicador["fora"] == 2
+    assert indicador["base"] == 2
+    assert indicador["atrasos_abertos"] == 1
+    assert {item["rotulo"]: item["base"] for item in indicador["recortes"]} == {
+        "Desenho": 1,
+        "Memorial de cálculo": 1,
+    }
+    assert dados["analises_deduzidas_sem_data"] == 1
+    assert "Análises deduzidas sem data excluídas dos prazos: 1" in resposta.content.decode()
+    assert "Nossa devolução" in resposta.content.decode()
 
 
 @pytest.mark.django_db

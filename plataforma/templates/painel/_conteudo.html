@@ -72,6 +72,8 @@
   <div id="painel-recortes">{% include "painel/_recortes.html" %}</div>
 </section>
 
+{% if indicadores_prazo %}{% include "painel/_prazos.html" %}{% endif %}
+
 {% if estados_nao_mapeados %}
 <section class="notice painel-nao-mapeado" role="status">
   <strong>{{ estados_nao_mapeados|length }} estados do PW não mapeados</strong>
