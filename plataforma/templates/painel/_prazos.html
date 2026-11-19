@@ -1,3 +1,4 @@
+{% load l10n %}
 <section class="panel painel-indicador" aria-labelledby="painel-prazos-titulo">
   <div class="painel-indicador-topo">
     <div>
@@ -5,7 +6,7 @@
       <h2 id="painel-prazos-titulo">Prazos</h2>
       <p class="painel-indicador-geral">Cumprimento das regras configuradas no perfil vigente</p>
     </div>
-    <p class="painel-indicador-legenda">Meta: {{ perfil.prazos.meta_percentual|floatformat:0 }}%</p>
+    {% if meta_prazo_percentual != None %}<p class="painel-indicador-legenda">Meta: {{ meta_prazo_percentual|floatformat:0 }}%</p>{% endif %}
   </div>
 
   <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap:12px">
@@ -22,10 +23,10 @@
       </div>
 
       <div class="painel-progresso" role="progressbar" aria-label="{{ indicador.regra.rotulo }} no prazo" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{% if indicador.tem_dados %}{{ indicador.percentual|floatformat:0 }}{% else %}0{% endif %}" style="position:relative; height:14px; overflow:visible; margin-top:14px">
-        <span style="width:{% if indicador.tem_dados %}{{ indicador.percentual }}{% else %}0{% endif %}%; background:var(--chart-green)"></span>
-        <i aria-hidden="true" style="position:absolute; top:-4px; bottom:-4px; left:{{ perfil.prazos.meta_percentual }}%; border-left:2px dashed var(--indicador-meta)"></i>
+        <span style="width:{% if indicador.tem_dados %}{{ indicador.percentual|unlocalize }}{% else %}0{% endif %}%; background:var(--chart-green)"></span>
+        {% if meta_prazo_percentual != None %}<i aria-hidden="true" style="position:absolute; top:-4px; bottom:-4px; left:{{ meta_prazo_percentual|unlocalize }}%; border-left:2px dashed var(--indicador-meta)"></i>{% endif %}
       </div>
-      <p class="painel-indicador-legenda" style="margin-top:7px; text-align:left">Linha tracejada: Meta {{ perfil.prazos.meta_percentual|floatformat:0 }}%</p>
+      {% if meta_prazo_percentual != None %}<p class="painel-indicador-legenda" style="margin-top:7px; text-align:left">Linha tracejada: Meta {{ meta_prazo_percentual|floatformat:0 }}%</p>{% endif %}
 
       <details class="painel-dados-tabulares" {% if forloop.first %}open{% endif %}>
         <summary>Números por {{ rotulo_caixa }}</summary>
@@ -44,6 +45,20 @@
       </details>
     </article>
     {% endfor %}
+
+    {% if indicador_cronograma %}
+      {% include "painel/_cronograma.html" %}
+    {% elif user.is_staff %}
+    <article class="painel-indicador" style="margin-top:0" aria-labelledby="painel-cronograma-titulo">
+      <div class="painel-indicador-topo">
+        <div>
+          <h3 id="painel-cronograma-titulo">Cronograma de emissão</h3>
+          <p class="painel-indicador-geral"><strong>Nenhum cronograma importado</strong></p>
+        </div>
+      </div>
+      <p class="painel-indicador-legenda" style="text-align:left"><a href="{% url 'importar_cronograma' %}">Importar cronograma</a></p>
+    </article>
+    {% endif %}
   </div>
 
   {% if analises_deduzidas_sem_data %}<p class="painel-indicador-legenda" style="margin-top:12px; text-align:left">Análises deduzidas sem data excluídas dos prazos: {{ analises_deduzidas_sem_data }}.</p>{% endif %}

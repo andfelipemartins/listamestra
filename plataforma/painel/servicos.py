@@ -22,7 +22,13 @@ from core.perfil.painel import (
 from core.perfil.prazos import avaliar as avaliar_prazo, indicador as resumir_prazos
 from contratos.models import PerfilContrato
 from documentos.models import Analise, Documento, Emissao
-from importacoes.models import ImportacaoID, ImportacaoSituacao, ItemPrevisto
+from importacoes.cronograma import comparar_previsoes_cronograma
+from importacoes.models import (
+    ImportacaoID,
+    ImportacaoSituacao,
+    ItemPrevisto,
+    PrevisaoEmissao,
+)
 
 
 class PainelIndisponivel(ValueError):
@@ -147,6 +153,14 @@ def carregar_painel(contrato, por=None, filtros=None):
     )
 
     indicadores_prazo, analises_deduzidas_sem_data = _calcular_indicadores_prazo(
+        perfil,
+        documentos_filtrados,
+        caixa_selecionada,
+        definicao_caixa,
+        hoje,
+    )
+    indicador_cronograma = _calcular_indicador_cronograma(
+        contrato,
         perfil,
         documentos_filtrados,
         caixa_selecionada,
@@ -286,7 +300,86 @@ def carregar_painel(contrato, por=None, filtros=None):
         "grupos_recorte": grupos_recorte,
         "indicadores_aprovacao": indicadores_aprovacao,
         "indicadores_prazo": indicadores_prazo,
+        "indicador_cronograma": indicador_cronograma,
+        "meta_prazo_percentual": (
+            perfil.prazos.meta_percentual if perfil.prazos is not None else None
+        ),
         "analises_deduzidas_sem_data": analises_deduzidas_sem_data,
+    }
+
+
+def _calcular_indicador_cronograma(
+    contrato, perfil, documentos, caixa_selecionada, definicao_caixa, hoje
+):
+    if not PrevisaoEmissao.objects.filter(contrato=contrato).exists():
+        return None
+
+    documentos_por_id = {item.documento.pk: item.documento for item in documentos}
+    resultados = comparar_previsoes_cronograma(contrato, hoje=hoje)
+    recortes = {}
+    for documento in documentos_por_id.values():
+        valor = _valor_recorte(perfil, documento, caixa_selecionada) or "(sem informação)"
+        recortes.setdefault(
+            valor,
+            {
+                "valor": valor,
+                "rotulo": _rotulo_recorte(
+                    perfil, caixa_selecionada, valor, definicao_caixa
+                ),
+                "no_prazo": 0,
+                "atrasados": 0,
+                "vencidos_sem_emissao": 0,
+                "futuros": 0,
+                "previstos": 0,
+            },
+        )
+
+    contagens = {
+        "no_prazo": 0,
+        "atrasados": 0,
+        "vencidos_sem_emissao": 0,
+        "futuros": 0,
+        "previstos": 0,
+    }
+    chaves_status = {
+        "no_prazo": "no_prazo",
+        "atrasado": "atrasados",
+        "vencido_sem_emissao": "vencidos_sem_emissao",
+        "futuro": "futuros",
+    }
+    for resultado in resultados:
+        documento = documentos_por_id.get(resultado.previsao.documento_id)
+        if documento is None:
+            continue
+        chave = chaves_status[resultado.status]
+        contagens[chave] += 1
+        contagens["previstos"] += 1
+        valor = _valor_recorte(perfil, documento, caixa_selecionada) or "(sem informação)"
+        recortes[valor][chave] += 1
+        recortes[valor]["previstos"] += 1
+
+    base = contagens["no_prazo"] + contagens["atrasados"] + contagens["vencidos_sem_emissao"]
+    meta_percentual = perfil.prazos.meta_percentual if perfil.prazos is not None else None
+    for recorte in recortes.values():
+        recorte["base"] = (
+            recorte["no_prazo"]
+            + recorte["atrasados"]
+            + recorte["vencidos_sem_emissao"]
+        )
+        recorte["percentual"] = (
+            recorte["no_prazo"] * 100.0 / recorte["base"]
+            if recorte["base"]
+            else None
+        )
+        recorte["tem_dados"] = recorte["base"] > 0
+
+    return {
+        **contagens,
+        "base": base,
+        "percentual": contagens["no_prazo"] * 100.0 / base if base else None,
+        "tem_dados": base > 0,
+        "meta_percentual": meta_percentual,
+        "recortes": sorted(recortes.values(), key=lambda item: item["rotulo"].casefold()),
     }
 
 

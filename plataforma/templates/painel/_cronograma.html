@@ -1,0 +1,35 @@
+{% load l10n %}
+<article class="painel-indicador" style="margin-top:0" aria-labelledby="painel-cronograma-titulo">
+  <div class="painel-indicador-topo">
+    <div>
+      <h3 id="painel-cronograma-titulo">Cronograma de emissão</h3>
+      <p class="painel-indicador-geral">
+        {% if indicador_cronograma.tem_dados %}<strong>{{ indicador_cronograma.percentual|floatformat:1 }}%</strong> emitidos no prazo{% else %}<strong>Sem dados</strong> para calcular{% endif %}
+      </p>
+    </div>
+    <p class="painel-indicador-legenda">
+      Previstos: {{ indicador_cronograma.previstos }} · No prazo: {{ indicador_cronograma.no_prazo }} · Atrasados: {{ indicador_cronograma.atrasados }} · Vencidos sem emissão: {{ indicador_cronograma.vencidos_sem_emissao }} · Futuros (fora da base): {{ indicador_cronograma.futuros }} · Base: {{ indicador_cronograma.base }}
+    </p>
+  </div>
+
+  <div class="painel-progresso" role="progressbar" aria-label="Cronograma de emissão no prazo" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{% if indicador_cronograma.tem_dados %}{{ indicador_cronograma.percentual|floatformat:0 }}{% else %}0{% endif %}" style="position:relative; height:14px; overflow:visible; margin-top:14px">
+    <span style="width:{% if indicador_cronograma.tem_dados %}{{ indicador_cronograma.percentual|unlocalize }}{% else %}0{% endif %}%; background:var(--chart-green)"></span>
+    {% if indicador_cronograma.meta_percentual != None %}<i aria-hidden="true" style="position:absolute; top:-4px; bottom:-4px; left:{{ indicador_cronograma.meta_percentual|unlocalize }}%; border-left:2px dashed var(--indicador-meta)"></i>{% endif %}
+  </div>
+  {% if indicador_cronograma.meta_percentual != None %}<p class="painel-indicador-legenda" style="margin-top:7px; text-align:left">Linha tracejada: Meta {{ indicador_cronograma.meta_percentual|floatformat:0 }}%</p>{% endif %}
+
+  <details class="painel-dados-tabulares" open>
+    <summary>Números por {{ rotulo_caixa }}</summary>
+    <div class="table-wrap"><table>
+      <thead><tr><th>{{ rotulo_caixa }}</th><th>Previstos</th><th>No prazo</th><th>Atrasados</th><th>Vencidos sem emissão</th><th>Futuros</th><th>Base</th><th>% no prazo</th></tr></thead>
+      <tbody>
+        {% for recorte in indicador_cronograma.recortes %}
+        <tr>
+          <th scope="row">{{ recorte.rotulo }}</th>
+          <td>{{ recorte.previstos }}</td><td>{{ recorte.no_prazo }}</td><td>{{ recorte.atrasados }}</td><td>{{ recorte.vencidos_sem_emissao }}</td><td>{{ recorte.futuros }}</td><td>{{ recorte.base }}</td><td>{% if recorte.tem_dados %}{{ recorte.percentual|floatformat:1 }}%{% else %}—{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table></div>
+  </details>
+</article>

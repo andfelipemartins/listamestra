@@ -16,10 +16,12 @@ from contratos.models import Contrato, Participacao, PerfilContrato
 from documentos.models import Analise, Documento, Emissao
 from importacoes.models import (
     InconsistenciaImportacao,
+    ImportacaoCronograma,
     ImportacaoID,
     ImportacaoSituacao,
     IndiceDocumentos,
     ItemPrevisto,
+    PrevisaoEmissao,
 )
 from painel.servicos import carregar_painel
 
@@ -129,6 +131,23 @@ def _emissao_com_status(
         data_analise=data + timedelta(days=1),
     )
     return emissao
+
+
+def _previsoes_cronograma(contrato, previsoes):
+    importacao = ImportacaoCronograma.objects.create(
+        contrato=contrato,
+        arquivo_nome="cronograma.xlsx",
+        linhas_validas=len(previsoes),
+    )
+    return [
+        PrevisaoEmissao.objects.create(
+            contrato=contrato,
+            documento=documento,
+            data_prevista=data_prevista,
+            importacao=importacao,
+        )
+        for documento, data_prevista in previsoes
+    ]
 
 
 @pytest.mark.django_db
@@ -706,6 +725,160 @@ def test_indicador_prazos_devolucao_usa_analise_proxima_emissao_e_abertos(
     assert dados["analises_deduzidas_sem_data"] == 1
     assert "Análises deduzidas sem data excluídas dos prazos: 1" in resposta.content.decode()
     assert "Nossa devolução" in resposta.content.decode()
+
+
+@pytest.mark.django_db
+def test_indicador_cronograma_classifica_situacoes_e_exclui_futuros_da_base(
+    contrato, perfil_modelo, monkeypatch, client, django_user_model
+):
+    hoje = date(2026, 12, 10)
+    monkeypatch.setattr("painel.servicos.timezone.localdate", lambda: hoje)
+    indice = _indice(contrato, "ID-CRONOGRAMA-PAINEL")
+    no_prazo = _documento(contrato, indice, 8101)
+    atrasado = _documento(contrato, indice, 8102)
+    vencido = _documento(contrato, indice, 8103)
+    futuro = _documento(contrato, indice, 8104)
+    _previsoes_cronograma(
+        contrato,
+        [
+            (no_prazo, date(2026, 12, 9)),
+            (atrasado, date(2026, 12, 8)),
+            (vencido, date(2026, 12, 9)),
+            (futuro, hoje),
+        ],
+    )
+    Emissao.objects.create(
+        documento=no_prazo,
+        revisao="1",
+        versao=1,
+        fase=Emissao.Fase.PRELIMINAR,
+        data_emissao=date(2026, 12, 9),
+        origem=Emissao.Origem.CLIENTE,
+    )
+    Emissao.objects.create(
+        documento=atrasado,
+        revisao="1",
+        versao=1,
+        fase=Emissao.Fase.PRELIMINAR,
+        data_emissao=date(2026, 12, 9),
+        origem=Emissao.Origem.CLIENTE,
+    )
+
+    dados = carregar_painel(contrato)
+    indicador = dados["indicador_cronograma"]
+    usuario = django_user_model.objects.create_user(
+        username="chefia-cronograma", password="senha"
+    )
+    Participacao.objects.create(usuario=usuario, contrato=contrato, papel="chefia")
+    client.force_login(usuario)
+    html = client.get(reverse("painel", args=(contrato.pk,))).content.decode()
+
+    assert indicador["no_prazo"] == 1
+    assert indicador["atrasados"] == 1
+    assert indicador["vencidos_sem_emissao"] == 1
+    assert indicador["futuros"] == 1
+    assert indicador["previstos"] == 4
+    assert indicador["base"] == 3
+    assert indicador["percentual"] == pytest.approx(100 / 3)
+    assert indicador["meta_percentual"] == 80
+    texto = re.sub(r"\s+", " ", html)
+    assert "Cronograma de emissão" in texto
+    trecho_cronograma = texto[texto.index("Cronograma de emissão"):][:1200]
+    assert "emitidos no prazo" in trecho_cronograma, trecho_cronograma
+    assert "Futuros (fora da base): 1" in texto
+    assert "Base: 3" in texto
+    assert "Linha tracejada: Meta 80%" in texto
+    assert re.search(r"left:80(?:\.0)?%", html), re.findall(r"left.{0,40}", html)
+
+
+@pytest.mark.django_db
+def test_indicador_cronograma_respeita_filtros_e_recorte_selecionado(
+    contrato, perfil_modelo, monkeypatch
+):
+    hoje = date(2026, 12, 10)
+    monkeypatch.setattr("painel.servicos.timezone.localdate", lambda: hoje)
+    indice = _indice(contrato, "ID-CRONOGRAMA-FILTROS")
+    ragueb = _documento(contrato, indice, 8201, tipo="DE", trecho="25")
+    sao_mateus = _documento(contrato, indice, 8202, tipo="DE", trecho="23")
+    outro_tipo = _documento(contrato, indice, 8203, tipo="MC", trecho="25")
+    _previsoes_cronograma(
+        contrato,
+        [
+            (ragueb, date(2026, 12, 9)),
+            (sao_mateus, date(2026, 12, 9)),
+            (outro_tipo, date(2026, 12, 20)),
+        ],
+    )
+    Emissao.objects.create(
+        documento=ragueb,
+        revisao="1",
+        versao=1,
+        fase=Emissao.Fase.PRELIMINAR,
+        data_emissao=date(2026, 12, 9),
+        origem=Emissao.Origem.CLIENTE,
+    )
+
+    dados = carregar_painel(
+        contrato, por="trecho", filtros={"tipo": "DE"}
+    )
+    indicador = dados["indicador_cronograma"]
+
+    assert indicador["previstos"] == 2
+    assert indicador["no_prazo"] == 1
+    assert indicador["vencidos_sem_emissao"] == 1
+    assert indicador["futuros"] == 0
+    assert indicador["base"] == 2
+    assert indicador["percentual"] == 50
+    assert {item["rotulo"]: item["previstos"] for item in indicador["recortes"]} == {
+        "Ragueb Chohfi": 1,
+        "São Mateus": 1,
+    }
+
+
+@pytest.mark.django_db
+def test_cronograma_sem_previsoes_so_mostra_link_de_importacao_para_staff(
+    contrato, perfil_modelo, client, django_user_model
+):
+    assert carregar_painel(contrato)["indicador_cronograma"] is None
+    url = reverse("painel", args=(contrato.pk,))
+    staff = django_user_model.objects.create_user(
+        username="staff-sem-cronograma", password="senha", is_staff=True
+    )
+    Participacao.objects.create(usuario=staff, contrato=contrato, papel="chefia")
+    client.force_login(staff)
+    resposta_staff = client.get(url)
+    assert resposta_staff.status_code == 200
+    assert "Nenhum cronograma importado" in resposta_staff.content.decode()
+    assert reverse("importar_cronograma") in resposta_staff.content.decode()
+    assert "Importar cronograma" in resposta_staff.content.decode()
+
+    chefia = django_user_model.objects.create_user(
+        username="chefia-sem-cronograma", password="senha"
+    )
+    Participacao.objects.create(usuario=chefia, contrato=contrato, papel="chefia")
+    client.force_login(chefia)
+    resposta_chefia = client.get(url)
+    assert resposta_chefia.status_code == 200
+    assert "Cronograma de emissão" not in resposta_chefia.content.decode()
+    assert "Nenhum cronograma importado" not in resposta_chefia.content.decode()
+
+
+@pytest.mark.django_db
+def test_indicador_cronograma_funciona_sem_configuracao_de_prazos_no_perfil(
+    contrato, perfil_modelo
+):
+    perfil_modelo.definicao.pop("prazos", None)
+    perfil_modelo.save(update_fields=("definicao",))
+    indice = _indice(contrato, "ID-CRONOGRAMA-SEM-META")
+    documento = _documento(contrato, indice, 8301)
+    _previsoes_cronograma(contrato, [(documento, timezone.localdate())])
+
+    indicador = carregar_painel(contrato)["indicador_cronograma"]
+
+    assert indicador["futuros"] == 1
+    assert indicador["base"] == 0
+    assert indicador["percentual"] is None
+    assert indicador["meta_percentual"] is None
 
 
 @pytest.mark.django_db
