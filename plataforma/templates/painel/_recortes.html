@@ -24,26 +24,31 @@
     </div>
     <p class="painel-indicador-legenda">Dentro do limite: {{ indicador.dentro_limite }} · Fora do limite: {{ indicador.fora_limite }} · Base: {{ indicador.base }}</p>
   </div>
-  {% if indicador.recortes %}
-  <div class="painel-indicador-grafico-wrap" style="--linhas-indicador: {{ indicador.recortes|length }}">
+  {% if indicador.recortes_com_dados %}
+  <div class="painel-indicador-grafico-wrap" style="--linhas-indicador: {{ indicador.recortes_com_dados|length }}">
     <canvas id="grafico-indicador-{{ forloop.counter }}" data-grafico-indicador aria-label="Percentual de {{ indicador.configuracao.rotulo|lower }} por {{ rotulo_caixa }}"></canvas>
   </div>
   {{ indicador.grafico|json_script:indicador.script_id }}
+  {% else %}<p class="painel-sem-dados">Sem dados</p>{% endif %}
+  {% if indicador.recortes %}
   <details class="painel-dados-tabulares" open>
     <summary>Números do indicador por recorte</summary>
     <div class="table-wrap"><table>
       <thead><tr><th>{{ rotulo_caixa }}</th><th>Dentro do limite</th><th>Fora do limite</th><th>Base</th><th>Percentual</th></tr></thead>
       <tbody>
-        {% for recorte in indicador.recortes %}
+        {% for recorte in indicador.recortes_com_dados %}
         <tr>
           <th scope="row">{{ recorte.rotulo }}</th>
           <td>{{ recorte.dentro_limite }}</td><td>{{ recorte.fora_limite }}</td><td>{{ recorte.base }}</td>
-          <td>{% if recorte.tem_dados %}{{ recorte.percentual|floatformat:1 }}%{% else %}Sem dados{% endif %}</td>
+          <td>{{ recorte.percentual|floatformat:1 }}%</td>
         </tr>
         {% endfor %}
+        {% if indicador.recortes_sem_base %}
+        <tr><th scope="row" colspan="5">Sem documentos na conta: {% for recorte in indicador.recortes_sem_base %}{{ recorte.rotulo }}{% if not forloop.last %}, {% endif %}{% endfor %}</th></tr>
+        {% endif %}
       </tbody>
     </table></div>
   </details>
-  {% else %}<p class="painel-sem-dados">Não há documentos elegíveis para este indicador.</p>{% endif %}
+  {% endif %}
 </article>
 {% endfor %}

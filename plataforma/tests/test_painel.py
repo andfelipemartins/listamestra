@@ -379,14 +379,77 @@ def test_indicador_aparece_com_numero_geral_barras_por_recorte_e_linha_de_meta(
     assert "<strong>50%</strong> aprovados em até 3 revisões · meta 80%" in re.sub(
         r"\s+", " ", html
     )
-    assert grafico["labels"] == ["Ragueb Chohfi", "São Mateus"]
-    assert grafico["datasets"][0]["data"] == [100, 0]
+    assert grafico["labels"] == ["São Mateus", "Ragueb Chohfi"]
+    assert grafico["datasets"][0]["data"] == [0, 100]
     assert grafico["metaPercentual"] == 80
     assert "linha-meta-indicador" in html
     assert "setLineDash([6, 5])" in html
     assert "rotulos-indicador" in html
     assert "Dentro do limite: 1" in html
     assert "Fora do limite: 1" in html
+
+
+@pytest.mark.django_db
+def test_indicador_exclui_recortes_sem_base_do_grafico_e_ordena_por_percentual(
+    contrato, perfil_modelo, client, django_user_model
+):
+    usuario = django_user_model.objects.create_user(
+        username="chefia-indicador-recortes", password="senha"
+    )
+    Participacao.objects.create(usuario=usuario, contrato=contrato, papel="chefia")
+    indice = _indice(contrato, "ID-INDICADOR-RECORTES")
+
+    para_revisao = _documento(
+        contrato, indice, 5201, tipo="DE", situacao="Não Aprovado"
+    )
+    _emissao_com_status(para_revisao, "2", "Não Aprovado")
+    _emissao_com_status(para_revisao, "3", "Não Aprovado")
+    _emissao_com_status(para_revisao, "4", "Não Aprovado")
+
+    em_analise = _documento(
+        contrato, indice, 5202, tipo="DG", situacao="Não Aprovado"
+    )
+    _emissao_com_status(em_analise, "2", "Não Aprovado")
+    _emissao_com_status(em_analise, "3", "Não Aprovado")
+    _emissao_com_status(em_analise, "4", "Não Aprovado")
+
+    _documento(contrato, indice, 5203, tipo="RT", situacao="Aprovado")
+    _documento(contrato, indice, 5204, tipo="MC")
+    client.force_login(usuario)
+
+    resposta = client.get(reverse("painel", args=(contrato.pk,)), {"por": "tipo"})
+    html = resposta.content.decode()
+    grafico = json.loads(
+        re.search(
+            r'<script id="dados-indicador-1" type="application/json">(.*?)</script>', html
+        ).group(1)
+    )
+
+    assert grafico["labels"] == ["Desenho", "Diagrama", "Relatório técnico"]
+    assert grafico["datasets"][0]["data"] == [0, 0, 100]
+    assert all("Memorial de cálculo" not in rotulo for rotulo in grafico["labels"])
+    assert "Sem documentos na conta: Memorial de cálculo" in html
+
+
+@pytest.mark.django_db
+def test_indicador_sem_recortes_com_base_mostra_sem_dados_no_grafico(
+    contrato, perfil_modelo, client, django_user_model
+):
+    usuario = django_user_model.objects.create_user(
+        username="chefia-indicador-sem-base", password="senha"
+    )
+    Participacao.objects.create(usuario=usuario, contrato=contrato, papel="chefia")
+    indice = _indice(contrato, "ID-INDICADOR-SEM-BASE")
+    _documento(contrato, indice, 5301, tipo="MC")
+    client.force_login(usuario)
+
+    resposta = client.get(reverse("painel", args=(contrato.pk,)), {"por": "tipo"})
+    html = resposta.content.decode()
+
+    assert resposta.status_code == 200
+    assert '<canvas id="grafico-indicador-1"' not in html
+    assert 'painel-sem-dados">Sem dados</p>' in html
+    assert "Sem documentos na conta: Memorial de cálculo" in html
 
 
 @pytest.mark.django_db
