@@ -756,3 +756,12 @@ Aprovado, Não Conforme, Inconsistente, Erro de Assinatura, Cancelado, Revisão 
 
 - A planilha de cronograma traz o código e a **data prevista**. A real vem da extração do PW.
 - O indicador de prazo (80%, PE 5.6) entra no **painel da chefia**, com linha "Meta" em 80%.
+
+## D-057 · Classe N3 é ARQUITETURA
+
+*Origem: AA4 · 2026-11-19 (respondida no chat)*
+
+- N3 é paisagismo e urbanismo, portanto **ARQUITETURA**. Na Lista Mestra do escritório os N3 estavam como CIVIL por
+  descuido no preenchimento. No perfil Metrô: ARQUITETURA = B3, B7 e N3.
+- A categoria segue a classe na grande maioria dos casos, mas a regra fica configurável no perfil (classe e sigla
+  combinadas), porque há exceções, como a A9, que é de qualidade (PE, MQ) ou de ATO (RT, ID).
