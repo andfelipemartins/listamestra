@@ -2,6 +2,7 @@ from datetime import date
 from pathlib import Path
 
 import pytest
+import yaml
 
 from core.perfil.feriados import feriados_nacionais
 from core.perfil.modelo import ErroPerfil, carregar_yaml, perfil_de_dict
@@ -73,13 +74,57 @@ def test_perfil_metro_carrega_prazos_configurados():
     perfil = carregar_yaml(ROOT / "core" / "perfil" / "exemplos" / "metro.yaml")
 
     assert perfil.prazos.meta_percentual == 80
+    assert perfil.prazos.meta_cronograma == 80
     assert perfil.prazos.feriados.nacionais is True
     assert [regra.id for regra in perfil.prazos.regras] == ["analise_cliente", "devolucao_nossa"]
-    assert perfil.prazos.regras[0].excecoes == ()
+    assert perfil.prazos.regras[0].meta_percentual is None
+    assert perfil.prazos.regras[0].excecoes[0].siglas == ("MM", "MO", "MP", "MQ", "MU")
+    assert perfil.prazos.regras[0].excecoes[0].dias == 30
     assert perfil.prazos.regras[0].dias == 15
     assert perfil.prazos.regras[0].tipo_dia == "uteis"
+    assert perfil.prazos.regras[1].meta_percentual == 80
     assert perfil.prazos.regras[1].tipo_dia == "corridos"
     assert perfil.prazos.regras[1].so_quando_grupo == ("nao_aprovado", "inconsistente")
+
+
+def test_meta_especifica_da_regra_substitui_o_padrao():
+    with (ROOT / "core" / "perfil" / "exemplos" / "metro.yaml").open(encoding="utf-8") as arquivo:
+        dados = yaml.safe_load(arquivo)
+    dados["prazos"]["regras"][1]["meta_percentual"] = 65
+    dados["prazos"]["meta_cronograma"] = 75
+
+    perfil = perfil_de_dict(dados)
+
+    assert perfil.prazos.regras[1].meta_percentual == 65
+    assert perfil.prazos.meta_cronograma == 75
+
+
+def test_perfil_antigo_com_meta_geral_aplica_padrao_as_regras_e_cronograma():
+    with (ROOT / "core" / "perfil" / "exemplos" / "metro.yaml").open(encoding="utf-8") as arquivo:
+        dados = yaml.safe_load(arquivo)
+    dados["prazos"].pop("meta_cronograma")
+    for regra in dados["prazos"]["regras"]:
+        regra.pop("meta_percentual", None)
+
+    perfil = perfil_de_dict(dados)
+
+    assert [regra.meta_percentual for regra in perfil.prazos.regras] == [80, 80]
+    assert perfil.prazos.meta_cronograma == 80
+
+
+def test_excecao_mo_aplica_30_dias_uteis():
+    perfil = carregar_yaml(ROOT / "core" / "perfil" / "exemplos" / "metro.yaml")
+    regra = perfil.prazos.regras[0]
+
+    resultado = avaliar(
+        regra,
+        date(2026, 1, 1),
+        date(2026, 2, 12),
+        date(2026, 2, 12),
+        sigla="MO",
+    )
+
+    assert resultado == AvaliacaoPrazo("no_prazo", date(2026, 2, 12), 0)
 
 
 def test_spobras_permanece_sem_secao_de_prazos():

@@ -164,6 +164,7 @@ class RegraPrazo:
     fim: str
     excecoes: tuple[ExcecaoPrazo, ...] = ()
     so_quando_grupo: tuple[str, ...] = ()
+    meta_percentual: float | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "excecoes", tuple(self.excecoes))
@@ -171,9 +172,16 @@ class RegraPrazo:
 
 
 @dataclass(frozen=True)
+class RegiaoFeriados:
+    uf: str
+    municipio: str
+
+
+@dataclass(frozen=True)
 class FeriadosPerfil:
     nacionais: bool = True
     extras: tuple[FeriadoExtra, ...] = ()
+    regiao: RegiaoFeriados | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "extras", tuple(self.extras))
@@ -184,6 +192,7 @@ class PrazosPerfil:
     feriados: FeriadosPerfil
     meta_percentual: float
     regras: tuple[RegraPrazo, ...]
+    meta_cronograma: float | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "regras", tuple(self.regras))
@@ -527,6 +536,18 @@ def _prazos_de_dict(dados: Any) -> PrazosPerfil | None:
     nacionais = feriados_dados.get("nacionais", True)
     if not isinstance(nacionais, bool):
         raise ErroPerfil("'prazos.feriados.nacionais' precisa ser booleano.")
+    regiao_dados = feriados_dados.get("regiao")
+    regiao = None
+    if regiao_dados is not None:
+        if not isinstance(regiao_dados, Mapping):
+            raise ErroPerfil("'prazos.feriados.regiao' precisa ser um objeto.")
+        uf = _texto_obrigatorio(regiao_dados.get("uf"), "prazos.feriados.regiao.uf")
+        municipio = _texto_obrigatorio(
+            regiao_dados.get("municipio"), "prazos.feriados.regiao.municipio"
+        )
+        if not re.fullmatch(r"[A-Za-z]{2}", uf):
+            raise ErroPerfil("'prazos.feriados.regiao.uf' precisa ter duas letras.")
+        regiao = RegiaoFeriados(uf=uf.upper(), municipio=municipio)
     extras_dados = feriados_dados.get("extras", ())
     if not isinstance(extras_dados, (list, tuple)):
         raise ErroPerfil("'prazos.feriados.extras' precisa ser uma lista.")
@@ -541,9 +562,10 @@ def _prazos_de_dict(dados: Any) -> PrazosPerfil | None:
             raise ErroPerfil(str(erro)) from erro
         extras.append(FeriadoExtra(data, _texto_obrigatorio(item.get("nome"), f"nome em {campo}")))
 
-    meta = dados.get("meta_percentual")
-    if isinstance(meta, bool) or not isinstance(meta, (int, float)) or not 0 <= meta <= 100:
-        raise ErroPerfil("'prazos.meta_percentual' precisa ser um número entre 0 e 100.")
+    meta = _meta_percentual_prazo(dados.get("meta_percentual"), "prazos.meta_percentual")
+    meta_cronograma = _meta_percentual_prazo(
+        dados.get("meta_cronograma", meta), "prazos.meta_cronograma", permite_none=True
+    )
 
     regras_dados = dados.get("regras")
     if not isinstance(regras_dados, (list, tuple)):
@@ -555,6 +577,11 @@ def _prazos_de_dict(dados: Any) -> PrazosPerfil | None:
         if not isinstance(item, Mapping):
             raise ErroPerfil(f"{campo} precisa ser um objeto.")
         identificador = _texto_obrigatorio(item.get("id"), f"id em {campo}")
+        meta_regra = _meta_percentual_prazo(
+            item.get("meta_percentual", meta),
+            f"meta_percentual de '{identificador}'",
+            permite_none=True,
+        )
         chave_id = identificador.casefold()
         if chave_id in ids:
             raise ErroPerfil(f"Id de regra repetido em 'prazos.regras': '{identificador}'.")
@@ -583,9 +610,23 @@ def _prazos_de_dict(dados: Any) -> PrazosPerfil | None:
                 fim=_texto_obrigatorio(item.get("fim"), f"fim da regra '{identificador}'"),
                 excecoes=excecoes,
                 so_quando_grupo=grupos,
+                meta_percentual=meta_regra,
             )
         )
-    return PrazosPerfil(FeriadosPerfil(nacionais=nacionais, extras=tuple(extras)), float(meta), tuple(regras))
+    return PrazosPerfil(
+        FeriadosPerfil(nacionais=nacionais, extras=tuple(extras), regiao=regiao),
+        meta,
+        tuple(regras),
+        meta_cronograma,
+    )
+
+
+def _meta_percentual_prazo(valor: Any, campo: str, *, permite_none: bool = False) -> float | None:
+    if permite_none and valor is None:
+        return None
+    if isinstance(valor, bool) or not isinstance(valor, (int, float)) or not 0 <= valor <= 100:
+        raise ErroPerfil(f"'{campo}' precisa ser um número entre 0 e 100.")
+    return float(valor)
 
 
 def _excecoes_prazo(dados: Any, identificador: str) -> tuple[ExcecaoPrazo, ...]:

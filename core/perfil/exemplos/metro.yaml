@@ -365,9 +365,11 @@ painel:
       contar_estourados_sem_aprovacao: false
       ciclos: primeira_aprovacao
 prazos:
-  feriados: {nacionais: true, extras: []}
+  # D-064: o acervo usa a região configurada para o contrato.
+  feriados: {nacionais: true, regiao: {uf: SP, municipio: São Paulo}, extras: []}
   # PE-ENG-001, item 5.6: indicador satisfatório quando 80% ou mais dos prazos são cumpridos.
   meta_percentual: 80
+  meta_cronograma: 80
   regras:
     # Contrato, cláusula 25.1.2.1: o Metrô analisa em até 15 dias úteis desde a emissão no PW.
     - id: analise_cliente
@@ -376,7 +378,11 @@ prazos:
       tipo_dia: uteis
       inicio: emissao
       fim: analise
-      excecoes: [] # Manuais (30 dias): siglas a confirmar.
+      meta_percentual: null # Prazo do cliente, sem meta (D-063).
+      excecoes:
+        # D-061: manuais com 30 dias úteis; sigla de treinamento a confirmar.
+        - siglas: [MM, MO, MP, MQ, MU]
+          dias: 30
     # Contrato, cláusula 25.1.2.3: devolução em até 15 dias corridos desde a análise do cliente.
     - id: devolucao_nossa
       rotulo: Nossa devolução
@@ -384,4 +390,5 @@ prazos:
       tipo_dia: corridos
       inicio: analise
       fim: proxima_emissao
+      # D-062: Não Aprovado e INCONSISTENTE (inclui Inconsistente e Não Conforme).
       so_quando_grupo: [nao_aprovado, inconsistente]

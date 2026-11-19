@@ -15,6 +15,7 @@ from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
+from simple_history.admin import SimpleHistoryAdmin
 
 from core.perfil import (
     ErroPerfil,
@@ -23,10 +24,15 @@ from core.perfil import (
     ler_feriados_extras,
     perfil_de_dict,
 )
+from core.perfil.feriados import feriados_acervo_detalhados
 from core.perfil.codigo import ErroCodigo, interpretar, montar
 
 from .forms import ImportarFeriadosForm
-from .models import Contrato, Participacao, PerfilContrato
+from .models import Contrato, FeriadoAcervo, Participacao, PerfilContrato
+
+
+def _pode_gerenciar_acervo_feriados(usuario):
+    return bool(usuario.is_active and (usuario.is_superuser or usuario.is_staff))
 
 
 class PerfilContratoInline(admin.TabularInline):
@@ -80,6 +86,42 @@ class ContratoAdmin(admin.ModelAdmin):
     search_fields = ("nome", "codigo_interno", "cliente", "descricao")
     inlines = (PerfilContratoInline,)
     readonly_fields = ("criado_em",)
+
+
+@admin.register(FeriadoAcervo)
+class FeriadoAcervoAdmin(SimpleHistoryAdmin):
+    list_display = (
+        "nome",
+        "abrangencia",
+        "uf",
+        "municipio",
+        "regra_resumida",
+        "vigencia_de",
+        "vigencia_ate",
+    )
+    list_filter = ("abrangencia", "uf", "tipo_regra")
+    search_fields = ("nome", "uf", "municipio")
+
+    def has_module_permission(self, request):
+        return _pode_gerenciar_acervo_feriados(request.user)
+
+    def has_view_permission(self, request, obj=None):
+        return _pode_gerenciar_acervo_feriados(request.user)
+
+    def has_add_permission(self, request):
+        return _pode_gerenciar_acervo_feriados(request.user)
+
+    def has_change_permission(self, request, obj=None):
+        return _pode_gerenciar_acervo_feriados(request.user)
+
+    def has_delete_permission(self, request, obj=None):
+        return _pode_gerenciar_acervo_feriados(request.user)
+
+    @admin.display(description="Regra")
+    def regra_resumida(self, obj):
+        if obj.tipo_regra == FeriadoAcervo.TipoRegra.FIXA:
+            return f"{obj.dia:02d}/{obj.mes:02d}"
+        return f"Páscoa {obj.deslocamento_pascoa:+d} dias"
 
 
 @admin.register(PerfilContrato)
@@ -234,6 +276,34 @@ class PerfilContratoAdmin(admin.ModelAdmin):
                 for feriado in perfil.prazos.feriados.extras
                 if feriado.data.year in anos
             )
+            regiao = perfil.prazos.feriados.regiao
+            if regiao is not None:
+                regras_acervo = FeriadoAcervo.objects.filter(uf__iexact=regiao.uf).values(
+                    "nome",
+                    "abrangencia",
+                    "uf",
+                    "municipio",
+                    "tipo_regra",
+                    "dia",
+                    "mes",
+                    "deslocamento_pascoa",
+                    "vigencia_de",
+                    "vigencia_ate",
+                )
+                for ano in anos:
+                    itens.extend(
+                        {
+                            "data": feriado.data,
+                            "nome": feriado.nome,
+                            "origem": f"Acervo ({feriado.uf})",
+                        }
+                        for feriado in feriados_acervo_detalhados(
+                            ano,
+                            regras_acervo,
+                            uf=regiao.uf,
+                            municipio=regiao.municipio,
+                        )
+                    )
         itens.sort(key=lambda item: (item["data"], item["origem"], item["nome"]))
         contexto = self._contexto_feriados(request, perfil_db)
         contexto.update(

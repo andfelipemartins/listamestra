@@ -51,11 +51,21 @@ def perfil_modelo(contrato):
     )
 
 
-def _indice(contrato, codigo, *, fonte=IndiceDocumentos.Fonte.EXCEL_ID, revisao="1"):
+def _indice(
+    contrato,
+    codigo,
+    *,
+    fonte=IndiceDocumentos.Fonte.EXCEL_ID,
+    revisao="1",
+    fase="",
+    conta_no_previsto=True,
+):
     return IndiceDocumentos.objects.create(
         contrato=contrato,
         codigo=codigo,
         revisao=revisao,
+        fase=fase,
+        conta_no_previsto=conta_no_previsto,
         fonte=fonte,
         arquivo_nome=f"{codigo}.xlsx",
         importado_em=timezone.now(),
@@ -206,6 +216,74 @@ def test_servico_resume_uniao_status_recorte_fonte_e_fora_do_id(contrato, perfil
     assert dados["por"] == "classe"
     assert any(item["rotulo"] == "Iluminação" for item in dados["recortes"])
     assert any(estado.situacao == "Estado Novo do PW" and estado.contagem == 1 for estado in resumo.estados_nao_mapeados)
+
+
+@pytest.mark.django_db
+def test_id_que_nao_conta_sai_do_total_sem_virar_fora_do_id(contrato, perfil_modelo):
+    previsto = _indice(contrato, "ID-CONTA", fase="Fase 1")
+    consulta = _indice(
+        contrato,
+        "ID-CONSULTA",
+        fase="Fase 2",
+        conta_no_previsto=False,
+    )
+    _documento(contrato, previsto, 9101, situacao="Aprovado")
+    _documento(contrato, consulta, 9102, situacao="Aprovado")
+    fora_dos_ids = Documento.objects.create(
+        contrato=contrato,
+        identificador_base="DOC-9103",
+        tipo="DE",
+        trecho="25",
+        disciplina="P7",
+        atributos={"tipo": "DE", "trecho": "25", "classe": "P7"},
+    )
+    _emissao_com_status(fora_dos_ids, 1, "Em Análise")
+
+    dados = carregar_painel(contrato)
+
+    assert dados["total_documentos_previstos"] == 1
+    assert dados["total_documentos_id"] == 1
+    assert dados["fora_do_id"] == 1
+
+
+@pytest.mark.django_db
+def test_fase_filtra_o_previsto_e_documento_compartilhado_entra_em_ambas(contrato, perfil_modelo):
+    fase_1 = _indice(contrato, "ID-FASE-1", fase="Fase 1")
+    fase_2 = _indice(contrato, "ID-FASE-2", fase="Fase 2")
+    compartilhado = _documento(contrato, fase_1, 9201, situacao="Aprovado")
+    ItemPrevisto.objects.create(
+        indice=fase_2,
+        documento=compartilhado,
+        titulo=compartilhado.titulo,
+    )
+    _documento(contrato, fase_1, 9202, situacao="Em Análise")
+    _documento(contrato, fase_2, 9203, situacao="Em Análise")
+
+    geral = carregar_painel(contrato)
+    por_fase = carregar_painel(contrato, por="fase")
+    recortes = {item["rotulo"]: item["total"] for item in por_fase["recortes"]}
+    filtro_fase = carregar_painel(contrato, filtros={"fase": "Fase 1"})
+
+    assert geral["total_documentos_previstos"] == 3
+    assert filtro_fase["total_documentos_previstos"] == 2
+    assert filtro_fase["total_documentos_id"] == 2
+    assert filtro_fase["filtros_ativos"] == [{"rotulo": "Fase", "valores": ["Fase 1"]}]
+    assert recortes == {"Fase 1": 2, "Fase 2": 2}
+    assert any(filtro["nome"] == "fase" for filtro in por_fase["filtros"])
+    assert any(caixa.nome == "fase" and caixa.rotulo == "Fase" for caixa in por_fase["caixas"])
+
+
+@pytest.mark.django_db
+def test_sem_fases_configuradas_preserva_o_previsto_padrao(contrato, perfil_modelo):
+    indice = _indice(contrato, "ID-SEM-FASE")
+    _documento(contrato, indice, 9301)
+    _documento(contrato, indice, 9302)
+
+    dados = carregar_painel(contrato)
+
+    assert dados["total_documentos_previstos"] == 2
+    assert all(filtro["nome"] != "fase" for filtro in dados["filtros"])
+    assert all(caixa.nome != "fase" for caixa in dados["caixas"])
 
 
 @pytest.mark.django_db
@@ -472,18 +550,62 @@ def test_indicador_mostra_distribuicao_vertical_e_linha_meta_no_limite(
     ]
     assert indicador["configuracao"].meta_percentual is None
     assert '<svg role="img"' in html
-    assert 'stroke-dasharray="6 5"' in html
+    grafico_html = re.search(
+        r'<svg role="img" aria-labelledby="painel-indicador-grafico-titulo-1.*?</svg>',
+        html,
+        re.S,
+    ).group(0)
+    assert 'stroke-dasharray="6 5"' in grafico_html
     grafico_svg = indicador["grafico_distribuicao"]
     assert grafico_svg["x_meta"] == pytest.approx(
         grafico_svg["esquerda"]
         + (grafico_svg["direita"] - grafico_svg["esquerda"]) * 4 / 6
     )
+    linha_meta = re.search(
+        r'<line x1="(?P<x1>[\d.,]+)" y1="[\d.,]+" x2="(?P<x2>[\d.,]+)" y2="[\d.,]+" '
+        r'stroke="var\(--indicador-meta\)" stroke-width="2" stroke-dasharray="6 5" />',
+        grafico_html,
+    )
+    assert linha_meta is not None
+    assert float(linha_meta["x1"].replace(",", ".")) == pytest.approx(
+        grafico_svg["x_meta"]
+    )
+    assert float(linha_meta["x2"].replace(",", ".")) == pytest.approx(
+        grafico_svg["x_meta"]
+    )
+    rotulo_meta = re.search(
+        r'<text x="(?P<x>[\d.,]+)" y="[\d.,]+" fill="var\(--indicador-meta\)" '
+        r'font-size="11" font-weight="700">Meta</text>',
+        grafico_html,
+    )
+    assert rotulo_meta is not None
+    assert float(rotulo_meta["x"].replace(",", ".")) == pytest.approx(
+        grafico_svg["x_meta"] + 5
+    )
     assert "var(--blue)" in html
     assert "var(--indicador-alerta)" in html
     assert "Meta</th>" not in html
-    assert "Meta: 80%" in html
     assert "Dentro do limite: 1" in html
     assert "Fora do limite: 1" in html
+
+    prazo_cliente = next(
+        item
+        for item in dados["indicadores_prazo"]
+        if item["regra"].id == "analise_cliente"
+    )
+    assert prazo_cliente["tem_dados"] is True
+    assert prazo_cliente["meta_percentual"] is None
+    artigos_prazo = re.findall(
+        r'<article class="painel-indicador" style="margin-top:0" '
+        r'aria-labelledby="painel-prazo-titulo-\d+">(.*?)</article>',
+        html,
+        re.S,
+    )
+    artigo_cliente = next(
+        artigo for artigo in artigos_prazo if "Análise do cliente</h3>" in artigo
+    )
+    assert "Linha tracejada: Meta" not in artigo_cliente
+    assert "border-left:2px dashed var(--indicador-meta)" not in artigo_cliente
 
 
 @pytest.mark.django_db
@@ -901,9 +1023,32 @@ def test_filtro_htmx_atualiza_tela_inteira_e_preserva_valores_na_querystring(
     html = resposta.content.decode()
 
     assert resposta.status_code == 200
-    assert "Filtros ativos:" in html
-    assert "tipo documental: MC – Memorial de cálculo" in html
-    assert "trecho: 25 – Ragueb Chohfi" in html
+    barra_filtros = re.search(
+        r'<nav class="painel-filtros-ativos" aria-label="Filtros ativos">(.*?)</nav>',
+        html,
+        re.S,
+    )
+    assert barra_filtros is not None
+    filtros_ativos = barra_filtros.group(1)
+    assert "tipo documental: MC – Memorial de cálculo" in filtros_ativos
+    assert "trecho: 25 – Ragueb Chohfi" in filtros_ativos
+    assert 'aria-label="Remover filtro tipo documental: MC – Memorial de cálculo"' in filtros_ativos
+    assert 'aria-label="Remover filtro trecho: 25 – Ragueb Chohfi"' in filtros_ativos
+    assert filtros_ativos.count('class="painel-filtro-remover"') == 2
+    assert "×</a>" in filtros_ativos
+    assert "Limpar todos" in filtros_ativos
+    por = resposta.context["por"]
+    links_remocao = re.findall(
+        r'<a class="painel-filtro-remover"[^>]*href="([^"]+)"', filtros_ativos
+    )
+    assert any(
+        link.endswith(f"?por={por}&amp;trecho=25&amp;manter_filtros_abertos=1")
+        for link in links_remocao
+    )
+    assert any(
+        link.endswith(f"?por={por}&amp;tipo=MC&amp;manter_filtros_abertos=1")
+        for link in links_remocao
+    )
     assert "Documentos previstos em conta" in html
     assert "Distribuição por situação" in html
     assert "dados-grafico-pizza" in html

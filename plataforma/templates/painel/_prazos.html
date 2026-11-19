@@ -6,7 +6,6 @@
       <h2 id="painel-prazos-titulo">Prazos</h2>
       <p class="painel-indicador-geral">Cumprimento das regras configuradas no perfil vigente</p>
     </div>
-    {% if meta_prazo_percentual != None %}<p class="painel-indicador-legenda">Meta: {{ meta_prazo_percentual|floatformat:0 }}%</p>{% endif %}
   </div>
 
   <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap:12px">
@@ -24,9 +23,9 @@
 
       <div class="painel-progresso" role="progressbar" aria-label="{{ indicador.regra.rotulo }} no prazo" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{% if indicador.tem_dados %}{{ indicador.percentual|floatformat:0 }}{% else %}0{% endif %}" style="position:relative; height:14px; overflow:visible; margin-top:14px">
         <span style="width:{% if indicador.tem_dados %}{{ indicador.percentual|unlocalize }}{% else %}0{% endif %}%; background:var(--chart-green)"></span>
-        {% if meta_prazo_percentual != None %}<i aria-hidden="true" style="position:absolute; top:-4px; bottom:-4px; left:{{ meta_prazo_percentual|unlocalize }}%; border-left:2px dashed var(--indicador-meta)"></i>{% endif %}
+        {% if indicador.meta_percentual != None %}<i aria-hidden="true" style="position:absolute; top:-4px; bottom:-4px; left:{{ indicador.meta_percentual|unlocalize }}%; border-left:2px dashed var(--indicador-meta)"></i>{% endif %}
       </div>
-      {% if meta_prazo_percentual != None %}<p class="painel-indicador-legenda" style="margin-top:7px; text-align:left">Linha tracejada: Meta {{ meta_prazo_percentual|floatformat:0 }}%</p>{% endif %}
+      {% if indicador.meta_percentual != None %}<p class="painel-indicador-legenda" style="margin-top:7px; text-align:left">Linha tracejada: Meta {{ indicador.meta_percentual|floatformat:0 }}%</p>{% endif %}
 
       <details class="painel-dados-tabulares" {% if forloop.first %}open{% endif %}>
         <summary>Números por {{ rotulo_caixa }}</summary>

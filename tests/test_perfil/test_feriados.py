@@ -2,7 +2,12 @@ from datetime import date
 
 from openpyxl import Workbook
 
-from core.perfil.feriados import FeriadoExtra, feriados_nacionais, ler_feriados_extras
+from core.perfil.feriados import (
+    FeriadoExtra,
+    feriados_acervo,
+    feriados_nacionais,
+    ler_feriados_extras,
+)
 
 
 def test_feriados_nacionais_2025():
@@ -38,6 +43,75 @@ def test_feriados_nacionais_2026():
 def test_feriado_de_20_de_novembro_so_entra_desde_2024():
     assert date(2023, 11, 20) not in feriados_nacionais(2023)
     assert date(2024, 11, 20) in feriados_nacionais(2024)
+
+
+def test_corpus_christi_2026_e_pascoa_mais_60_dias():
+    corpus_christi = {
+        "nome": "Corpus Christi",
+        "abrangencia": "municipal",
+        "uf": "SP",
+        "municipio": "São Paulo",
+        "tipo_regra": "pascoa",
+        "deslocamento_pascoa": 60,
+    }
+
+    assert feriados_acervo(2026, [corpus_christi], uf="SP", municipio="São Paulo") == (
+        date(2026, 6, 4),
+    )
+
+
+def test_acervo_aplica_feriados_estaduais_e_municipais_a_regiao_certa():
+    regras = [
+        {
+            "nome": "Aniversário de São Paulo",
+            "abrangencia": "municipal",
+            "uf": "SP",
+            "municipio": "São Paulo",
+            "tipo_regra": "fixa",
+            "dia": 25,
+            "mes": 1,
+        },
+        {
+            "nome": "Revolução Constitucionalista",
+            "abrangencia": "estadual",
+            "uf": "SP",
+            "municipio": "",
+            "tipo_regra": "fixa",
+            "dia": 9,
+            "mes": 7,
+        },
+    ]
+
+    sao_paulo = feriados_acervo(2026, regras, uf="SP", municipio="São Paulo")
+    campinas = feriados_acervo(2026, regras, uf="SP", municipio="Campinas")
+    curitiba = feriados_acervo(2026, regras, uf="PR", municipio="Curitiba")
+
+    assert sao_paulo == (date(2026, 1, 25), date(2026, 7, 9))
+    assert campinas == (date(2026, 7, 9),)
+    assert curitiba == ()
+
+
+def test_vigencia_do_acervo_inclui_limites_e_omite_anos_fora_da_faixa():
+    regra = {
+        "nome": "Feriado de teste",
+        "abrangencia": "estadual",
+        "uf": "SP",
+        "municipio": "",
+        "tipo_regra": "fixa",
+        "dia": 9,
+        "mes": 7,
+        "vigencia_de": 2026,
+        "vigencia_ate": 2027,
+    }
+
+    assert feriados_acervo(2025, [regra], uf="SP", municipio="São Paulo") == ()
+    assert feriados_acervo(2026, [regra], uf="SP", municipio="São Paulo") == (
+        date(2026, 7, 9),
+    )
+    assert feriados_acervo(2027, [regra], uf="SP", municipio="São Paulo") == (
+        date(2027, 7, 9),
+    )
+    assert feriados_acervo(2028, [regra], uf="SP", municipio="São Paulo") == ()
 
 
 def test_leitor_csv_retorna_erros_por_linha(tmp_path):

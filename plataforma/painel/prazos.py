@@ -5,7 +5,7 @@ from datetime import date, timedelta
 
 from django.utils import timezone
 
-from core.perfil.feriados import feriados_nacionais
+from core.perfil.feriados import feriados_acervo, feriados_nacionais
 from core.perfil.painel import classificar
 from core.perfil.prazos import avaliar as avaliar_prazo, indicador as resumir_prazos
 from documentos.models import Analise
@@ -74,7 +74,7 @@ def calcular_indicador_cronograma(
         recortes[valor]["previstos"] += 1
 
     base = contagens["no_prazo"] + contagens["atrasados"] + contagens["vencidos_sem_emissao"]
-    meta_percentual = perfil.prazos.meta_percentual if perfil.prazos is not None else None
+    meta_percentual = perfil.prazos.meta_cronograma if perfil.prazos is not None else None
     for recorte in recortes.values():
         recorte["base"] = (
             recorte["no_prazo"]
@@ -135,7 +135,14 @@ def calcular_indicadores_prazo(
         ):
             resumo = _resumo_prazo(por_recorte[valor])
             recortes.append({"valor": valor, "rotulo": rotulo, **resumo})
-        indicadores.append({"regra": regra, **geral, "recortes": recortes})
+        indicadores.append(
+            {
+                "regra": regra,
+                **geral,
+                "meta_percentual": regra.meta_percentual,
+                "recortes": recortes,
+            }
+        )
 
     return indicadores, len(analises_sem_data)
 
@@ -258,9 +265,6 @@ def _resumo_prazo(avaliacoes):
 
 def feriados_prazo(prazos, documentos, hoje):
     extras = {feriado.data for feriado in prazos.feriados.extras}
-    if not prazos.feriados.nacionais:
-        return extras
-
     max_dias = max(
         (dias for regra in prazos.regras for dias in (regra.dias, *(excecao.dias for excecao in regra.excecoes))),
         default=0,
@@ -281,7 +285,47 @@ def feriados_prazo(prazos, documentos, hoje):
     for inicio in datas_inicio:
         ano_final = min(9999, (inicio + timedelta(days=dias_calendario)).year)
         anos.update(range(inicio.year, ano_final + 1))
-    return extras.union(data for ano in anos for data in feriados_nacionais(ano))
+
+    regionais = set()
+    regiao = prazos.feriados.regiao
+    if regiao is not None:
+        from contratos.models import FeriadoAcervo
+
+        try:
+            regras_acervo = list(
+                FeriadoAcervo.objects.filter(uf__iexact=regiao.uf).values(
+                    "nome",
+                    "abrangencia",
+                    "uf",
+                    "municipio",
+                    "tipo_regra",
+                    "dia",
+                    "mes",
+                    "deslocamento_pascoa",
+                    "vigencia_de",
+                    "vigencia_ate",
+                )
+            )
+        except RuntimeError as erro:
+            if not str(erro).startswith("Database access not allowed"):
+                raise
+            # Cálculos unitários sem banco continuam usando nacionais e extras do perfil.
+            regras_acervo = []
+        regionais.update(
+            data
+            for ano in anos
+            for data in feriados_acervo(
+                ano,
+                regras_acervo,
+                uf=regiao.uf,
+                municipio=regiao.municipio,
+            )
+        )
+
+    if not prazos.feriados.nacionais:
+        return extras.union(regionais)
+    nacionais = {data for ano in anos for data in feriados_nacionais(ano)}
+    return extras.union(regionais, nacionais)
 
 
 def _valor_caixa(documento, nome):

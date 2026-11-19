@@ -2,18 +2,29 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 import csv
 import io
+import unicodedata
 
 
 @dataclass(frozen=True)
 class FeriadoExtra:
     data: date
     nome: str
+
+
+@dataclass(frozen=True)
+class FeriadoCalculado:
+    data: date
+    nome: str
+    abrangencia: str
+    uf: str
+    municipio: str
 
 
 @dataclass(frozen=True)
@@ -48,6 +59,117 @@ def feriados_nacionais(ano: int) -> tuple[date, ...]:
     pascoa = _pascoa(ano)
     fixos.append(pascoa - timedelta(days=2))
     return tuple(sorted(fixos))
+
+
+def feriados_acervo(
+    ano: int,
+    regras: Iterable[Mapping[str, Any]],
+    *,
+    uf: str,
+    municipio: str,
+) -> tuple[date, ...]:
+    """Retorna as datas do acervo que se aplicam à região no ano informado."""
+    return tuple(
+        item.data
+        for item in feriados_acervo_detalhados(
+            ano, regras, uf=uf, municipio=municipio
+        )
+    )
+
+
+def feriados_acervo_detalhados(
+    ano: int,
+    regras: Iterable[Mapping[str, Any]],
+    *,
+    uf: str,
+    municipio: str,
+) -> tuple[FeriadoCalculado, ...]:
+    """Calcula datas e metadados do acervo sem depender de modelos Django."""
+    _validar_ano(ano)
+    uf_normalizada = _normalizar_regiao(uf)
+    municipio_normalizado = _normalizar_regiao(municipio)
+    if not uf_normalizada or not municipio_normalizado:
+        return ()
+
+    calculados: list[FeriadoCalculado] = []
+    for posicao, regra in enumerate(regras, start=1):
+        if not isinstance(regra, Mapping):
+            raise ValueError(f"A regra {posicao} do acervo precisa ser um objeto.")
+        abrangencia = regra.get("abrangencia")
+        uf_regra = regra.get("uf")
+        municipio_regra = regra.get("municipio", "") or ""
+        if _normalizar_regiao(uf_regra) != uf_normalizada:
+            continue
+        if abrangencia == "estadual":
+            if str(municipio_regra).strip():
+                continue
+        elif abrangencia == "municipal":
+            if _normalizar_regiao(municipio_regra) != municipio_normalizado:
+                continue
+        else:
+            raise ValueError(f"Abrangência inválida na regra {posicao} do acervo.")
+
+        inicio = regra.get("vigencia_de")
+        fim = regra.get("vigencia_ate")
+        if inicio is not None and (isinstance(inicio, bool) or not isinstance(inicio, int)):
+            raise ValueError(f"'vigencia_de' inválida na regra {posicao} do acervo.")
+        if fim is not None and (isinstance(fim, bool) or not isinstance(fim, int)):
+            raise ValueError(f"'vigencia_ate' inválida na regra {posicao} do acervo.")
+        if (inicio is not None and ano < inicio) or (fim is not None and ano > fim):
+            continue
+
+        data = data_feriado_acervo(regra, ano)
+        if data is not None:
+            calculados.append(
+                FeriadoCalculado(
+                    data=data,
+                    nome=str(regra.get("nome", "")).strip(),
+                    abrangencia=abrangencia,
+                    uf=str(uf_regra).strip().upper(),
+                    municipio=str(municipio_regra).strip(),
+                )
+            )
+    return tuple(sorted(calculados, key=lambda item: (item.data, item.nome.casefold())))
+
+
+def data_feriado_acervo(regra: Mapping[str, Any], ano: int) -> date | None:
+    """Calcula uma ocorrência anual; uma regra fixa em 29/02 só ocorre em anos bissextos."""
+    _validar_ano(ano)
+    tipo = regra.get("tipo_regra")
+    if tipo == "fixa":
+        dia = regra.get("dia")
+        mes = regra.get("mes")
+        if any(isinstance(valor, bool) or not isinstance(valor, int) for valor in (dia, mes)):
+            raise ValueError("Uma regra fixa precisa informar dia e mês inteiros.")
+        try:
+            return date(ano, mes, dia)
+        except ValueError:
+            if mes == 2 and dia == 29:
+                return None
+            raise ValueError("A data fixa do acervo é inválida.") from None
+    if tipo == "pascoa":
+        deslocamento = regra.get("deslocamento_pascoa")
+        if isinstance(deslocamento, bool) or not isinstance(deslocamento, int):
+            raise ValueError("Uma regra móvel precisa informar deslocamento_pascoa inteiro.")
+        return _pascoa(ano) + timedelta(days=deslocamento)
+    raise ValueError("'tipo_regra' do acervo precisa ser 'fixa' ou 'pascoa'.")
+
+
+def _validar_ano(ano: int) -> None:
+    if isinstance(ano, bool) or not isinstance(ano, int) or not 1 <= ano <= 9999:
+        raise ValueError("O ano precisa ser um inteiro entre 1 e 9999.")
+
+
+def _normalizar_regiao(valor: Any) -> str:
+    if not isinstance(valor, str):
+        return ""
+    sem_acentos = unicodedata.normalize("NFKD", valor.strip().casefold())
+    sem_marcas = "".join(
+        caractere
+        for caractere in sem_acentos
+        if not unicodedata.combining(caractere)
+    )
+    return " ".join(sem_marcas.split())
 
 
 def ler_feriados_extras(caminho: str | Path) -> ResultadoLeituraFeriados:
