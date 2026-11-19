@@ -7,17 +7,19 @@
 <p class="notice painel-recusa-aviso">{{ linhas_recusadas }} linha{{ linhas_recusadas|pluralize }} recusada{{ linhas_recusadas|pluralize }} nas importações · <a href="{% url 'linhas_recusadas' contrato.pk %}">ver</a></p>
 {% endif %}
 
-<details class="painel-filtros" {% if quantidade_filtros_ativos %}open{% endif %}>
+<details class="painel-filtros" {% if quantidade_filtros_ativos or manter_filtros_abertos %}open{% endif %}>
   <summary>Filtros{% if quantidade_filtros_ativos %} · {{ quantidade_filtros_ativos }} ativos{% endif %}</summary>
   <form id="filtros-painel" class="painel-filtros-form" method="get" action="{% url 'painel' contrato.pk %}"
         hx-get="{% url 'painel' contrato.pk %}" hx-trigger="change, submit" hx-target="#painel-dados" hx-swap="innerHTML" hx-push-url="true">
+    <input type="hidden" name="manter_filtros_abertos" value="1">
     <div class="painel-filtros-grade">
       {% for filtro in filtros %}
-      <label class="painel-filtro">{{ filtro.rotulo }}
-        <select name="{{ filtro.nome }}" multiple size="4" aria-label="Filtrar por {{ filtro.rotulo }}">
-          {% for opcao in filtro.opcoes %}<option value="{{ opcao.valor }}" {% if opcao.selecionado %}selected{% endif %}>{{ opcao.rotulo }}</option>{% endfor %}
-        </select>
-      </label>
+      <fieldset class="painel-filtro">
+        <legend>{{ filtro.rotulo }}</legend>
+        <div class="painel-filtro-opcoes">
+          {% for opcao in filtro.opcoes %}<label class="painel-filtro-opcao"><input type="checkbox" name="{{ filtro.nome }}" value="{{ opcao.valor }}" {% if opcao.selecionado %}checked{% endif %}><span>{{ opcao.rotulo }}</span></label>{% endfor %}
+        </div>
+      </fieldset>
       {% endfor %}
       <label class="painel-seletor">Agrupar barras por
         <select name="por" aria-label="Selecionar caixa do perfil">
@@ -26,8 +28,8 @@
       </label>
     </div>
     <div class="painel-filtros-acoes">
-      <button class="button button-primary" type="submit">Aplicar filtros</button>
-      <a class="button button-quiet" href="{% url 'painel' contrato.pk %}?por={{ por|urlencode }}" hx-get="{% url 'painel' contrato.pk %}?por={{ por|urlencode }}" hx-target="#painel-dados" hx-swap="innerHTML" hx-push-url="true">Limpar filtros</a>
+      <noscript><button class="button button-primary" type="submit">Aplicar filtros</button></noscript>
+      <a class="button button-quiet" href="{% url 'painel' contrato.pk %}?por={{ por|urlencode }}&amp;manter_filtros_abertos=1" hx-get="{% url 'painel' contrato.pk %}?por={{ por|urlencode }}&amp;manter_filtros_abertos=1" hx-target="#painel-dados" hx-swap="innerHTML" hx-push-url="true">Limpar filtros</a>
     </div>
   </form>
 </details>

@@ -10,7 +10,7 @@
   <script src="https://unpkg.com/htmx.org@2.0.3" defer></script>
 </head>
 <body>
-  <header class="topbar">
+  <header class="topbar topbar--fixed">
     <a class="brand" href="{% url 'inicio' %}"><span class="brand-mark">LM</span><span>Lista Mestra <small>Plataforma da equipe</small></span></a>
     {% if user.is_authenticated %}
     <div class="account">
@@ -20,7 +20,7 @@
     {% endif %}
   </header>
   <div class="app-shell">
-    <aside class="sidebar" aria-label="Navegação principal">
+    <aside class="sidebar sidebar--fixed" aria-label="Navegação principal">
       <span class="nav-label">Menu</span>
       <a class="nav-item {% if request.resolver_match.url_name == 'inicio' %}active{% endif %}" href="{% url 'inicio' %}"><span class="nav-icon">⌂</span>Início</a>
       {% for contrato_painel in contratos_painel %}<a class="nav-item {% if request.resolver_match.kwargs.contrato_id == contrato_painel.pk|stringformat:'s' %}active{% endif %}" href="{% url 'painel' contrato_painel.pk %}"><span class="nav-icon">◉</span>Painel · {{ contrato_painel.codigo_interno }}</a>{% endfor %}

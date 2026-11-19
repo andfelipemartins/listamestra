@@ -94,6 +94,7 @@ def _render_painel(request, contrato):
         )
     except PainelIndisponivel as erro:
         return render(request, "painel/indisponivel.html", {"contrato": contrato, "erro": erro})
+    contexto["manter_filtros_abertos"] = request.GET.get("manter_filtros_abertos") == "1"
     template = "painel/_conteudo.html" if request.headers.get("HX-Request") == "true" else "painel/index.html"
     response = render(request, template, contexto)
     response["Cache-Control"] = "private, no-store"
