@@ -93,17 +93,44 @@ class Grupo:
 
 
 @dataclass(frozen=True)
+class RegraCategoria:
+    valores: Mapping[str, tuple[str, ...]]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "valores",
+            MappingProxyType(
+                {str(caixa): tuple(str(valor) for valor in valores) for caixa, valores in self.valores.items()}
+            ),
+        )
+
+
+@dataclass(frozen=True)
+class Categoria:
+    id: str
+    rotulo: str
+    regras: tuple[RegraCategoria, ...] = ()
+    padrao: bool = False
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "regras", tuple(self.regras))
+
+
+@dataclass(frozen=True)
 class PainelPerfil:
     grupos: tuple[Grupo, ...]
     ignorar: tuple[str, ...] = ()
     avanco: tuple[str, ...] = ()
     indicadores: tuple[IndicadorAprovacao, ...] = ()
+    categorias: tuple[Categoria, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "grupos", tuple(self.grupos))
         object.__setattr__(self, "ignorar", tuple(self.ignorar))
         object.__setattr__(self, "avanco", tuple(self.avanco))
         object.__setattr__(self, "indicadores", tuple(self.indicadores))
+        object.__setattr__(self, "categorias", tuple(self.categorias))
 
 
 @dataclass(frozen=True)
@@ -196,7 +223,7 @@ def perfil_de_dict(dados: Mapping[str, Any]) -> PerfilContrato:
         emissao = regra_emissao_de_dict(dados.get("emissao") or {})
         _validar_series(emissao)
         analise = ciclo_analise_de_dict(dados.get("analise") or {})
-        painel = _painel_de_dict(dados.get("painel"))
+        painel = _painel_de_dict(dados.get("painel"), codigo)
         prazos = _prazos_de_dict(dados.get("prazos"))
         return PerfilContrato(nome, versao, vigencia, codigo, emissao, analise, painel, prazos)
     except ErroPerfil:
@@ -224,7 +251,7 @@ def carregar_yaml(caminho: str | Path) -> PerfilContrato:
     return perfil_de_dict(dados)
 
 
-def _painel_de_dict(dados: Any) -> PainelPerfil:
+def _painel_de_dict(dados: Any, codigo: EstruturaCodigo) -> PainelPerfil:
     if dados is None:
         return _painel_minimo()
     if not isinstance(dados, Mapping):
@@ -339,9 +366,75 @@ def _painel_de_dict(dados: Any) -> PainelPerfil:
         ids_avanco.add(chave_id)
 
     indicadores = _indicadores_de_dict(dados.get("indicadores", ()))
+    categorias = _categorias_de_dict(dados.get("categorias"), codigo)
     return PainelPerfil(
-        grupos=tuple(grupos), ignorar=ignorar, avanco=avanco, indicadores=indicadores
+        grupos=tuple(grupos),
+        ignorar=ignorar,
+        avanco=avanco,
+        indicadores=indicadores,
+        categorias=categorias,
     )
+
+
+def _categorias_de_dict(dados: Any, codigo: EstruturaCodigo) -> tuple[Categoria, ...]:
+    if dados is None:
+        return ()
+    if not isinstance(dados, (list, tuple)):
+        raise ErroPerfil("'painel.categorias' precisa ser uma lista.")
+
+    caixas = {campo.nome.casefold(): campo.nome for campo in codigo.campos}
+    categorias: list[Categoria] = []
+    ids: set[str] = set()
+    padroes = 0
+    for posicao, item in enumerate(dados, start=1):
+        campo = f"painel.categorias[{posicao}]"
+        if not isinstance(item, Mapping):
+            raise ErroPerfil(f"{campo} precisa ser um objeto.")
+        identificador = _texto_obrigatorio(item.get("id"), f"id em {campo}")
+        chave_id = identificador.casefold()
+        if chave_id in ids:
+            raise ErroPerfil(f"Id de categoria repetido em 'painel.categorias': '{identificador}'.")
+        ids.add(chave_id)
+        rotulo = _texto_obrigatorio(item.get("rotulo"), f"rótulo da categoria '{identificador}'")
+        padrao = item.get("padrao", False)
+        if not isinstance(padrao, bool):
+            raise ErroPerfil(f"'padrao' da categoria '{identificador}' precisa ser booleano.")
+        padroes += int(padrao)
+
+        regras_brutas = item.get("regras", ())
+        if not isinstance(regras_brutas, (list, tuple)):
+            raise ErroPerfil(f"'regras' da categoria '{identificador}' precisa ser uma lista.")
+        regras: list[RegraCategoria] = []
+        for indice, regra_bruta in enumerate(regras_brutas, start=1):
+            campo_regra = f"{campo}.regras[{indice}]"
+            if not isinstance(regra_bruta, Mapping) or not regra_bruta:
+                raise ErroPerfil(f"{campo_regra} precisa ser um objeto com ao menos uma caixa.")
+            valores_regra: dict[str, tuple[str, ...]] = {}
+            caixas_regra: set[str] = set()
+            for nome_caixa, valores_brutos in regra_bruta.items():
+                if not isinstance(nome_caixa, str) or nome_caixa.casefold() not in caixas:
+                    raise ErroPerfil(
+                        f"A regra {campo_regra} referencia a caixa inexistente '{nome_caixa}'."
+                    )
+                nome = caixas[nome_caixa.casefold()]
+                chave_caixa = nome.casefold()
+                if chave_caixa in caixas_regra:
+                    raise ErroPerfil(f"Caixa repetida em {campo_regra}: '{nome}'.")
+                caixas_regra.add(chave_caixa)
+                if not isinstance(valores_brutos, (list, tuple)) or not valores_brutos:
+                    raise ErroPerfil(
+                        f"Os valores da caixa '{nome}' em {campo_regra} precisam ser uma lista não vazia."
+                    )
+                valores_regra[nome] = tuple(
+                    _texto_obrigatorio(valor, f"valor da caixa '{nome}' em {campo_regra}")
+                    for valor in valores_brutos
+                )
+            regras.append(RegraCategoria(valores=valores_regra))
+        categorias.append(Categoria(identificador, rotulo, tuple(regras), padrao))
+
+    if padroes > 1:
+        raise ErroPerfil("'painel.categorias' não pode ter mais de uma categoria com 'padrao: true'.")
+    return tuple(categorias)
 
 
 def _indicadores_de_dict(dados: Any) -> tuple[IndicadorAprovacao, ...]:

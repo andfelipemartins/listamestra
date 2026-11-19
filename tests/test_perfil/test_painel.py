@@ -3,7 +3,12 @@ from pathlib import Path
 import pytest
 
 from core.perfil.modelo import ErroPerfil, carregar_yaml, perfil_de_dict
-from core.perfil.painel import classificar, resolver_situacao_oculta, resumir
+from core.perfil.painel import (
+    classificar,
+    classificar_categoria,
+    resolver_situacao_oculta,
+    resumir,
+)
 
 
 ROOT = Path(__file__).parents[2]
@@ -197,3 +202,80 @@ def test_painel_spobras_usa_situacoes_do_manual():
     assert classificar(spobras, "A REVISAR").id == "nao_aprovado"
     assert classificar(spobras, "CANCELADO").id == "cancelado"
     assert all(not grupo.oculto_no_painel for grupo in spobras.painel.grupos)
+    assert spobras.painel.categorias == ()
+
+
+def _perfil_com_categorias(categorias):
+    dados = _perfil_base(
+        {
+            "grupos": [
+                {"id": "a_emitir", "rotulo": "A EMITIR", "sem_emissao": True},
+            ],
+            "categorias": categorias,
+        }
+    )
+    dados["codigo"]["segmentos"] = [
+        {"nome": "tipo", "padrao_regex": "[A-Z]+"},
+        {"nome": "classe_subclasse", "padrao_regex": "[A-Z][0-9]"},
+    ]
+    return perfil_de_dict(dados)
+
+
+def test_categoria_usa_primeira_regra_e_sigla_precede_classe():
+    perfil = _perfil_com_categorias(
+        [
+            {
+                "id": "qualidade",
+                "rotulo": "QUALIDADE",
+                "regras": [
+                    {"tipo": ["PE", "MQ"]},
+                    {"classe_subclasse": ["A7"]},
+                ],
+            },
+            {"id": "arquitetura", "rotulo": "ARQUITETURA", "regras": [{"classe_subclasse": ["B3", "B7", "N3"]}]},
+            {"id": "sistemas", "rotulo": "SISTEMAS", "regras": [{"classe_subclasse": ["P7"]}]},
+            {"id": "civil", "rotulo": "CIVIL", "padrao": True},
+        ]
+    )
+
+    assert classificar_categoria(perfil, {"tipo": "PE", "classe_subclasse": "B3"}).id == "qualidade"
+    assert classificar_categoria(perfil, {"tipo": "DE", "classe_subclasse": "A7"}).id == "qualidade"
+    assert classificar_categoria(perfil, {"tipo": "DE", "classe_subclasse": "N3"}).id == "arquitetura"
+    assert classificar_categoria(perfil, {"tipo": "DE", "classe_subclasse": "P7"}).id == "sistemas"
+    assert classificar_categoria(perfil, {"tipo": "DE", "classe_subclasse": "C1"}).id == "civil"
+
+
+def test_categoria_sem_padrao_retorna_none_para_outros():
+    perfil = _perfil_com_categorias(
+        [{"id": "qualidade", "rotulo": "QUALIDADE", "regras": [{"tipo": ["PE"]}]}]
+    )
+
+    assert classificar_categoria(perfil, {"tipo": "DE", "classe_subclasse": "C1"}) is None
+
+
+@pytest.mark.parametrize(
+    ("categorias", "mensagem"),
+    [
+        (
+            [
+                {"id": "civil", "rotulo": "Civil", "regras": []},
+                {"id": "CIVIL", "rotulo": "Outro", "regras": []},
+            ],
+            "Id de categoria repetido",
+        ),
+        (
+            [{"id": "civil", "rotulo": "Civil", "regras": [{"classe": ["A1"]}]}],
+            "caixa inexistente",
+        ),
+        (
+            [
+                {"id": "civil", "rotulo": "Civil", "regras": [], "padrao": True},
+                {"id": "sistemas", "rotulo": "Sistemas", "regras": [], "padrao": True},
+            ],
+            "mais de uma categoria",
+        ),
+    ],
+)
+def test_validacoes_de_categorias(categorias, mensagem):
+    with pytest.raises(ErroPerfil, match=mensagem):
+        _perfil_com_categorias(categorias)

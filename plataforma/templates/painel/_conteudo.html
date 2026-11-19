@@ -1,6 +1,19 @@
 <section class="page-heading painel-heading">
   <div><span class="eyebrow">ACOMPANHAMENTO EXECUTIVO</span><h1>{{ contrato.nome }}</h1><p>{{ contrato.codigo_interno }} · {{ contrato.cliente }}</p></div>
   <div class="painel-total"><span>Documentos previstos em conta</span><strong>{{ total_documentos_previstos }}</strong><small>{{ total_documentos_id }} no ID{% if quantidade_filtros_ativos %} com os filtros{% endif %}</small></div>
+  {% if categoria_cards %}
+  <div class="painel-categoria-cards" style="display:grid;flex:1;min-width:220px;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:8px;align-self:stretch">
+    {% for item in categoria_cards %}
+    <article class="painel-categoria-card" style="display:flex;flex-direction:column;justify-content:center;gap:5px;padding:9px 11px;border:1px solid var(--border);border-radius:10px;background:var(--surface)">
+      <span style="color:var(--text-secondary);font-size:10px;font-weight:700;letter-spacing:.04em">{{ item.rotulo }}</span>
+      <strong style="font-size:21px;line-height:1">{{ item.total }}</strong>
+      <div style="display:flex;flex-wrap:wrap;gap:3px 8px;color:var(--text-secondary);font-size:9px;line-height:1.35">
+        {% for grupo in item.grupos %}<span>{{ grupo.rotulo }} <b style="color:var(--text-primary)">{{ grupo.quantidade }}</b></span>{% endfor %}
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% endif %}
 </section>
 
 {% if linhas_recusadas %}
@@ -24,6 +37,7 @@
       <label class="painel-seletor">Agrupar barras por
         <select name="por" aria-label="Selecionar caixa do perfil">
           {% for caixa in caixas %}<option value="{{ caixa.nome }}" {% if caixa.nome == por %}selected{% endif %}>{{ caixa.rotulo }}</option>{% endfor %}
+          {% if categorias %}<option value="categoria" {% if por == "categoria" %}selected{% endif %}>Categoria</option>{% endif %}
         </select>
       </label>
     </div>

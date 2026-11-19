@@ -13,7 +13,12 @@ from core.perfil.indicadores import (
     EmissaoIndicador,
     calcular_indicador_aprovacao,
 )
-from core.perfil.painel import classificar, resolver_situacao_oculta, resumir
+from core.perfil.painel import (
+    classificar,
+    classificar_categoria,
+    resolver_situacao_oculta,
+    resumir,
+)
 from core.perfil.prazos import avaliar as avaliar_prazo, indicador as resumir_prazos
 from contratos.models import PerfilContrato
 from documentos.models import Analise, Documento, Emissao
@@ -22,6 +27,9 @@ from importacoes.models import ImportacaoID, ImportacaoSituacao, ItemPrevisto
 
 class PainelIndisponivel(ValueError):
     pass
+
+
+_ID_OUTROS = "__outros__"
 
 
 @dataclass(frozen=True)
@@ -78,6 +86,8 @@ def carregar_painel(contrato, por=None, filtros=None):
         )
 
     filtros_disponiveis = _filtros_disponiveis(perfil.codigo.campos, todos_documentos)
+    if perfil.painel.categorias:
+        filtros_disponiveis.append(_filtro_categorias(perfil, todos_documentos))
     filtros_selecionados = _normalizar_filtros(filtros, filtros_disponiveis)
     for filtro in filtros_disponiveis:
         valores_selecionados = filtros_selecionados.get(filtro["nome"], set())
@@ -85,7 +95,9 @@ def carregar_painel(contrato, por=None, filtros=None):
             opcao["selecionado"] = opcao["valor"] in valores_selecionados
     filtros_ativos = _resumir_filtros(filtros_disponiveis, filtros_selecionados)
     documentos_filtrados = [
-        item for item in todos_documentos if _corresponde_filtros(item.documento, filtros_selecionados)
+        item
+        for item in todos_documentos
+        if _corresponde_filtros(item.documento, filtros_selecionados, perfil)
     ]
 
     grupos_fora_painel = {
@@ -111,7 +123,7 @@ def carregar_painel(contrato, por=None, filtros=None):
     )
     if filtros_selecionados:
         fora_do_id = sum(
-            _corresponde_filtros(documento, filtros_selecionados)
+            _corresponde_filtros(documento, filtros_selecionados, perfil)
             for documento in documentos_fora_id
         )
     else:
@@ -121,8 +133,18 @@ def carregar_painel(contrato, por=None, filtros=None):
     if not caixas:
         raise PainelIndisponivel("O perfil vigente não define caixas para recorte.")
     nomes_caixas = {caixa.nome for caixa in caixas}
-    caixa_selecionada = por if por in nomes_caixas else caixas[0].nome
-    definicao_caixa = next(caixa for caixa in caixas if caixa.nome == caixa_selecionada)
+    nome_categoria = "categoria"
+    caixa_selecionada = (
+        por
+        if por in nomes_caixas or (por == nome_categoria and perfil.painel.categorias)
+        else caixas[0].nome
+    )
+    definicao_caixa = next(
+        (caixa for caixa in caixas if caixa.nome == caixa_selecionada), None
+    )
+    rotulo_caixa = (
+        "Categoria" if caixa_selecionada == nome_categoria else definicao_caixa.rotulo
+    )
 
     indicadores_prazo, analises_deduzidas_sem_data = _calcular_indicadores_prazo(
         perfil,
@@ -150,7 +172,8 @@ def carregar_painel(contrato, por=None, filtros=None):
                     )
                     for emissao in item.documento.emissoes.all()
                 ),
-                recorte=_valor_caixa(item.documento, caixa_selecionada) or "(sem informação)",
+                recorte=_valor_recorte(perfil, item.documento, caixa_selecionada)
+                or "(sem informação)",
                 situacoes_mais_recentes=item.situacoes_mais_recentes,
             )
             for item in documentos_filtrados
@@ -158,7 +181,7 @@ def carregar_painel(contrato, por=None, filtros=None):
         resultado = calcular_indicador_aprovacao(perfil, indicador, documentos_indicador)
         recortes_indicador = []
         for valor, contagem in resultado.por_recorte.items():
-            rotulo = (definicao_caixa.valores or {}).get(valor, valor)
+            rotulo = _rotulo_recorte(perfil, caixa_selecionada, valor, definicao_caixa)
             recortes_indicador.append(
                 {
                     "valor": valor,
@@ -193,13 +216,13 @@ def carregar_painel(contrato, por=None, filtros=None):
 
     por_valor = {}
     for item in documentos_em_conta:
-        bruto = _valor_caixa(item.documento, caixa_selecionada)
+        bruto = _valor_recorte(perfil, item.documento, caixa_selecionada)
         valor = bruto or "(sem informação)"
         registro = por_valor.setdefault(
             valor,
             {
                 "valor": valor,
-                "rotulo": (definicao_caixa.valores or {}).get(valor, valor),
+                "rotulo": _rotulo_recorte(perfil, caixa_selecionada, valor, definicao_caixa),
                 "situacoes": [],
             },
         )
@@ -221,6 +244,8 @@ def carregar_painel(contrato, por=None, filtros=None):
                 "contagens": [subtotal.contagens.get(grupo.id, 0) for grupo in grupos_recorte],
             }
         )
+
+    categoria_cards = _cartoes_categorias(perfil, documentos_em_conta, todos_documentos)
 
     ultima_situacao = (
         ImportacaoSituacao.objects.filter(contrato=contrato)
@@ -250,8 +275,10 @@ def carregar_painel(contrato, por=None, filtros=None):
         if ultima_importacao_id
         else None,
         "caixas": caixas,
+        "categorias": perfil.painel.categorias,
+        "categoria_cards": categoria_cards,
         "por": caixa_selecionada,
-        "rotulo_caixa": definicao_caixa.rotulo,
+        "rotulo_caixa": rotulo_caixa,
         "filtros": filtros_disponiveis,
         "filtros_ativos": filtros_ativos,
         "quantidade_filtros_ativos": sum(len(item["valores"]) for item in filtros_ativos),
@@ -273,10 +300,9 @@ def _calcular_indicadores_prazo(perfil, documentos, caixa_selecionada, definicao
     analises_sem_data = set()
     recortes_documentos = {}
     for item in documentos:
-        valor = _valor_caixa(item.documento, caixa_selecionada) or "(sem informação)"
-        recortes_documentos.setdefault(
-            valor, (definicao_caixa.valores or {}).get(valor, valor)
-        )
+        valor = _valor_recorte(perfil, item.documento, caixa_selecionada) or "(sem informação)"
+        rotulo = _rotulo_recorte(perfil, caixa_selecionada, valor, definicao_caixa)
+        recortes_documentos.setdefault(valor, rotulo)
 
     for regra in prazos.regras:
         avaliacoes = []
@@ -286,7 +312,7 @@ def _calcular_indicadores_prazo(perfil, documentos, caixa_selecionada, definicao
                 perfil, regra, item.documento, hoje, feriados
             )
             analises_sem_data.update(sem_data)
-            valor = _valor_caixa(item.documento, caixa_selecionada) or "(sem informação)"
+            valor = _valor_recorte(perfil, item.documento, caixa_selecionada) or "(sem informação)"
             for avaliacao in registro:
                 avaliacoes.append(avaliacao)
                 por_recorte[valor].append(avaliacao)
@@ -469,6 +495,21 @@ def _filtros_disponiveis(caixas, documentos):
     return filtros
 
 
+def _filtro_categorias(perfil, documentos):
+    categorias = {categoria.id: categoria.rotulo for categoria in perfil.painel.categorias}
+    valores_presentes = {
+        _id_categoria(perfil, item.documento) for item in documentos
+    }
+    opcoes = [
+        {"valor": categoria_id, "rotulo": rotulo}
+        for categoria_id, rotulo in categorias.items()
+        if categoria_id in valores_presentes
+    ]
+    if _ID_OUTROS in valores_presentes:
+        opcoes.append({"valor": _ID_OUTROS, "rotulo": "Outros"})
+    return {"nome": "categoria", "rotulo": "Categoria", "opcoes": opcoes}
+
+
 def _normalizar_filtros(filtros, filtros_disponiveis):
     selecionados = {}
     for filtro in filtros_disponiveis:
@@ -500,10 +541,80 @@ def _resumir_filtros(filtros_disponiveis, selecionados):
     return ativos
 
 
-def _corresponde_filtros(documento, filtros):
+def _corresponde_filtros(documento, filtros, perfil=None):
     return all(
-        _valor_caixa(documento, nome) in valores for nome, valores in filtros.items()
+        (
+            _id_categoria(perfil, documento)
+            if perfil is not None and perfil.painel.categorias and nome == "categoria"
+            else _valor_caixa(documento, nome)
+        )
+        in valores
+        for nome, valores in filtros.items()
     )
+
+
+def _id_categoria(perfil, documento):
+    valores_caixas = {
+        caixa.nome: _valor_caixa(documento, caixa.nome) for caixa in perfil.codigo.campos
+    }
+    categoria = classificar_categoria(perfil, valores_caixas)
+    return categoria.id if categoria is not None else _ID_OUTROS
+
+
+def _valor_recorte(perfil, documento, nome):
+    if nome == "categoria" and perfil.painel.categorias:
+        return _id_categoria(perfil, documento)
+    return _valor_caixa(documento, nome)
+
+
+def _rotulo_recorte(perfil, nome, valor, definicao_caixa):
+    if nome == "categoria" and perfil.painel.categorias:
+        if valor == _ID_OUTROS:
+            return "Outros"
+        return next(
+            (categoria.rotulo for categoria in perfil.painel.categorias if categoria.id == valor),
+            valor,
+        )
+    return (definicao_caixa.valores or {}).get(valor, valor)
+
+
+def _cartoes_categorias(perfil, documentos_em_conta, todos_documentos):
+    if not perfil.painel.categorias:
+        return []
+    categorias = [(categoria.id, categoria.rotulo) for categoria in perfil.painel.categorias]
+    if any(_id_categoria(perfil, item.documento) == _ID_OUTROS for item in todos_documentos):
+        categorias.append((_ID_OUTROS, "Outros"))
+
+    grupos_resumo = tuple(
+        grupo
+        for grupo in perfil.painel.grupos
+        if grupo.conta_no_avanco and not grupo.oculto_no_painel
+    )
+    cartoes = []
+    for categoria_id, rotulo in categorias:
+        documentos_categoria = [
+            item
+            for item in documentos_em_conta
+            if _id_categoria(perfil, item.documento) == categoria_id
+        ]
+        resumo_categoria = resumir(
+            perfil, (item.situacao for item in documentos_categoria)
+        )
+        cartoes.append(
+            {
+                "id": categoria_id,
+                "rotulo": rotulo,
+                "total": resumo_categoria.total_previsto,
+                "grupos": [
+                    {
+                        "rotulo": grupo.rotulo,
+                        "quantidade": resumo_categoria.contagens.get(grupo.id, 0),
+                    }
+                    for grupo in grupos_resumo
+                ],
+            }
+        )
+    return cartoes
 
 
 def _situacao_atual(documento):

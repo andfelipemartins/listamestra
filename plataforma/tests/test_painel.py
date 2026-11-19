@@ -348,6 +348,70 @@ def test_filtro_combina_com_recorte_de_barras(contrato, perfil_modelo):
 
 
 @pytest.mark.django_db
+def test_categorias_do_perfil_aparecem_em_cartoes_recortes_e_filtros(
+    contrato, perfil_modelo, client, django_user_model
+):
+    usuario = django_user_model.objects.create_user(username="chefia-categorias", password="senha")
+    Participacao.objects.create(usuario=usuario, contrato=contrato, papel="chefia")
+    indice = _indice(contrato, "ID-CATEGORIAS")
+    _documento(contrato, indice, 6101, tipo="PE", classe="B3")
+    _documento(contrato, indice, 6102, tipo="DE", classe="A7", situacao="Em Análise")
+    _documento(contrato, indice, 6103, tipo="DE", classe="B3", situacao="Aprovado")
+    _documento(contrato, indice, 6104, tipo="DE", classe="P7")
+    _documento(contrato, indice, 6105, tipo="DE", classe="C1")
+    client.force_login(usuario)
+
+    dados = carregar_painel(contrato, por="categoria")
+    resposta = client.get(reverse("painel", args=(contrato.pk,)), {"por": "categoria"})
+    cartoes = {item["rotulo"]: item for item in dados["categoria_cards"]}
+    qualidade = {item["rotulo"]: item["quantidade"] for item in cartoes["QUALIDADE"]["grupos"]}
+    filtro = next(item for item in dados["filtros"] if item["nome"] == "categoria")
+    filtrado = carregar_painel(contrato, por="categoria", filtros={"categoria": "sistemas"})
+
+    assert dados["por"] == "categoria"
+    assert {nome: item["total"] for nome, item in cartoes.items()} == {
+        "QUALIDADE": 2,
+        "ARQUITETURA": 1,
+        "SISTEMAS": 1,
+        "CIVIL": 1,
+    }
+    assert qualidade["A EMITIR"] == 1
+    assert qualidade["EM ANÁLISE"] == 1
+    assert qualidade["APROVADO"] == 0
+    assert {opcao["valor"] for opcao in filtro["opcoes"]} == {
+        "qualidade",
+        "arquitetura",
+        "sistemas",
+        "civil",
+    }
+    assert filtrado["total_documentos_previstos"] == 1
+    assert {item["rotulo"]: item["total"] for item in filtrado["recortes"]} == {"SISTEMAS": 1}
+    assert {item["rotulo"]: item["total"] for item in filtrado["categoria_cards"]}[
+        "SISTEMAS"
+    ] == 1
+    html = resposta.content.decode()
+    assert "Categoria" in html
+    assert "QUALIDADE" in html
+
+
+@pytest.mark.django_db
+def test_categoria_sem_regra_e_sem_padrao_vai_para_outros(contrato, perfil_modelo):
+    definicao = perfil_modelo.definicao
+    definicao["painel"]["categorias"] = definicao["painel"]["categorias"][:-1]
+    perfil_modelo.definicao = definicao
+    perfil_modelo.save(update_fields=("definicao",))
+    indice = _indice(contrato, "ID-CATEGORIA-OUTROS")
+    _documento(contrato, indice, 6201, classe="C1")
+
+    dados = carregar_painel(contrato, por="categoria")
+
+    assert {item["rotulo"]: item["total"] for item in dados["categoria_cards"]}["Outros"] == 1
+    assert {item["rotulo"]: item["total"] for item in dados["recortes"]} == {"Outros": 1}
+    filtro = next(item for item in dados["filtros"] if item["nome"] == "categoria")
+    assert {opcao["valor"] for opcao in filtro["opcoes"]} == {"__outros__"}
+
+
+@pytest.mark.django_db
 def test_indicador_mostra_distribuicao_vertical_e_linha_meta_no_limite(
     contrato, perfil_modelo, client, django_user_model
 ):

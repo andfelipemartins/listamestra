@@ -7,7 +7,7 @@ from types import MappingProxyType
 from typing import Iterable, Mapping
 
 from .ciclo import _normalizar_situacao
-from .modelo import Grupo, PerfilContrato
+from .modelo import Categoria, Grupo, PerfilContrato
 
 
 _GRUPO_NAO_MAPEADO = Grupo(id="nao_mapeado", rotulo="NÃO MAPEADO")
@@ -48,6 +48,31 @@ def classificar(perfil: PerfilContrato, situacao_vigente: str | None) -> Grupo:
         if any(_normalizar_situacao(estado) == chave for estado in grupo.estados):
             return grupo
     return _GRUPO_NAO_MAPEADO
+
+
+def classificar_categoria(
+    perfil: PerfilContrato, valores_caixas: Mapping[str, str | None]
+) -> Categoria | None:
+    """Classifica pelas regras ordenadas do perfil e usa a categoria padrão como fallback."""
+    categorias = perfil.painel.categorias
+    padrao = next((categoria for categoria in categorias if categoria.padrao), None)
+    valores = {str(nome).casefold(): _normalizar_valor(valor) for nome, valor in valores_caixas.items()}
+    for categoria in categorias:
+        if categoria.padrao:
+            continue
+        if any(
+            all(
+                valores.get(caixa.casefold()) in {valor.casefold() for valor in aceitos}
+                for caixa, aceitos in regra.valores.items()
+            )
+            for regra in categoria.regras
+        ):
+            return categoria
+    return padrao
+
+
+def _normalizar_valor(valor: str | None) -> str:
+    return str(valor).strip().casefold() if valor is not None else ""
 
 
 def resolver_situacao_oculta(

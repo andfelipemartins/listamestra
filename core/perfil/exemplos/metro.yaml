@@ -335,6 +335,25 @@ painel:
   # Revisão Superada é somente histórica, nunca a situação vigente.
   ignorar: ["Revisão Superada"]
   avanco: [aprovado]
+  # D-052: categorias do painel seguem a coluna MODALIDADE da Lista Mestra; D-057: N3 (paisagismo e urbanismo) é ARQUITETURA.
+  categorias:
+    - id: qualidade
+      rotulo: QUALIDADE
+      regras:
+        - tipo: [PE, MQ]
+        - classe: [A7]
+    - id: arquitetura
+      rotulo: ARQUITETURA
+      regras:
+        - classe: [B3, B7, N3]
+    - id: sistemas
+      rotulo: SISTEMAS
+      regras:
+        - classe: [P0, P5, P6, P7, Q1, S5, S6, Z2]
+    - id: civil
+      rotulo: CIVIL
+      regras: []
+      padrao: true
   indicadores:
     # D-052: PE-ENG-001 item 5.5 define aprovação em até 3 revisões, sem meta percentual.
     # D-043/D-044: revisões contam emissões do primeiro ciclo; empacados não entram e a linha se chama Meta.
