@@ -41,6 +41,10 @@ class DocumentoIndicador:
 class ResultadoContagemIndicador:
     dentro_limite: int
     fora_limite: int
+    distribuicao: tuple[int, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "distribuicao", tuple(self.distribuicao))
 
     @property
     def base(self) -> int:
@@ -64,11 +68,16 @@ def calcular_indicador_aprovacao(
     indicador: IndicadorAprovacao,
     documentos: Iterable[DocumentoIndicador],
 ) -> ResultadoIndicadorAprovacao:
-    """Calcula o percentual do primeiro ciclo e as mesmas métricas por recorte."""
+    """Calcula aprovações no primeiro ciclo e sua distribuição por revisão."""
     ids_avanco = {identificador.casefold() for identificador in perfil.painel.avanco}
     grupos = {grupo.id.casefold(): grupo for grupo in perfil.painel.grupos}
     dentro = fora = 0
-    por_recorte: dict[str, list[int]] = {}
+    quantidade_faixas = indicador.agrupar_a_partir + 1
+    distribuicao_geral = [0] * quantidade_faixas
+    por_recorte: dict[str, list] = {}
+
+    def nova_contagem() -> list:
+        return [0, 0, [0] * quantidade_faixas]
 
     for documento in documentos:
         grupo_id = documento.grupo_id.casefold()
@@ -92,14 +101,19 @@ def calcular_indicador_aprovacao(
         ):
             continue
 
-        contagem = por_recorte.setdefault(documento.recorte, [0, 0])
+        contagem = por_recorte.setdefault(documento.recorte, nova_contagem())
         if grupo_sem_emissao:
             continue
 
         numero_revisoes, aprovado = _contar_primeiro_ciclo(perfil, documento.emissoes)
         estourou = numero_revisoes > indicador.limite_revisoes
         no_avanco = grupo_id in ids_avanco
-        if no_avanco:
+        aprovado = aprovado or no_avanco
+        if aprovado:
+            faixa = min(numero_revisoes, indicador.agrupar_a_partir)
+            distribuicao_geral[faixa] += 1
+            contagem[2][faixa] += 1
+        if aprovado:
             if estourou:
                 fora += 1
                 contagem[1] += 1
@@ -115,9 +129,11 @@ def calcular_indicador_aprovacao(
             contagem[1] += 1
 
     return ResultadoIndicadorAprovacao(
-        geral=ResultadoContagemIndicador(dentro, fora),
+        geral=ResultadoContagemIndicador(dentro, fora, tuple(distribuicao_geral)),
         por_recorte={
-            valor: ResultadoContagemIndicador(contagem[0], contagem[1])
+            valor: ResultadoContagemIndicador(
+                contagem[0], contagem[1], tuple(contagem[2])
+            )
             for valor, contagem in por_recorte.items()
         },
     )

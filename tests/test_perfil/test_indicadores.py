@@ -43,6 +43,7 @@ def test_aprovacao_na_copia_3_fica_dentro_do_limite(metro):
 
     assert (resultado.geral.dentro_limite, resultado.geral.fora_limite) == (1, 0)
     assert resultado.geral.percentual == 100
+    assert resultado.geral.distribuicao[2] == 1
 
 
 def test_aprovacao_na_quarta_emissao_fica_dentro_do_limite(metro):
@@ -61,6 +62,7 @@ def test_aprovacao_na_quarta_emissao_fica_dentro_do_limite(metro):
 
     assert (resultado.geral.dentro_limite, resultado.geral.fora_limite) == (1, 0)
     assert resultado.geral.percentual == 100
+    assert resultado.geral.distribuicao[3] == 1
 
 
 def test_emissoes_com_mesma_revisao_e_versoes_diferentes_contam_como_revisoes(metro):
@@ -80,6 +82,7 @@ def test_emissoes_com_mesma_revisao_e_versoes_diferentes_contam_como_revisoes(me
     )
 
     assert (resultado.geral.dentro_limite, resultado.geral.fora_limite) == (1, 0)
+    assert resultado.geral.distribuicao[3] == 1
 
 
 def test_quinta_emissao_aprovada_excede_limite_de_tres_revisoes(metro):
@@ -100,6 +103,33 @@ def test_quinta_emissao_aprovada_excede_limite_de_tres_revisoes(metro):
     )
 
     assert (resultado.geral.dentro_limite, resultado.geral.fora_limite) == (0, 1)
+    assert resultado.geral.distribuicao[4] == 1
+
+
+def test_distribuicao_agrupa_aprovacoes_em_rev_5_ou_mais_por_recorte(metro):
+    documentos = []
+    for numero_revisoes, recorte in ((0, "25"), (1, "23"), (3, "25"), (4, "23"), (5, "25"), (6, "23")):
+        emissoes = [
+            EmissaoIndicador(
+                "preliminar",
+                str(posicao + 1),
+                "Aprovado" if posicao == numero_revisoes else "Não Aprovado",
+            )
+            for posicao in range(numero_revisoes + 1)
+        ]
+        documentos.append(
+            DocumentoIndicador("aprovado", "Aprovado", tuple(emissoes), recorte)
+        )
+
+    resultado = calcular_indicador_aprovacao(
+        metro, metro.painel.indicadores[0], documentos
+    )
+
+    assert resultado.geral.distribuicao == (1, 1, 0, 1, 1, 2)
+    assert resultado.geral.base == sum(resultado.geral.distribuicao) == 6
+    assert resultado.geral.percentual == 50
+    assert resultado.por_recorte["25"].distribuicao == (1, 0, 0, 1, 0, 1)
+    assert resultado.por_recorte["23"].distribuicao == (0, 1, 0, 0, 1, 1)
 
 
 def test_indicador_resolve_situacao_oculta_pela_historica_valida(metro):
@@ -202,6 +232,7 @@ def test_base_vazia_retorna_sem_dados(metro):
     [
         (lambda i: i.update(limite_revisoes=0), "limite_revisoes"),
         (lambda i: i.update(meta_percentual=101), "meta_percentual"),
+        (lambda i: i.update(agrupar_a_partir=3), "agrupar_a_partir"),
         (lambda i: i.update(contar_estourados_sem_aprovacao="sim"), "precisa ser booleano"),
         (lambda i: i.update(ciclos="cada_ciclo"), "ainda não suportado"),
         (lambda i: i.update(rotulo_meta=" "), "rótulo da meta"),
@@ -281,6 +312,8 @@ def test_rotulo_padrao_do_indicador_usa_o_limite_do_perfil():
 
     assert perfil.painel.indicadores[0].rotulo == "Aprovados até a Revisão 3"
     assert perfil.painel.indicadores[0].contar_estourados_sem_aprovacao is False
+    assert perfil.painel.indicadores[0].meta_percentual is None
+    assert perfil.painel.indicadores[0].agrupar_a_partir == 5
 
 
 def test_rotulo_declarado_no_perfil_prevalece_sobre_o_rotulo_gerado():

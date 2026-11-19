@@ -111,10 +111,11 @@ class IndicadorAprovacao:
     id: str
     rotulo: str
     limite_revisoes: int
-    meta_percentual: float
+    meta_percentual: float | None
     rotulo_meta: str
     contar_estourados_sem_aprovacao: bool
     ciclos: str
+    agrupar_a_partir: int = 5
 
 
 @dataclass(frozen=True)
@@ -370,8 +371,23 @@ def _indicadores_de_dict(dados: Any) -> tuple[IndicadorAprovacao, ...]:
         if isinstance(limite, bool) or not isinstance(limite, int) or limite < 1:
             raise ErroPerfil(f"'limite_revisoes' de '{identificador}' precisa ser inteiro maior ou igual a 1.")
         meta = item.get("meta_percentual")
-        if isinstance(meta, bool) or not isinstance(meta, (int, float)) or not 0 <= meta <= 100:
+        if meta is not None and (
+            isinstance(meta, bool)
+            or not isinstance(meta, (int, float))
+            or not 0 <= meta <= 100
+        ):
             raise ErroPerfil(f"'meta_percentual' de '{identificador}' precisa ser um número entre 0 e 100.")
+        agrupar_a_partir = item.get("agrupar_a_partir", 5)
+        if (
+            isinstance(agrupar_a_partir, bool)
+            or not isinstance(agrupar_a_partir, int)
+            or agrupar_a_partir < 1
+        ):
+            raise ErroPerfil(f"'agrupar_a_partir' de '{identificador}' precisa ser inteiro maior ou igual a 1.")
+        if agrupar_a_partir <= limite:
+            raise ErroPerfil(
+                f"'agrupar_a_partir' de '{identificador}' precisa ser maior que 'limite_revisoes'."
+            )
         contar_estourados = item.get("contar_estourados_sem_aprovacao")
         if not isinstance(contar_estourados, bool):
             raise ErroPerfil(
@@ -394,12 +410,13 @@ def _indicadores_de_dict(dados: Any) -> tuple[IndicadorAprovacao, ...]:
                     f"rótulo do indicador '{identificador}'",
                 ),
                 limite_revisoes=limite,
-                meta_percentual=float(meta),
+                meta_percentual=float(meta) if meta is not None else None,
                 rotulo_meta=_texto_obrigatorio(
                     item.get("rotulo_meta"), f"rótulo da meta do indicador '{identificador}'"
                 ),
                 contar_estourados_sem_aprovacao=contar_estourados,
                 ciclos=ciclos,
+                agrupar_a_partir=agrupar_a_partir,
             )
         )
     return tuple(indicadores)

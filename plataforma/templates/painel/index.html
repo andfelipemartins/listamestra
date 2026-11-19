@@ -7,7 +7,6 @@
 <script>
   let graficoPizzaPainel;
   let graficoRecortesPainel;
-  let graficosIndicadoresPainel = [];
 
   function desenharPizzaPainel() {
     if (!window.Chart) return;
@@ -39,123 +38,15 @@
     }
   }
 
-  function desenharIndicadoresPainel() {
-    for (const grafico of graficosIndicadoresPainel) grafico.destroy();
-    graficosIndicadoresPainel = [];
-    if (!window.Chart) return;
-
-    const pluginLinhaMeta = {
-      id: "linha-meta-indicador",
-      afterDraw(chart) {
-        const area = chart.chartArea;
-        const eixo = chart.scales.y;
-        const meta = chart.data.metaPercentual;
-        if (!area || !eixo || !Number.isFinite(meta)) return;
-        const contexto = chart.ctx;
-        const y = eixo.getPixelForValue(meta);
-        const estilo = getComputedStyle(document.documentElement);
-        const cor = estilo.getPropertyValue("--indicador-meta").trim() || "#64748b";
-        contexto.save();
-        contexto.strokeStyle = cor;
-        contexto.fillStyle = cor;
-        contexto.lineWidth = 1.5;
-        contexto.setLineDash([6, 5]);
-        contexto.beginPath();
-        contexto.moveTo(area.left, y);
-        contexto.lineTo(area.right, y);
-        contexto.stroke();
-        contexto.setLineDash([]);
-        contexto.font = "600 11px Segoe UI, Arial, sans-serif";
-        contexto.textAlign = "right";
-        contexto.textBaseline = y < area.top + 18 ? "top" : "bottom";
-        contexto.fillText(`${chart.data.rotuloMeta} ${meta}%`, area.right - 4, y < area.top + 18 ? y + 3 : y - 4);
-        contexto.restore();
-      }
-    };
-    const pluginRotulosBarras = {
-      id: "rotulos-indicador",
-      afterDatasetsDraw(chart) {
-        const dataset = chart.data.datasets[0];
-        const barras = chart.getDatasetMeta(0).data;
-        const contexto = chart.ctx;
-        const cor = getComputedStyle(document.documentElement).getPropertyValue("--ink").trim() || "#1b2b3d";
-        contexto.save();
-        contexto.fillStyle = cor;
-        contexto.font = "600 11px Segoe UI, Arial, sans-serif";
-        contexto.textAlign = "center";
-        contexto.textBaseline = "bottom";
-        barras.forEach((barra, indice) => {
-          const valor = dataset.data[indice];
-          if (!Number.isFinite(valor)) return;
-          const y = Math.max(chart.chartArea.top + 14, barra.y - 6);
-          const rotulo = `${new Intl.NumberFormat("pt-BR", {maximumFractionDigits: 1}).format(valor)}%`;
-          contexto.fillText(rotulo, barra.x, y);
-        });
-        contexto.restore();
-      }
-    };
-
-    for (const canvas of document.querySelectorAll("[data-grafico-indicador]")) {
-      const dadosEl = document.getElementById(canvas.id.replace("grafico-indicador-", "dados-indicador-"));
-      if (!dadosEl) continue;
-      const dados = JSON.parse(dadosEl.textContent);
-      const estilo = getComputedStyle(document.documentElement);
-      const normal = estilo.getPropertyValue("--blue").trim() || "#1769aa";
-      const alerta = estilo.getPropertyValue("--indicador-alerta").trim() || "#b7791f";
-      const texto = estilo.getPropertyValue("--muted").trim() || "#708093";
-      const grade = estilo.getPropertyValue("--grafico-grade").trim() || "#e4eaf0";
-      const valores = dados.datasets[0].data;
-      const cores = valores.map(valor => valor !== null && valor < dados.metaPercentual ? alerta : normal);
-      graficosIndicadoresPainel.push(new Chart(canvas, {
-        type: "bar",
-        data: {
-          labels: dados.labels,
-          metaPercentual: dados.metaPercentual,
-          rotuloMeta: dados.rotuloMeta,
-          datasets: [{
-            label: "Dentro do limite",
-            data: valores,
-            backgroundColor: cores,
-            borderRadius: 4,
-            maxBarThickness: 48
-          }]
-        },
-        plugins: [pluginRotulosBarras, pluginLinhaMeta],
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          layout: {padding: {top: 10}},
-          scales: {
-            y: {
-              min: 0,
-              max: 100,
-              ticks: {color: texto, callback: valor => `${valor}%`},
-              grid: {color: grade}
-            },
-            x: {ticks: {color: texto}, grid: {display: false}}
-          },
-          plugins: {
-            legend: {display: false},
-            tooltip: {callbacks: {label: contexto => contexto.raw === null ? "Sem dados" : `${contexto.raw.toFixed(1)}% dentro do limite`}}
-          }
-        }
-      }));
-    }
-  }
-
   function desenharGraficosPainel() {
     desenharPizzaPainel();
     desenharRecortesPainel();
-    desenharIndicadoresPainel();
   }
 
   document.addEventListener("DOMContentLoaded", desenharGraficosPainel);
   document.body.addEventListener("htmx:afterSwap", function(event) {
     if (event.detail.target.id === "painel-dados") desenharGraficosPainel();
-    if (event.detail.target.id === "painel-recortes") {
-      desenharRecortesPainel();
-      desenharIndicadoresPainel();
-    }
+    if (event.detail.target.id === "painel-recortes") desenharRecortesPainel();
   });
 </script>
 {% endblock %}

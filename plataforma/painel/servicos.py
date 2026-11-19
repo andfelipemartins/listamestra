@@ -1,5 +1,6 @@
 from collections.abc import Mapping
 from dataclasses import dataclass
+from math import ceil
 
 from django.db.models import F, Prefetch
 from django.utils import timezone
@@ -155,6 +156,7 @@ def carregar_painel(contrato, por=None, filtros=None):
                     "dentro_limite": contagem.dentro_limite,
                     "fora_limite": contagem.fora_limite,
                     "base": contagem.base,
+                    "distribuicao": _faixas_distribuicao(contagem.distribuicao, indicador),
                 }
             )
         indicadores_aprovacao.append(
@@ -165,6 +167,12 @@ def carregar_painel(contrato, por=None, filtros=None):
                 "dentro_limite": resultado.geral.dentro_limite,
                 "fora_limite": resultado.geral.fora_limite,
                 "base": resultado.geral.base,
+                "distribuicao": _faixas_distribuicao(
+                    resultado.geral.distribuicao, indicador
+                ),
+                "grafico_distribuicao": _grafico_distribuicao(
+                    resultado.geral.distribuicao, indicador
+                ),
                 "recortes": sorted(
                     recortes_indicador, key=lambda linha: linha["rotulo"].casefold()
                 ),
@@ -337,3 +345,82 @@ def _valor_caixa(documento, nome):
     if valor is None:
         valor = {"tipo": documento.tipo, "trecho": documento.trecho, "classe": documento.disciplina}.get(nome)
     return str(valor).strip() if valor is not None else ""
+
+
+def _faixas_distribuicao(distribuicao, indicador):
+    faixas = []
+    for numero, quantidade in enumerate(distribuicao):
+        if numero == 0:
+            rotulo = "Emissão Inicial"
+        elif numero == indicador.agrupar_a_partir:
+            rotulo = f"Rev. {numero}+"
+        else:
+            rotulo = f"Rev. {numero}"
+        faixas.append(
+            {
+                "rotulo": rotulo,
+                "quantidade": quantidade,
+                "dentro_limite": numero <= indicador.limite_revisoes,
+            }
+        )
+    return faixas
+
+
+def _grafico_distribuicao(distribuicao, indicador):
+    faixas = _faixas_distribuicao(distribuicao, indicador)
+    quantidade_faixas = max(len(faixas), 1)
+    largura = max(700, quantidade_faixas * 104 + 80)
+    altura = 260
+    esquerda = 48
+    direita = 20
+    topo = 28
+    base = 194
+    area_altura = base - topo
+    passo = (largura - esquerda - direita) / quantidade_faixas
+    largura_barra = min(58, passo * 0.58)
+    maximo = max((faixa["quantidade"] for faixa in faixas), default=0) or 1
+
+    marcacoes = sorted(
+        {
+            0,
+            ceil(maximo * 0.25),
+            ceil(maximo * 0.5),
+            ceil(maximo * 0.75),
+            maximo,
+        }
+    )
+    grades = [
+        {"valor": valor, "y": base - (valor / maximo) * area_altura}
+        for valor in marcacoes
+    ]
+    barras = []
+    for indice, faixa in enumerate(faixas):
+        valor = faixa["quantidade"]
+        altura_barra = (valor / maximo) * area_altura
+        x = esquerda + indice * passo + (passo - largura_barra) / 2
+        y = base - altura_barra
+        barras.append(
+            {
+                **faixa,
+                "x": x,
+                "y": y,
+                "centro_x": x + largura_barra / 2,
+                "largura": largura_barra,
+                "altura": altura_barra,
+                "rotulo_y": max(topo + 14, y - 7),
+                "titulo": f"{faixa['rotulo']}: {valor} aprovado(s)",
+            }
+        )
+
+    x_meta = esquerda + passo * (indicador.limite_revisoes + 1)
+    return {
+        "largura": largura,
+        "altura": altura,
+        "esquerda": esquerda,
+        "direita": largura - direita,
+        "topo": topo,
+        "base": base,
+        "x_meta": x_meta,
+        "grades": grades,
+        "barras": barras,
+    }

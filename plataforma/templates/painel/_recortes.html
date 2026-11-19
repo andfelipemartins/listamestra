@@ -16,36 +16,56 @@
       <h3 id="painel-indicador-titulo-{{ forloop.counter }}">{{ indicador.configuracao.rotulo }}</h3>
       <p class="painel-indicador-geral">
         {% if indicador.tem_dados %}
-          <strong>{{ indicador.percentual|floatformat:0 }}%</strong> {{ indicador.configuracao.rotulo|lower }} · {{ indicador.configuracao.rotulo_meta|lower }} {{ indicador.configuracao.meta_percentual|floatformat:0 }}%
+          <strong>{{ indicador.dentro_limite }} de {{ indicador.base }}</strong> aprovados até a Revisão {{ indicador.configuracao.limite_revisoes }} ({{ indicador.percentual|floatformat:0 }}%)
         {% else %}
-          <strong>Sem dados</strong> para {{ indicador.configuracao.rotulo|lower }} · {{ indicador.configuracao.rotulo_meta|lower }} {{ indicador.configuracao.meta_percentual|floatformat:0 }}%
+          <strong>Sem dados</strong> de aprovação até a Revisão {{ indicador.configuracao.limite_revisoes }}
         {% endif %}
       </p>
     </div>
     <p class="painel-indicador-legenda">Dentro do limite: {{ indicador.dentro_limite }} · Fora do limite: {{ indicador.fora_limite }} · Base: {{ indicador.base }}</p>
   </div>
-  {% if indicador.recortes_com_dados %}
-  <div class="painel-indicador-grafico-wrap" style="--linhas-indicador: {{ indicador.recortes_com_dados|length }}">
-    <canvas id="grafico-indicador-{{ forloop.counter }}" data-grafico-indicador aria-label="Percentual de {{ indicador.configuracao.rotulo|lower }} por {{ rotulo_caixa }}"></canvas>
+  <div class="painel-indicador-grafico-wrap" style="--linhas-indicador: 1; overflow-x: auto">
+    <svg role="img" aria-labelledby="painel-indicador-grafico-titulo-{{ forloop.counter }} painel-indicador-grafico-descricao-{{ forloop.counter }}"
+         viewBox="0 0 {{ indicador.grafico_distribuicao.largura }} {{ indicador.grafico_distribuicao.altura }}"
+         width="{{ indicador.grafico_distribuicao.largura }}" height="{{ indicador.grafico_distribuicao.altura }}"
+         style="display: block; min-width: {{ indicador.grafico_distribuicao.largura }}px; max-width: none">
+      <title id="painel-indicador-grafico-titulo-{{ forloop.counter }}">Aprovações pelo número de revisões</title>
+      <desc id="painel-indicador-grafico-descricao-{{ forloop.counter }}">Distribuição geral dos documentos aprovados, com a meta no limite da Revisão {{ indicador.configuracao.limite_revisoes }}.</desc>
+      {% for grade in indicador.grafico_distribuicao.grades %}
+      <line x1="{{ indicador.grafico_distribuicao.esquerda }}" y1="{{ grade.y }}" x2="{{ indicador.grafico_distribuicao.direita }}" y2="{{ grade.y }}" stroke="var(--grafico-grade)" stroke-width="1" />
+      <text x="{{ indicador.grafico_distribuicao.esquerda|add:'-10' }}" y="{{ grade.y|add:'4' }}" text-anchor="end" fill="var(--text-secondary)" font-size="11">{{ grade.valor }}</text>
+      {% endfor %}
+      {% for barra in indicador.grafico_distribuicao.barras %}
+      <rect x="{{ barra.x }}" y="{{ barra.y }}" width="{{ barra.largura }}" height="{{ barra.altura }}" rx="4" fill="{% if barra.dentro_limite %}var(--blue){% else %}var(--indicador-alerta){% endif %}">
+        <title>{{ barra.titulo }}</title>
+      </rect>
+      <text x="{{ barra.centro_x }}" y="{{ barra.rotulo_y }}" text-anchor="middle" fill="var(--text-primary)" font-size="12" font-weight="600">{{ barra.quantidade }}</text>
+      <text x="{{ barra.centro_x }}" y="{{ indicador.grafico_distribuicao.base|add:'25' }}" text-anchor="middle" fill="var(--text-secondary)" font-size="11">{{ barra.rotulo }}</text>
+      {% endfor %}
+      <line x1="{{ indicador.grafico_distribuicao.x_meta }}" y1="{{ indicador.grafico_distribuicao.topo }}" x2="{{ indicador.grafico_distribuicao.x_meta }}" y2="{{ indicador.grafico_distribuicao.base }}" stroke="var(--indicador-meta)" stroke-width="2" stroke-dasharray="6 5" />
+      <text x="{{ indicador.grafico_distribuicao.x_meta|add:'5' }}" y="{{ indicador.grafico_distribuicao.topo|add:'-8' }}" fill="var(--indicador-meta)" font-size="11" font-weight="700">{{ indicador.configuracao.rotulo_meta }}</text>
+    </svg>
   </div>
-  {{ indicador.grafico|json_script:indicador.script_id }}
-  {% else %}<p class="painel-sem-dados">Sem dados</p>{% endif %}
   {% if indicador.recortes %}
   <details class="painel-dados-tabulares" open>
     <summary>Números do indicador por recorte</summary>
     <div class="table-wrap"><table>
-      <thead><tr><th>{{ rotulo_caixa }}</th><th>Dentro do limite</th><th>Fora do limite</th><th>Base</th><th>Percentual</th></tr></thead>
+      <thead><tr>
+        <th>{{ rotulo_caixa }}</th>
+        {% for faixa in indicador.distribuicao %}<th>{{ faixa.rotulo }}</th>{% endfor %}
+        <th>Dentro do limite</th><th>Fora do limite</th><th>Base</th><th>Percentual</th>
+        {% if indicador.configuracao.meta_percentual is not None %}<th>{{ indicador.configuracao.rotulo_meta }}</th>{% endif %}
+      </tr></thead>
       <tbody>
-        {% for recorte in indicador.recortes_com_dados %}
+        {% for recorte in indicador.recortes %}
         <tr>
           <th scope="row">{{ recorte.rotulo }}</th>
+          {% for faixa in recorte.distribuicao %}<td>{{ faixa.quantidade }}</td>{% endfor %}
           <td>{{ recorte.dentro_limite }}</td><td>{{ recorte.fora_limite }}</td><td>{{ recorte.base }}</td>
-          <td>{{ recorte.percentual|floatformat:1 }}%</td>
+          <td>{% if recorte.tem_dados %}{{ recorte.percentual|floatformat:1 }}%{% else %}—{% endif %}</td>
+          {% if indicador.configuracao.meta_percentual is not None %}<td>{{ indicador.configuracao.meta_percentual|floatformat:0 }}%</td>{% endif %}
         </tr>
         {% endfor %}
-        {% if indicador.recortes_sem_base %}
-        <tr><th scope="row" colspan="5">Sem documentos na conta: {% for recorte in indicador.recortes_sem_base %}{{ recorte.rotulo }}{% if not forloop.last %}, {% endif %}{% endfor %}</th></tr>
-        {% endif %}
       </tbody>
     </table></div>
   </details>

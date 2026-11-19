@@ -336,12 +336,13 @@ painel:
   ignorar: ["Revisão Superada"]
   avanco: [aprovado]
   indicadores:
+    # D-052: PE-ENG-001 item 5.5 define aprovação em até 3 revisões, sem meta percentual.
     # D-043/D-044: revisões contam emissões do primeiro ciclo; empacados não entram e a linha se chama Meta.
     - tipo: aprovacao_em_ate_n_revisoes
       id: aprovacao_ate_3_revisoes
       limite_revisoes: 3
-      meta_percentual: 80
       rotulo_meta: Meta
+      agrupar_a_partir: 5
       contar_estourados_sem_aprovacao: false
       ciclos: primeira_aprovacao
 prazos:

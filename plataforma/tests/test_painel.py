@@ -348,7 +348,7 @@ def test_filtro_combina_com_recorte_de_barras(contrato, perfil_modelo):
 
 
 @pytest.mark.django_db
-def test_indicador_aparece_com_numero_geral_barras_por_recorte_e_linha_de_meta(
+def test_indicador_mostra_distribuicao_vertical_e_linha_meta_no_limite(
     contrato, perfil_modelo, client, django_user_model
 ):
     usuario = django_user_model.objects.create_user(username="chefia-indicador", password="senha")
@@ -372,27 +372,33 @@ def test_indicador_aparece_com_numero_geral_barras_por_recorte_e_linha_de_meta(
     resposta = client.get(reverse("painel", args=(contrato.pk,)), {"por": "trecho"})
     html = resposta.content.decode()
     indicador = dados["indicadores_aprovacao"][0]
-    grafico = json.loads(
-        re.search(
-            r'<script id="dados-indicador-1" type="application/json">(.*?)</script>', html
-        ).group(1)
-    )
-
     assert indicador["tem_dados"] is True
     assert indicador["percentual"] == pytest.approx(50)
     assert {item["rotulo"]: item["percentual"] for item in indicador["recortes"]} == {
         "Ragueb Chohfi": 100,
         "São Mateus": 0,
     }
-    assert "<strong>50%</strong> aprovados até a revisão 3 · meta 80%" in re.sub(
+    assert "<strong>1 de 2</strong> aprovados até a Revisão 3 (50%)" in re.sub(
         r"\s+", " ", html
     )
-    assert grafico["labels"] == ["São Mateus", "Ragueb Chohfi"]
-    assert grafico["datasets"][0]["data"] == [0, 100]
-    assert grafico["metaPercentual"] == 80
-    assert "linha-meta-indicador" in html
-    assert "setLineDash([6, 5])" in html
-    assert "rotulos-indicador" in html
+    assert [faixa["rotulo"] for faixa in indicador["distribuicao"]] == [
+        "Emissão Inicial", "Rev. 1", "Rev. 2", "Rev. 3", "Rev. 4", "Rev. 5+"
+    ]
+    assert [faixa["quantidade"] for faixa in indicador["distribuicao"]] == [
+        0, 0, 1, 0, 1, 0
+    ]
+    assert indicador["configuracao"].meta_percentual is None
+    assert '<svg role="img"' in html
+    assert 'stroke-dasharray="6 5"' in html
+    grafico_svg = indicador["grafico_distribuicao"]
+    assert grafico_svg["x_meta"] == pytest.approx(
+        grafico_svg["esquerda"]
+        + (grafico_svg["direita"] - grafico_svg["esquerda"]) * 4 / 6
+    )
+    assert "var(--blue)" in html
+    assert "var(--indicador-alerta)" in html
+    assert "Meta</th>" not in html
+    assert "80%" not in html
     assert "Dentro do limite: 1" in html
     assert "Fora do limite: 1" in html
 
@@ -413,10 +419,11 @@ def test_indicador_conta_emissoes_de_versoes_diferentes_na_mesma_revisao(
 
     assert Emissao.objects.filter(documento=documento).count() == 5
     assert (indicador["dentro_limite"], indicador["fora_limite"]) == (0, 1)
+    assert indicador["distribuicao"][4]["quantidade"] == 1
 
 
 @pytest.mark.django_db
-def test_indicador_exclui_recortes_sem_base_do_grafico_e_ordena_por_percentual(
+def test_indicador_mantem_distribuicao_e_tabela_por_recorte(
     contrato, perfil_modelo, client, django_user_model
 ):
     usuario = django_user_model.objects.create_user(
@@ -445,17 +452,18 @@ def test_indicador_exclui_recortes_sem_base_do_grafico_e_ordena_por_percentual(
 
     resposta = client.get(reverse("painel", args=(contrato.pk,)), {"por": "tipo"})
     html = resposta.content.decode()
-    grafico = json.loads(
-        re.search(
-            r'<script id="dados-indicador-1" type="application/json">(.*?)</script>', html
-        ).group(1)
-    )
+    dados = carregar_painel(contrato, por="tipo")
+    indicador = dados["indicadores_aprovacao"][0]
+    por_recorte = {item["rotulo"]: item for item in indicador["recortes"]}
 
-    assert grafico["labels"] == ["Relatório técnico"]
-    assert grafico["datasets"][0]["data"] == [100]
-    assert all("Memorial de cálculo" not in rotulo for rotulo in grafico["labels"])
+    assert por_recorte["Relatório técnico"]["distribuicao"][0]["quantidade"] == 1
+    assert por_recorte["Desenho"]["base"] == 0
+    assert sum(faixa["quantidade"] for faixa in por_recorte["Desenho"]["distribuicao"]) == 0
     texto = re.sub(r"\s+", " ", html)
-    assert "Sem documentos na conta: Desenho, Diagrama, Memorial de cálculo" in texto
+    assert "Números do indicador por recorte" in texto
+    assert "Emissão Inicial" in texto
+    assert "Rev. 5+" in texto
+    assert "Meta</th>" not in texto
 
 
 @pytest.mark.django_db
@@ -474,9 +482,9 @@ def test_indicador_sem_recortes_com_base_mostra_sem_dados_no_grafico(
     html = resposta.content.decode()
 
     assert resposta.status_code == 200
-    assert '<canvas id="grafico-indicador-1"' not in html
-    assert 'painel-sem-dados">Sem dados</p>' in html
-    assert "Sem documentos na conta: Memorial de cálculo" in html
+    assert '<svg role="img"' in html
+    assert "<strong>Sem dados</strong>" in html
+    assert "Memorial de cálculo" in html
 
 
 @pytest.mark.django_db
