@@ -29,5 +29,6 @@ urlpatterns = [
     path("importacoes/recusadas/<int:contrato_id>/", LinhasRecusadasView.as_view(), name="linhas_recusadas"),
     path("painel/", include("painel.urls")),
     path("atividade/", include("registro.urls")),
+    path("acoes/", include("acoes.urls")),
     path("", InicioView.as_view(), name="inicio"),
 ]

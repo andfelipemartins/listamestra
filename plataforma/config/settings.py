@@ -99,6 +99,7 @@ INSTALLED_APPS = [
     "importacoes.apps.ImportacoesConfig",
     "painel.apps.PainelConfig",
     "registro.apps.RegistroConfig",
+    "acoes.apps.AcoesConfig",
 ]
 
 MIDDLEWARE = [

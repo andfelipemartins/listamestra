@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Pendências ignoradas{% endblock %}
+{% block extra_head %}
+<style>
+  .mesa-lista-completa { display:grid; gap:12px; }
+  .mesa-item { min-width:0; padding:14px; border:1px solid var(--border); border-radius:9px; background:var(--surface); }
+  .mesa-item p { margin:4px 0; color:var(--text-secondary); font-size:12px; line-height:1.5; overflow-wrap:anywhere; }
+  .mesa-item-meta { display:flex; flex-wrap:wrap; gap:5px 13px; color:var(--text-secondary); font-size:11px; }
+  .mesa-selo { display:inline-flex; padding:3px 7px; border-radius:999px; background:var(--warning-surface); color:var(--warning-text); font-size:10px; font-weight:700; }
+  .mesa-acoes { display:flex; gap:6px; margin-top:10px; }
+  .mesa-acoes button { min-height:36px; padding:6px 10px; color:var(--text-primary); font-size:11px; font-weight:650; }
+  .mesa-lista-completa { margin-top:16px; }
+</style>
+{% endblock %}
+{% block content %}
+  {% if not contrato %}
+    <section class="welcome-panel"><div class="welcome-symbol">LM</div><div><h2>Nenhum contrato disponível</h2><p>Peça à administração para incluir sua participação em um contrato ativo.</p></div></section>
+  {% else %}
+  <div><span class="eyebrow">{{ contrato.codigo_interno }}</span><h1>{{ janela.titulo }}</h1><p>{{ janela.quantidade }} item{{ janela.quantidade|pluralize:",s" }}</p></div>
+  {% if perfil_erro %}<div class="notice" style="margin-top:16px">{{ perfil_erro }}</div>{% endif %}
+  {% if janela.itens %}<div class="mesa-lista-completa">{% for item in janela.itens %}{% include "acoes/_item_erro.html" with janela=janela %}{% endfor %}</div>
+  {% else %}<section class="welcome-panel"><div class="welcome-symbol">✓</div><div><h2>Nenhuma pendência ignorada</h2><p>Os itens que você ignorar aparecerão aqui e poderão ser reativados.</p></div></section>{% endif %}
+  <p style="margin-top:20px"><a href="{% url 'inicio' %}?contrato={{ contrato.pk }}">Voltar para Minha mesa</a></p>
+  {% endif %}
+{% endblock %}

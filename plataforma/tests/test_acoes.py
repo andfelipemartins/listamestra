@@ -1,0 +1,351 @@
+from datetime import date, datetime, timedelta
+from pathlib import Path
+
+import pytest
+import yaml
+from django.urls import reverse
+from django.utils import timezone
+
+from acoes.models import AcaoPendencia
+from acoes.services import carregar_janela, carregar_minha_mesa
+from contas.models import Usuario
+from contratos.models import Contrato, Participacao, PerfilContrato
+from documentos.models import Analise, Documento, Emissao
+from importacoes.models import (
+    ImportacaoCronograma,
+    ImportacaoID,
+    ImportacaoSituacao,
+    InconsistenciaImportacao,
+    IndiceDocumentos,
+    PrevisaoEmissao,
+)
+
+
+RAIZ = Path(__file__).resolve().parents[2]
+PERFIL_METRO = RAIZ / "core" / "perfil" / "exemplos" / "metro.yaml"
+HOJE = date(2026, 11, 23)
+
+
+@pytest.fixture
+def contrato(db):
+    return Contrato.objects.create(
+        nome="Contrato de ações",
+        codigo_interno="CT-ACOES",
+        cliente="Cliente de teste",
+    )
+
+
+@pytest.fixture
+def perfil_modelo(contrato):
+    with PERFIL_METRO.open(encoding="utf-8") as arquivo:
+        definicao = yaml.safe_load(arquivo)
+    definicao["vigencia_inicio"] = "2020-01-01"
+    return PerfilContrato.objects.create(
+        contrato=contrato,
+        versao=1,
+        vigencia_inicio=date(2020, 1, 1),
+        definicao=definicao,
+    )
+
+
+@pytest.fixture
+def usuario(contrato, django_user_model):
+    pessoa = django_user_model.objects.create_user(
+        username="equipe-acoes", password="senha-segura", first_name="Ana", last_name="Equipe"
+    )
+    Participacao.objects.create(
+        usuario=pessoa,
+        contrato=contrato,
+        papel=Usuario.Perfil.EQUIPE,
+        ativo=True,
+    )
+    return pessoa
+
+
+def _documento(contrato, identificador, *, titulo="Documento", tipo="DE"):
+    return Documento.objects.create(
+        contrato=contrato,
+        identificador_base=identificador,
+        titulo=titulo,
+        tipo=tipo,
+        atributos={"tipo": tipo},
+    )
+
+
+def _emissao(documento, data, *, revisao="1", situacao=None, data_analise=None, usuario=None):
+    emissao = Emissao.objects.create(
+        documento=documento,
+        revisao=revisao,
+        versao=1,
+        fase=Emissao.Fase.PRELIMINAR,
+        data_emissao=data,
+        origem=Emissao.Origem.CLIENTE,
+    )
+    if situacao is not None:
+        Analise.objects.create(
+            emissao=emissao,
+            etapa="Análise do cliente",
+            situacao=situacao,
+            origem=Analise.Origem.IMPORTADO_PW,
+            data_analise=data_analise,
+            registrado_por=usuario,
+        )
+    return emissao
+
+
+def _janela(dados, identificador):
+    return next(item for item in dados["janelas"] if item["id"] == identificador)
+
+
+@pytest.mark.django_db
+def test_janela_erros_usa_grupo_oculto_e_mostra_quem_lancou(contrato, perfil_modelo, usuario):
+    documento = _documento(contrato, "DOC-ERRO-1001", titulo="Desenho de teste")
+    _emissao(documento, date(2026, 11, 10), situacao="Erro de Assinatura", data_analise=date(2026, 11, 12), usuario=usuario)
+
+    dados = carregar_minha_mesa(usuario, contrato.pk, hoje=HOJE)
+    erros = _janela(dados, "erros")
+
+    assert erros["quantidade"] == 1
+    assert erros["itens"][0]["codigo"] == "DOC-ERRO-1001"
+    assert erros["itens"][0]["situacao"] == "Erro de Assinatura"
+    assert erros["itens"][0]["data_desde"] == date(2026, 11, 12)
+    assert erros["itens"][0]["quem_lancou"] == "Ana Equipe"
+
+
+@pytest.mark.django_db
+def test_janela_analise_usa_dias_uteis_e_ordena_atrasados_primeiro(contrato, perfil_modelo, usuario):
+    perfil_modelo.definicao["prazos"]["regras"][0]["dias"] = 3
+    perfil_modelo.save(update_fields=("definicao",))
+    vencido = _documento(contrato, "DOC-ANALISE-1001")
+    proximo = _documento(contrato, "DOC-ANALISE-1002")
+    _emissao(vencido, date(2026, 11, 12))
+    _emissao(proximo, date(2026, 11, 20))
+
+    janela = _janela(carregar_minha_mesa(usuario, contrato.pk, hoje=HOJE), "analise-cliente")
+
+    assert janela["quantidade"] == 2
+    assert janela["itens"][0]["codigo"] == "DOC-ANALISE-1001"
+    assert janela["itens"][0]["atrasado"] is True
+    assert janela["itens"][0]["vencimento"] == date(2026, 11, 17)
+    assert janela["itens"][1]["codigo"] == "DOC-ANALISE-1002"
+    assert janela["itens"][1]["vencimento"] == date(2026, 11, 25)
+    assert janela["itens"][1]["dias"] == 2
+
+
+@pytest.mark.django_db
+def test_janela_devolucao_usa_dias_corridos(contrato, perfil_modelo, usuario):
+    perfil_modelo.definicao["prazos"]["regras"][1]["dias"] = 2
+    perfil_modelo.save(update_fields=("definicao",))
+    documento = _documento(contrato, "DOC-DEVOLUCAO-1001")
+    _emissao(
+        documento,
+        date(2026, 11, 10),
+        situacao="Não Aprovado",
+        data_analise=date(2026, 11, 22),
+        usuario=usuario,
+    )
+
+    janela = _janela(carregar_minha_mesa(usuario, contrato.pk, hoje=HOJE), "devolucao")
+
+    assert janela["quantidade"] == 1
+    assert janela["itens"][0]["vencimento"] == date(2026, 11, 24)
+    assert janela["itens"][0]["dias"] == 1
+    assert janela["itens"][0]["texto_prazo"] == "Vence em 1 dia"
+
+
+@pytest.mark.django_db
+def test_janela_cronograma_mostra_vencidos_e_proximos_sete_dias(contrato, perfil_modelo, usuario):
+    atrasado = _documento(contrato, "DOC-CRONO-1001")
+    proximo = _documento(contrato, "DOC-CRONO-1002")
+    fora_da_janela = _documento(contrato, "DOC-CRONO-1003")
+    importacao = ImportacaoCronograma.objects.create(contrato=contrato, arquivo_nome="cronograma.xlsx")
+    for documento, prevista in (
+        (atrasado, HOJE - timedelta(days=1)),
+        (proximo, HOJE + timedelta(days=7)),
+        (fora_da_janela, HOJE + timedelta(days=8)),
+    ):
+        PrevisaoEmissao.objects.create(
+            contrato=contrato,
+            documento=documento,
+            data_prevista=prevista,
+            importacao=importacao,
+        )
+
+    janela = _janela(carregar_minha_mesa(usuario, contrato.pk, hoje=HOJE), "cronograma")
+
+    assert janela["quantidade"] == 2
+    assert [item["codigo"] for item in janela["itens"]] == ["DOC-CRONO-1001", "DOC-CRONO-1002"]
+    assert janela["itens"][0]["vencido"] is True
+    assert janela["itens"][1]["data_prevista"] == HOJE + timedelta(days=7)
+
+
+@pytest.mark.django_db
+def test_janela_recusadas_agrupa_por_importacao(contrato, perfil_modelo, usuario):
+    indice = IndiceDocumentos.objects.create(
+        contrato=contrato,
+        codigo="ID-TESTE",
+        revisao="1",
+        fonte=IndiceDocumentos.Fonte.EXCEL_ID,
+        arquivo_nome="id.xlsx",
+        importado_em=timezone.now(),
+    )
+    importacao_id = ImportacaoID.objects.create(
+        contrato=contrato, indice=indice, arquivo_nome="id.xlsx"
+    )
+    importacao_pw = ImportacaoSituacao.objects.create(
+        contrato=contrato,
+        data_extracao=HOJE,
+        arquivo_nome="pw.xlsx",
+        importado_por=usuario,
+    )
+    for numero in (3, 4):
+        InconsistenciaImportacao.objects.create(
+            importacao_id=importacao_id,
+            numero_linha=numero,
+            mensagem="Linha recusada",
+        )
+    InconsistenciaImportacao.objects.create(
+        importacao_situacao=importacao_pw,
+        numero_linha=7,
+        mensagem="Linha recusada",
+    )
+
+    janela = _janela(carregar_minha_mesa(usuario, contrato.pk, hoje=HOJE), "recusadas")
+
+    assert janela["quantidade"] == 2
+    assert sum(item["quantidade"] for item in janela["itens"]) == 3
+    assert {item["tipo"] for item in janela["itens"]} == {"ID", "Situação PW"}
+    assert all(item["link_recusadas"] for item in janela["itens"])
+
+
+@pytest.mark.django_db
+def test_ignorar_e_reativar_registra_historico_e_mantem_item_disponivel(contrato, perfil_modelo, usuario, client):
+    documento = _documento(contrato, "DOC-ERRO-1002")
+    _emissao(documento, date(2026, 11, 10), situacao="Em Desenvolvimento", data_analise=date(2026, 11, 12), usuario=usuario)
+    client.force_login(usuario)
+
+    resposta = client.post(
+        reverse("acoes:registrar_acao"),
+        {
+            "contrato": contrato.pk,
+            "documento": documento.pk,
+            "tipo_pendencia": "erro",
+            "acao": "ignorar",
+            "motivo": "Aguardando retorno do cliente",
+        },
+    )
+
+    assert resposta.status_code == 302
+    acao = AcaoPendencia.objects.get(documento=documento)
+    assert acao.usuario == usuario
+    assert acao.resolvida_em is None
+    assert acao.history.count() == 1
+    assert _janela(carregar_minha_mesa(usuario, contrato.pk, hoje=HOJE), "erros")["quantidade"] == 0
+    ignorados = carregar_janela(usuario, contrato.pk, "erros", hoje=HOJE)
+    assert ignorados["janela"]["quantidade"] == 0
+    assert carregar_janela(usuario, contrato.pk, "erros", hoje=HOJE)["janela"]["titulo"] == "Erros a corrigir"
+
+    from acoes.services import carregar_ignorados, reativar_ignorado
+
+    lista_ignorados = carregar_ignorados(usuario, contrato.pk, hoje=HOJE)
+    assert lista_ignorados["janela"]["quantidade"] == 1
+    reativar_ignorado(usuario, contrato.pk, documento.pk, "erro")
+
+    acao.refresh_from_db()
+    assert acao.resolvida_em is not None
+    assert acao.history.count() == 2
+    assert _janela(carregar_minha_mesa(usuario, contrato.pk, hoje=HOJE), "erros")["quantidade"] == 1
+
+
+@pytest.mark.django_db
+def test_pedir_correcao_gera_email_pronto_para_copiar(contrato, perfil_modelo, usuario, client):
+    documento = _documento(contrato, "DOC-ERRO-1003")
+    _emissao(documento, date(2026, 11, 10), revisao="2", situacao="Erro de Assinatura", data_analise=date(2026, 11, 12), usuario=usuario)
+    client.force_login(usuario)
+
+    resposta = client.post(
+        reverse("acoes:registrar_acao"),
+        {
+            "contrato": contrato.pk,
+            "documento": documento.pk,
+            "tipo_pendencia": "erro",
+            "acao": "pedir_correcao",
+        },
+    )
+    acao = AcaoPendencia.objects.get(documento=documento)
+
+    assert resposta.status_code == 302
+    assert "email=" in resposta.url
+    assert "DOC-ERRO-1003" in acao.texto_email
+    assert "revisão 2 versão 1" in acao.texto_email
+    assert "Erro de Assinatura" in acao.texto_email
+    assert "12/11/2026" in acao.texto_email
+    pagina = client.get(resposta.url)
+    assert "Copiar texto" in pagina.content.decode()
+    assert "Agradecemos a verificação" in pagina.content.decode()
+
+
+@pytest.mark.django_db
+def test_ja_corrigi_fica_na_janela_ate_que_a_situacao_mude(contrato, perfil_modelo, usuario, client):
+    documento = _documento(contrato, "DOC-ERRO-1004")
+    emissao = _emissao(documento, date(2026, 11, 10), situacao="Em Desenvolvimento", data_analise=date(2026, 11, 12), usuario=usuario)
+    client.force_login(usuario)
+    client.post(
+        reverse("acoes:registrar_acao"),
+        {"contrato": contrato.pk, "documento": documento.pk, "tipo_pendencia": "erro", "acao": "ja_corrigi"},
+    )
+
+    erros = _janela(carregar_minha_mesa(usuario, contrato.pk, hoje=HOJE), "erros")
+    assert erros["quantidade"] == 1
+    assert erros["itens"][0]["ultima_acao"].acao == AcaoPendencia.Acao.JA_CORRIGI
+
+    Analise.objects.create(
+        emissao=emissao,
+        etapa="Análise do cliente",
+        situacao="Em Análise",
+        origem=Analise.Origem.IMPORTADO_PW,
+        data_analise=HOJE,
+        registrado_por=usuario,
+    )
+    assert _janela(carregar_minha_mesa(usuario, contrato.pk, hoje=HOJE), "erros")["quantidade"] == 0
+
+
+@pytest.mark.django_db
+def test_perfil_sem_prazos_nao_cria_janelas_de_prazo(contrato, perfil_modelo, usuario):
+    perfil_modelo.definicao.pop("prazos")
+    perfil_modelo.save(update_fields=("definicao",))
+
+    ids = {item["id"] for item in carregar_minha_mesa(usuario, contrato.pk, hoje=HOJE)["janelas"]}
+
+    assert "analise-cliente" not in ids
+    assert "devolucao" not in ids
+    assert {"erros", "cronograma", "recusadas"}.issubset(ids)
+
+
+@pytest.mark.django_db
+def test_usuario_sem_participacao_nao_acessa_contrato(contrato, perfil_modelo, client, django_user_model):
+    usuario = django_user_model.objects.create_user(username="sem-contrato", password="senha-segura")
+    client.force_login(usuario)
+
+    resposta = client.get(reverse("inicio"), {"contrato": contrato.pk})
+
+    assert resposta.status_code == 403
+
+
+@pytest.mark.django_db
+def test_staff_pode_selecionar_contratos_sem_participacao_inclusive_inativos(client, django_user_model):
+    contrato = Contrato.objects.create(
+        nome="Contrato inativo",
+        codigo_interno="CT-INATIVO",
+        cliente="Cliente de teste",
+        ativo=False,
+    )
+    staff = django_user_model.objects.create_user(
+        username="staff-acoes", password="senha-segura", is_staff=True
+    )
+    client.force_login(staff)
+
+    resposta = client.get(reverse("inicio"), {"contrato": contrato.pk})
+
+    assert resposta.status_code == 200
+    assert resposta.context["contrato"] == contrato

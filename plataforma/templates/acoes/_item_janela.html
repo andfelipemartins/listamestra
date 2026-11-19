@@ -1,0 +1,21 @@
+{% if janela.id == "erros" or janela.id == "ignorados" %}
+  {% include "acoes/_item_erro.html" %}
+{% elif janela.id == "analise-cliente" or janela.id == "devolucao" %}
+  <article class="mesa-item">
+    <div class="mesa-item-meta"><span class="mesa-selo">{{ item.texto_prazo }}</span><span>{{ item.regra_rotulo }}</span></div>
+    <strong>{{ item.codigo }}</strong><p>{{ item.titulo }}</p>
+    <div class="mesa-item-meta"><span>Rev. {{ item.revisao }}{% if item.versao != None %} · Ver. {{ item.versao }}{% endif %}</span><span>{{ item.situacao }}</span><span>Início: {{ item.data_inicio|date:"d/m/Y" }}</span><span>Vencimento: {{ item.vencimento|date:"d/m/Y" }}</span></div>
+  </article>
+{% elif janela.id == "cronograma" %}
+  <article class="mesa-item">
+    <div class="mesa-item-meta"><span class="mesa-selo">{{ item.texto_prazo }}</span></div>
+    <strong>{{ item.codigo }}</strong><p>{{ item.titulo }}</p>
+    <div class="mesa-item-meta"><span>Previsão: {{ item.data_prevista|date:"d/m/Y" }}</span></div>
+  </article>
+{% elif janela.id == "recusadas" %}
+  <article class="mesa-item">
+    <div class="mesa-item-meta"><span class="mesa-selo">{{ item.quantidade }} recusada{{ item.quantidade|pluralize:",s" }}</span><span>{{ item.tipo }}</span><span>{{ item.data_importacao|date:"d/m/Y" }}</span></div>
+    <strong>{{ item.arquivo }}</strong>
+    <p><a href="{% url 'linhas_recusadas' contrato.pk %}">Abrir linhas recusadas</a></p>
+  </article>
+{% endif %}

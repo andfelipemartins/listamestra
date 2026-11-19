@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}{{ janela.titulo }}{% endblock %}
+{% block extra_head %}
+<style>
+  .mesa-cabecalho { display:flex; align-items:flex-end; justify-content:space-between; gap:18px; margin-bottom:24px; }
+  .mesa-seletor { display:flex; align-items:flex-end; gap:9px; }
+  .mesa-seletor label { display:grid; gap:6px; color:var(--text-secondary); font-size:12px; }
+  .mesa-seletor select { min-width:min(280px,54vw); min-height:40px; padding:7px 10px; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--text-primary); }
+  .mesa-lista-completa { display:grid; gap:12px; }
+  .mesa-item { min-width:0; padding:14px; border:1px solid var(--border); border-radius:9px; background:var(--surface); }
+  .mesa-item p { margin:4px 0; color:var(--text-secondary); font-size:12px; line-height:1.5; overflow-wrap:anywhere; }
+  .mesa-item-meta { display:flex; flex-wrap:wrap; gap:5px 13px; color:var(--text-secondary); font-size:11px; }
+  .mesa-selo { display:inline-flex; padding:3px 7px; border-radius:999px; background:var(--warning-surface); color:var(--warning-text); font-size:10px; font-weight:700; }
+  .mesa-acoes { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+  .mesa-acoes form { display:flex; flex:1 1 150px; flex-wrap:wrap; gap:6px; align-items:center; }
+  .mesa-acoes input { min-width:90px; flex:1 1 105px; min-height:34px; padding:6px 8px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:var(--text-primary); font:inherit; font-size:11px; }
+  .mesa-acoes button,.mesa-copiar { min-height:34px; padding:6px 9px; color:var(--text-primary); font-size:11px; font-weight:650; }
+  .mesa-email { margin-top:9px; padding:11px; border:1px solid var(--border); border-radius:7px; background:var(--surface-raised); white-space:pre-wrap; font-family:inherit; font-size:12px; line-height:1.55; }
+  @media(max-width:560px) { .mesa-cabecalho { align-items:stretch; flex-direction:column; } .mesa-seletor { align-items:stretch; flex-direction:column; } .mesa-seletor select { width:100%; } }
+</style>
+{% endblock %}
+{% block content %}
+  {% if not contrato %}
+    <section class="welcome-panel"><div class="welcome-symbol">LM</div><div><h2>Nenhum contrato disponível</h2><p>Peça à administração para incluir sua participação em um contrato ativo.</p></div></section>
+  {% else %}
+  <div class="mesa-cabecalho">
+    <div><span class="eyebrow">{{ contrato.codigo_interno }}</span><h1>{{ janela.titulo }}</h1><p>{{ janela.quantidade }} item{{ janela.quantidade|pluralize:",s" }}</p></div>
+    {% if contratos %}<form class="mesa-seletor" method="get"><label for="janela-contrato">Contrato<select id="janela-contrato" name="contrato" onchange="this.form.submit()">{% for opcao in contratos %}<option value="{{ opcao.pk }}" {% if contrato.pk == opcao.pk %}selected{% endif %}>{{ opcao.codigo_interno }} · {{ opcao.nome }}</option>{% endfor %}</select></label><noscript><button class="button button-quiet" type="submit">Abrir</button></noscript></form>{% endif %}
+  </div>
+  {% if perfil_erro %}<div class="notice" style="margin-bottom:16px">{{ perfil_erro }}</div>{% endif %}
+  {% if janela.id == "erros" %}<p><a href="{% url 'acoes:ignorados' %}?contrato={{ contrato.pk }}">Ver todos › ignorados</a></p>{% endif %}
+  {% if janela.itens %}
+    <div class="mesa-lista-completa">
+      {% for item in janela.itens %}{% include "acoes/_item_janela.html" %}{% endfor %}
+    </div>
+  {% else %}<section class="welcome-panel"><div class="welcome-symbol">✓</div><div><h2>Nenhum item nesta janela</h2><p>Não há itens que atendam a esta regra no momento.</p></div></section>{% endif %}
+  <p style="margin-top:20px"><a href="{% url 'inicio' %}?contrato={{ contrato.pk }}">Voltar para Minha mesa</a></p>
+  {% endif %}
+{% endblock %}
