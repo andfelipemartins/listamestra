@@ -211,7 +211,13 @@ h1 { margin: 9px 0 8px; font-size: clamp(25px, 3vw, 32px); font-weight: 650; let
 .painel-filtros-acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
 .painel-filtros-acoes .button-primary { min-height: 38px; margin-top: 0; padding: 0 14px; }
 .painel-filtros-acoes .button-quiet { min-height: 38px; display: inline-flex; align-items: center; }
-.painel-filtros-resumo { margin: -4px 0 14px; color: var(--text-secondary); font-size: 11px; line-height: 1.6; }
+.painel-filtros-ativos { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; margin: -4px 0 14px; }
+.painel-filtros-etiquetas { display: flex; flex: 1 1 auto; flex-wrap: wrap; align-items: center; gap: 7px; min-width: 0; }
+.painel-filtro-etiqueta { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; padding: 5px 8px 5px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text-primary); font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
+.painel-filtro-remover { display: inline-grid; width: 20px; height: 20px; flex: 0 0 20px; place-items: center; border-radius: 50%; color: var(--text-secondary); font-size: 16px; line-height: 1; text-decoration: none; }
+.painel-filtro-remover:hover { background: var(--surface-raised); color: var(--text-primary); text-decoration: none; }
+.painel-filtro-remover:focus-visible { outline: 2px solid var(--accent-link); outline-offset: 2px; }
+.painel-filtros-limpar { min-height: 34px; display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; margin-left: auto; padding: 0 11px; white-space: nowrap; }
 .painel-recusa-aviso { margin: -4px 0 14px; padding: 8px 11px; background: var(--info-surface); color: var(--text-primary); font-size: 11px; }
 .recusadas-grupo { margin-top: 12px; padding: 11px 13px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); }
 .recusadas-grupo > summary { color: var(--text-primary); cursor: pointer; font-size: 12px; font-weight: 650; }
@@ -288,6 +294,8 @@ h1 { margin: 9px 0 8px; font-size: clamp(25px, 3vw, 32px); font-weight: 650; let
   .painel-fora-id { min-height: 240px; }
   .painel-recorte-heading { align-items: stretch; flex-direction: column; gap: 15px; }
   .painel-filtros-grade { grid-template-columns: 1fr; }
+  .painel-filtros-ativos { align-items: flex-start; }
+  .painel-filtros-limpar { margin-left: 0; }
   .painel-avanco-topo { align-items: flex-start; flex-direction: column; gap: 6px; }
   .painel-barras-wrap { max-height: 700px; }
   .painel-indicador { padding: 14px; }

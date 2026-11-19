@@ -41,15 +41,28 @@
         </select>
       </label>
     </div>
-    <div class="painel-filtros-acoes">
-      <noscript><button class="button button-primary" type="submit">Aplicar filtros</button></noscript>
-      <a class="button button-quiet" href="{% url 'painel' contrato.pk %}?por={{ por|urlencode }}&amp;manter_filtros_abertos=1" hx-get="{% url 'painel' contrato.pk %}?por={{ por|urlencode }}&amp;manter_filtros_abertos=1" hx-target="#painel-dados" hx-swap="innerHTML" hx-push-url="true">Limpar filtros</a>
-    </div>
+    <noscript><button class="button button-primary" type="submit">Aplicar filtros</button></noscript>
   </form>
 </details>
 
 {% if filtros_ativos %}
-<p class="painel-filtros-resumo"><strong>Filtros ativos:</strong> {% for filtro in filtros_ativos %}{% if not forloop.first %}<span aria-hidden="true"> · </span>{% endif %}{{ filtro.rotulo }}: {{ filtro.valores|join:", " }}{% endfor %}</p>
+{% url 'painel' contrato.pk as painel_url %}
+<nav class="painel-filtros-ativos" aria-label="Filtros ativos">
+  <div class="painel-filtros-etiquetas">
+    {% for filtro in filtros %}
+      {% for opcao in filtro.opcoes %}
+        {% if opcao.selecionado %}
+        <span class="painel-filtro-etiqueta">
+          <span>{{ filtro.rotulo }}: {{ opcao.rotulo }}</span>
+          <a class="painel-filtro-remover" aria-label="Remover filtro {{ filtro.rotulo }}: {{ opcao.rotulo }}"
+             href="{{ painel_url }}?por={{ por|urlencode }}{% for outro_filtro in filtros %}{% for outra_opcao in outro_filtro.opcoes %}{% if outra_opcao.selecionado %}{% if outro_filtro.nome != filtro.nome or outra_opcao.valor != opcao.valor %}&amp;{{ outro_filtro.nome|urlencode }}={{ outra_opcao.valor|urlencode }}{% endif %}{% endif %}{% endfor %}{% endfor %}&amp;manter_filtros_abertos=1">×</a>
+        </span>
+        {% endif %}
+      {% endfor %}
+    {% endfor %}
+  </div>
+  <a class="button button-quiet painel-filtros-limpar" href="{{ painel_url }}?por={{ por|urlencode }}&amp;manter_filtros_abertos=1">Limpar todos</a>
+</nav>
 {% endif %}
 
 <section class="painel-grupos" aria-label="Situação dos documentos previstos em conta">
