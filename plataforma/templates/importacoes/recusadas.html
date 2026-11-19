@@ -108,7 +108,7 @@
         <thead><tr><th>Linha</th><th>Código lido</th><th>Mensagem</th></tr></thead>
         <tbody>
           {% for linha in grupo.linhas %}
-          <tr><td>{{ linha.numero_linha }}</td><td>{{ linha.codigo_lido|default:"—" }}</td><td>{{ linha.mensagem }}</td></tr>
+          <tr><td>{{ linha.numero_linha }}</td><td>{% if linha.documento_link_id %}<a href="{% url 'documento_pasta' contrato.pk linha.documento_link_id %}">{{ linha.codigo_lido }}</a>{% else %}{{ linha.codigo_lido|default:"—" }}{% endif %}</td><td>{{ linha.mensagem }}</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -144,7 +144,7 @@
         <thead><tr><th>Linha</th><th>Código lido</th><th>Mensagem</th></tr></thead>
         <tbody>
           {% for linha in grupo.linhas %}
-          <tr><td>{{ linha.numero_linha }}</td><td>{{ linha.codigo_lido|default:"—" }}</td><td>{{ linha.mensagem }}</td></tr>
+          <tr><td>{{ linha.numero_linha }}</td><td>{% if linha.documento_link_id %}<a href="{% url 'documento_pasta' contrato.pk linha.documento_link_id %}">{{ linha.codigo_lido }}</a>{% else %}{{ linha.codigo_lido|default:"—" }}{% endif %}</td><td>{{ linha.mensagem }}</td></tr>
           {% endfor %}
         </tbody>
       </table>

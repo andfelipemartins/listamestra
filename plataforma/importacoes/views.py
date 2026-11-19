@@ -419,6 +419,34 @@ def _contexto_recusadas(
                 "grupos": _grupos_recusadas(inconsistencias, "situacao_pw"),
         })
 
+    perfil_modelo = PerfilContrato.perfil_vigente(contrato, timezone.localdate())
+    perfil_codigo = None
+    if perfil_modelo is not None:
+        try:
+            perfil_codigo = perfil_de_dict(perfil_modelo.definicao)
+        except (ErroPerfil, TypeError, ValueError):
+            pass
+    documentos_por_identificador = {
+        identificador.upper(): documento_id
+        for identificador, documento_id in Documento.objects.filter(contrato=contrato).values_list(
+            "identificador_base", "pk"
+        )
+    }
+    linhas_recusadas = (
+        linha
+        for item in (*importacoes, *importacoes_situacao)
+        for grupo in item["grupos"]
+        for linha in grupo["linhas"]
+    )
+    for linha in linhas_recusadas:
+        codigo_lido = (linha.codigo_lido or "").strip()
+        identificador_base = codigo_lido.upper()
+        if perfil_codigo is not None and codigo_lido:
+            interpretado = interpretar(perfil_codigo, codigo_lido)
+            if not isinstance(interpretado, ErroCodigo):
+                identificador_base = interpretado.identificador_base.upper()
+        linha.documento_link_id = documentos_por_identificador.get(identificador_base)
+
     codigos_reprocessados = set(codigos_reprocessados)
     if previa and tipo_previa == "situacao_pw":
         codigos_reprocessados.update(documento.codigo_base for documento in previa.documentos)

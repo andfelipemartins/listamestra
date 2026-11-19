@@ -4,7 +4,9 @@ from pathlib import Path
 
 import pytest
 import yaml
+from django.db import connection
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from openpyxl import Workbook
 
@@ -320,6 +322,64 @@ def test_recusas_ficam_agrupadas_por_caixa_e_valor_e_exigem_acesso(contrato, per
     sem_participacao = django_user_model.objects.create_user(username="sem-participacao", password="senha")
     client.force_login(sem_participacao)
     assert client.get(url).status_code == 403
+
+
+@pytest.mark.django_db
+def test_codigo_recusado_abre_pasta_do_documento_existente_em_busca_em_lote(
+    contrato, perfil_modelo, client, django_user_model
+):
+    Documento.objects.create(
+        contrato=contrato,
+        identificador_base=CODIGO_1001,
+        titulo="Documento existente",
+    )
+    previa = previa_para(
+        criar_excel_id(
+            [
+                {
+                    "titulo": "Documento existente",
+                    "sequencial": "1001",
+                    "codigo": CODIGO_1001,
+                    "classe": "B1",
+                },
+                {
+                    "titulo": "Documento ausente",
+                    "sequencial": "1002",
+                    "codigo": CODIGO_1002,
+                    "classe": "B1",
+                },
+            ],
+            formato="extracao_pw",
+        ),
+        contrato,
+        perfil_modelo,
+        nome="ID PW.xlsx",
+    )
+    aplicar_previa(previa, contrato=contrato, perfil_modelo=perfil_modelo)
+    admin = django_user_model.objects.create_superuser(
+        username="admin-link-recusadas",
+        email="admin-link-recusadas@example.com",
+        password="senha-segura",
+    )
+    client.force_login(admin)
+
+    with CaptureQueriesContext(connection) as consultas:
+        resposta = client.get(reverse("linhas_recusadas", args=(contrato.pk,)))
+
+    assert resposta.status_code == 200
+    html = resposta.content.decode()
+    documento = Documento.objects.get(contrato=contrato, identificador_base=CODIGO_1001)
+    url_pasta = reverse("documento_pasta", args=(contrato.pk, documento.pk))
+    assert f'href="{url_pasta}">{CODIGO_1001}</a>' in html
+    assert CODIGO_1002 in html
+    assert f'href="{url_pasta}">{CODIGO_1002}</a>' not in html
+    consultas_documentos = [
+        consulta
+        for consulta in consultas
+        if "documentos_documento" in consulta["sql"]
+        and consulta["sql"].lstrip().upper().startswith("SELECT")
+    ]
+    assert len(consultas_documentos) == 1
 
 
 @pytest.mark.django_db
