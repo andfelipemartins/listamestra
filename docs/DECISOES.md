@@ -1020,7 +1020,7 @@ Aprovado, Não Conforme, Inconsistente, Erro de Assinatura, Cancelado, Revisão 
   (já entregue no block-056) até alguém corrigir: o dono corrige manualmente no PW, ou chega outra extração, ou uma
   planilha no formato padrão (D-081).
 
-## D-084 · Os IDs 1001, 1002 e 1501 viraram um ID só
+## D-084 · Os IDs 1001, 1002 e 1501 viraram um ID só (corrigida pela D-089)
 
 *Origem: AF6 · 2026-11-26*
 
@@ -1055,3 +1055,102 @@ Aprovado, Não Conforme, Inconsistente, Erro de Assinatura, Cancelado, Revisão 
 - Linha 3: **Pacotes em destaque**, **Atividade recente**, **Mensagens / Integrações** (espaço reservado "em breve", para
   e-mails e alertas futuros) e **Ações rápidas** (Ver pendências, Abrir documentos, Importar PW).
 - Ordem: o que estoura prazo e o que pede ação vem antes; pacotes na sequência (próximo da opção recomendada).
+
+## D-088 · Backup diário do banco inteiro, restaurado só pelo admin da plataforma
+
+*Origem: AI1 · 2026-11-26*
+
+- Uma **cópia automática por dia do banco inteiro** (todos os contratos, documentos, revisões, importações e registros),
+  guardando as **últimas 30 cópias** (30 dias). Não é "30 documentos": cada cópia é o sistema todo naquele dia.
+- O objetivo é **segurança contra pane** (disco, arquivo corrompido, erro grave). Restaurar volta tudo ao dia escolhido;
+  por isso só o **admin da plataforma (superusuário)** restaura, com confirmação. O desfazer do dia a dia continua pelas
+  reativações com registro (D-082).
+
+## D-089 · O ID 2001 substitui só o 1501; filtro por escopo e por classe
+
+*Origem: AI2 · 2026-11-26 · corrige D-084*
+
+- O dono explicou que o **2001 substituiu o 1501**: só mudaram os códigos, e ele deixou os dois em `entrada/` para mostrar
+  isso; o 1501 será apagado depois. Conferido nos arquivos: 279 códigos iguais; só o MC-15.25.00.00-6I5-1501 e o
+  RT-15.25.00.00-6C3-1501 viraram -2001. Os IDs 1001 e 1002 **não estão** no 2001 (o que acontece com eles fica em
+  pergunta). Isso corrige o "todos viraram um ID só" da D-084.
+- Escopo desta fase: o ID cobre **arquitetura/civil e sistemas**; não tem qualidade (qualidade é da execução, e esta obra
+  só produz os projetos executivos). É particularidade desta obra, não regra.
+- **Filtro: os dois.** O painel filtra por escopo **e** por classe; quem quiser ver só uma classe filtra por ela.
+
+## D-090 · Planilha padrão de situação: código, revisão, situação, data, mais colunas opcionais
+
+*Origem: AI3 · 2026-11-26*
+
+- Colunas base: **código, revisão, situação, data** (revisão vazia = última; data vazia = data da importação).
+- O dono pede **mais colunas no modelo**, porque outros contratos podem ter informações que esta obra não tem: quem não
+  tiver, **deixa em branco**. Toda coluna além do código é opcional.
+
+## D-091 · "Falta no PW" é pendência com ação
+
+*Origem: AI4 · 2026-11-26*
+
+- Documento do nosso ID que ainda não está no ID do PW entra na **Pendências** como "pedir inclusão no PW", com quem
+  resolveu e quando, como os outros erros. Continua contando no 100% (D-080).
+
+## D-092 · "Falta no nosso ID" fica fora do 100%; comparação com o ID do cliente é opção do perfil
+
+*Origem: AI5 · 2026-11-26*
+
+- Documento que está no ID do PW mas não no nosso ID **não conta no 100%** e vira pendência "falta no nosso ID" até alguém
+  incluir no nosso ID ou cancelar.
+- Ideia do dono, aceita: o perfil do contrato ganha a opção **"comparar com o ID do cliente (GED)"**, ligada ou desligada.
+  Ligada, valem a comparação e as pendências "falta no PW" / "falta no nosso ID" (D-091 e esta). Desligada (contrato sem
+  GED, só o nosso ID), não há comparação nem esses avisos. Linha 15 fica ligada.
+
+## D-093 · Planilha padrão de situação: admin e editor aplicam
+
+*Origem: AI6 · 2026-11-26*
+
+- Mesmo fluxo da importação do PW: admin e editor sobem, veem a prévia e aplicam; tudo registrado na Atividade.
+
+## D-094 · Card "Mensagens / Integrações" começa pelos alertas do sistema
+
+*Origem: AI7 · 2026-11-26*
+
+- A primeira coisa no card da Minha mesa são os **alertas gerados pelo próprio sistema** (importação nova, prazo vencendo
+  amanhã, documento cancelado). E-mail do contrato fica para depois, porque depende de liberação da TI.
+
+## D-095 · Nosso ID = 1001 + 1002 + 2001; o 1501 sai da pasta
+
+*Origem: AJ1 · 2026-11-26 · completa a D-089*
+
+- Os IDs **1001 e 1002 continuam vigentes**. O nosso ID passa a ser **1001 + 1002 + 2001**.
+- O dono confirmou que vai **excluir o 1501 da pasta**: o 2001 só o substitui com códigos novos, o conteúdo é o mesmo.
+  Entendido e conferido (279 documentos iguais; só MC-6I5 e RT-6C3 mudam de -1501 para -2001). O 1501 já importado fica
+  no sistema como **histórico** (substituído pelo 2001), sem contar no previsto, e sumir do `entrada/` não apaga nada.
+
+## D-096 · Planilha padrão: observação, GRD, data de envio e data de retorno; colunas por perfil
+
+*Origem: AJ2 · 2026-11-26 · completa a D-090*
+
+- Colunas opcionais do modelo: **observação, GRD, data de envio, data de retorno** (todas podem vir em branco).
+- Visão do dono: as colunas devem ser **configuráveis pelo admin** na pré-configuração do contrato. Para quem usa PW, o
+  layout de colunas da extração do PW pode ser uma **opção pronta** (preset); para outros sistemas, ou sem sistema, o
+  admin monta as colunas. Algumas colunas são **padrão do nosso processo** (GRD, data de envio, data de retorno...), por
+  exigência de auditoria, e não do cliente. A Lista Mestra `.xlsm` atual tem muitas dessas colunas, várias em branco hoje.
+- Primeiro passo (block-062): o modelo fixo base + opcionais acima. A configuração de colunas pelo admin e o preset PW
+  ficam como continuação.
+
+## D-097 · Backup em pasta configurável; padrão local; pode ser o SharePoint sincronizado
+
+*Origem: AJ3 · 2026-11-26 · completa a D-088*
+
+- O admin aponta a pasta do backup; sem configuração, usa `backups/` ao lado do sistema. Aviso no painel se falhar.
+- O dono lembra que a pasta pode ser o **SharePoint da empresa daquele contrato**, sincronizado no Windows (fica como uma
+  pasta comum no disco), o que já dá cópia fora da máquina.
+
+## D-098 · "Comparar com o ID do cliente" é pré-configuração do contrato, não um liga/desliga do dia a dia
+
+*Origem: AJ4 · 2026-11-26 · esclarece a D-092*
+
+- O dono estranhou a pergunta: contrato que **tem** ID do cliente (GED, aqui o PW) não vai desligar a comparação. A opção
+  existe para o admin **montar o ambiente de cada contrato**: quem tem GED liga, quem não tem deixa desligada. Não é
+  função para ficar ligando e desligando.
+- Consequência técnica (escolha do Claude, sem nova pergunta): as pendências "falta no PW" / "falta no nosso ID" são
+  **calculadas ao vivo** a partir dessa opção; não há tratamento especial para "desligar com pendência aberta".
