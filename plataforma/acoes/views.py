@@ -8,9 +8,19 @@ from django.views import View
 from .services import (
     carregar_ignorados,
     carregar_janela,
+    carregar_minha_mesa,
     reativar_ignorado,
     registrar_acao,
 )
+
+
+class PendenciasView(LoginRequiredMixin, View):
+    template_name = "acoes/pendencias.html"
+
+    def get(self, request):
+        contexto = carregar_minha_mesa(request.user, request.GET.get("contrato"))
+        contexto["email_aberto"] = request.GET.get("email", "")
+        return render(request, self.template_name, contexto)
 
 
 class JanelaView(LoginRequiredMixin, View):

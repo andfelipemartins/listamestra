@@ -1,3 +1,4 @@
+from collections import defaultdict
 from datetime import date, timedelta
 
 from django.core.exceptions import PermissionDenied
@@ -5,7 +6,8 @@ from django.db.models import Count, F, Prefetch
 from django.utils import timezone
 
 from core.perfil import ErroPerfil, perfil_de_dict
-from core.perfil.painel import classificar
+from core.perfil.codigo import ErroCodigo, interpretar
+from core.perfil.painel import classificar, classificar_categoria
 from contratos.models import Contrato, PerfilContrato
 from documentos.models import Analise, Documento, Emissao
 from importacoes.cronograma import comparar_previsoes_cronograma
@@ -31,6 +33,13 @@ TIPOS_JANELA = {
 }
 _DIAS_PARA_VENCER = 3
 _DIAS_CRONOGRAMA = 7
+_TEXTOS_RESUMO = {
+    "erros": "documentos com erros a corrigir",
+    PRAZO_ANALISE: "documentos aguardando análise do cliente",
+    PRAZO_DEVOLUCAO: "documentos aguardando nossa devolução",
+    "cronograma": "emissões vencidas ou próximas",
+    "recusadas": "linhas recusadas nas importações",
+}
 
 
 def contratos_acessiveis(usuario):
@@ -104,6 +113,71 @@ def carregar_minha_mesa(usuario, contrato_id=None, *, hoje=None, limite=10, incl
         "janelas": janelas,
         "perfil": perfil,
     }
+
+
+def carregar_resumo_inicio(usuario, contrato_id=None, *, hoje=None):
+    mesa = carregar_minha_mesa(usuario, contrato_id, hoje=hoje, limite=0)
+    cards_janelas = []
+    for janela in mesa["janelas"]:
+        quantidade = (
+            sum(item["quantidade"] for item in janela["todos"])
+            if janela["id"] == "recusadas"
+            else janela["quantidade"]
+        )
+        if not quantidade:
+            continue
+        cards_janelas.append(
+            {
+                "id": janela["id"],
+                "quantidade": quantidade,
+                "texto": _TEXTOS_RESUMO[janela["id"]],
+            }
+        )
+
+    return {
+        **mesa,
+        "cards_janelas": cards_janelas,
+        "cards_pacotes": _cards_pacotes_analise(mesa),
+    }
+
+
+def _cards_pacotes_analise(mesa):
+    perfil = mesa.get("perfil")
+    if perfil is None or not perfil.painel.categorias:
+        return []
+    janela = next(
+        (item for item in mesa["janelas"] if item["id"] == PRAZO_ANALISE),
+        None,
+    )
+    if janela is None:
+        return []
+
+    documentos_por_categoria = defaultdict(set)
+    rotulos_por_categoria = {}
+    for item in janela["todos"]:
+        documento = item["documento"]
+        codigo = interpretar(perfil, documento.identificador_base)
+        if isinstance(codigo, ErroCodigo):
+            continue
+        categoria = classificar_categoria(perfil, codigo.segmentos)
+        if categoria is None:
+            continue
+        documentos_por_categoria[categoria.id].add(documento.pk)
+        rotulos_por_categoria[categoria.id] = categoria.rotulo
+
+    pacotes = [
+        {
+            "id": identificador,
+            "rotulo": rotulos_por_categoria[identificador],
+            "quantidade": len(documentos),
+        }
+        for identificador, documentos in documentos_por_categoria.items()
+        if len(documentos) >= 2
+    ]
+    return sorted(
+        pacotes,
+        key=lambda pacote: (-pacote["quantidade"], pacote["rotulo"].casefold()),
+    )[:6]
 
 
 def carregar_janela(usuario, contrato_id, tipo, *, hoje=None):

@@ -7,7 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from acoes.models import AcaoPendencia
-from acoes.services import carregar_janela, carregar_minha_mesa
+from acoes.services import carregar_janela, carregar_minha_mesa, carregar_resumo_inicio
 from contas.models import Usuario
 from contratos.models import Contrato, Participacao, PerfilContrato
 from documentos.models import Analise, Documento, Emissao
@@ -129,11 +129,14 @@ def test_codigo_da_mesa_e_do_ver_todos_abre_a_pasta_do_documento(
     link = f'href="{pasta}"><strong>{documento.identificador_base}</strong></a>'
 
     mesa = client.get(reverse("inicio"), {"contrato": contrato.pk})
+    pendencias = client.get(reverse("acoes:pendencias"), {"contrato": contrato.pk})
     ver_todos = client.get(reverse("acoes:janela", args=("erros",)), {"contrato": contrato.pk})
 
     assert mesa.status_code == 200
+    assert pendencias.status_code == 200
     assert ver_todos.status_code == 200
-    assert link in mesa.content.decode()
+    assert link not in mesa.content.decode()
+    assert link in pendencias.content.decode()
     assert link in ver_todos.content.decode()
 
 
@@ -206,40 +209,31 @@ def test_janela_cronograma_mostra_vencidos_e_proximos_sete_dias(contrato, perfil
 
 @pytest.mark.django_db
 def test_janela_recusadas_agrupa_por_importacao(contrato, perfil_modelo, usuario):
-    indice = IndiceDocumentos.objects.create(
-        contrato=contrato,
-        codigo="ID-TESTE",
-        revisao="1",
-        fonte=IndiceDocumentos.Fonte.EXCEL_ID,
-        arquivo_nome="id.xlsx",
-        importado_em=timezone.now(),
-    )
-    importacao_id = ImportacaoID.objects.create(
-        contrato=contrato, indice=indice, arquivo_nome="id.xlsx"
-    )
     importacao_pw = ImportacaoSituacao.objects.create(
         contrato=contrato,
         data_extracao=HOJE,
         arquivo_nome="pw.xlsx",
         importado_por=usuario,
     )
-    for numero in (3, 4):
-        InconsistenciaImportacao.objects.create(
-            importacao_id=importacao_id,
-            numero_linha=numero,
-            mensagem="Linha recusada",
-        )
-    InconsistenciaImportacao.objects.create(
-        importacao_situacao=importacao_pw,
-        numero_linha=7,
-        mensagem="Linha recusada",
+    importacao_pw_2 = ImportacaoSituacao.objects.create(
+        contrato=contrato,
+        data_extracao=HOJE - timedelta(days=1),
+        arquivo_nome="pw-corrigido.xlsx",
+        importado_por=usuario,
     )
+    for importacao, numeros in ((importacao_pw, (3, 4)), (importacao_pw_2, (7,))):
+        for numero in numeros:
+            InconsistenciaImportacao.objects.create(
+                importacao_situacao=importacao,
+                numero_linha=numero,
+                mensagem="Linha recusada",
+            )
 
     janela = _janela(carregar_minha_mesa(usuario, contrato.pk, hoje=HOJE), "recusadas")
 
     assert janela["quantidade"] == 2
     assert sum(item["quantidade"] for item in janela["itens"]) == 3
-    assert {item["tipo"] for item in janela["itens"]} == {"ID", "Situação PW"}
+    assert {item["tipo"] for item in janela["itens"]} == {"Situação PW"}
     assert all(item["link_recusadas"] for item in janela["itens"])
 
 
@@ -374,3 +368,134 @@ def test_staff_pode_selecionar_contratos_sem_participacao_inclusive_inativos(cli
 
     assert resposta.status_code == 200
     assert resposta.context["contrato"] == contrato
+
+
+@pytest.mark.django_db
+def test_pendencias_concentra_acoes_inicio_so_mostra_resumos_e_menu_aponta_para_pendencias(
+    contrato, perfil_modelo, usuario, client
+):
+    documento = _documento(contrato, "DOC-ERRO-INICIO-1001")
+    _emissao(documento, date(2026, 11, 10), situacao="Erro de Assinatura", data_analise=date(2026, 11, 12))
+    client.force_login(usuario)
+
+    inicio = client.get(reverse("inicio"), {"contrato": contrato.pk})
+    pendencias = client.get(reverse("acoes:pendencias"), {"contrato": contrato.pk})
+
+    assert inicio.status_code == 200
+    assert pendencias.status_code == 200
+    assert 'name="acao"' not in inicio.content.decode()
+    assert "Ignorar" in pendencias.content.decode()
+    assert "Pedir correção ao cliente" in pendencias.content.decode()
+    assert "Já corrigi" in pendencias.content.decode()
+    assert f'href="{reverse("acoes:pendencias")}"' in pendencias.content.decode()
+    assert 'class="nav-item active"' in pendencias.content.decode()
+
+
+@pytest.mark.django_db
+def test_inicio_resume_contagens_de_janelas_incluindo_linhas_recusadas(
+    contrato, perfil_modelo, usuario
+):
+    perfil_modelo.definicao["prazos"]["regras"][0]["dias"] = 1
+    perfil_modelo.definicao["prazos"]["regras"][1]["dias"] = 1
+    perfil_modelo.save(update_fields=("definicao",))
+
+    erro = _documento(contrato, "DOC-ERRO-RESUMO-1001")
+    _emissao(erro, HOJE, situacao="Erro de Assinatura", data_analise=HOJE)
+    for sequencial in (1001, 1002):
+        documento = _documento(contrato, f"DE-15.25.00.00-6B3-{sequencial}")
+        _emissao(documento, HOJE)
+    devolucao = _documento(contrato, "DE-15.25.00.00-6B3-1003")
+    _emissao(devolucao, HOJE, situacao="Não Aprovado", data_analise=HOJE)
+
+    cronograma_documento = _documento(contrato, "DOC-CRONO-RESUMO-1001")
+    importacao_cronograma = ImportacaoCronograma.objects.create(
+        contrato=contrato, arquivo_nome="cronograma.xlsx"
+    )
+    PrevisaoEmissao.objects.create(
+        contrato=contrato,
+        documento=cronograma_documento,
+        data_prevista=HOJE - timedelta(days=1),
+        importacao=importacao_cronograma,
+    )
+
+    importacao_pw = ImportacaoSituacao.objects.create(
+        contrato=contrato,
+        data_extracao=HOJE,
+        arquivo_nome="pw.xlsx",
+        importado_por=usuario,
+    )
+    for numero in (3, 4, 5):
+        InconsistenciaImportacao.objects.create(
+            importacao_situacao=importacao_pw,
+            numero_linha=numero,
+            mensagem="Linha recusada",
+        )
+
+    resumo = carregar_resumo_inicio(usuario, contrato.pk, hoje=HOJE)
+    contagens = {card["id"]: card["quantidade"] for card in resumo["cards_janelas"]}
+
+    assert contagens == {
+        "erros": 1,
+        "analise-cliente": 2,
+        "devolucao": 1,
+        "cronograma": 1,
+        "recusadas": 3,
+    }
+
+
+@pytest.mark.django_db
+def test_inicio_agrupa_pacotes_pelo_perfil_apenas_com_dois_ou_mais_e_limita_a_seis(
+    contrato, perfil_modelo, usuario
+):
+    perfil_modelo.definicao["prazos"]["regras"][0]["dias"] = 1
+    perfil_modelo.definicao["painel"]["categorias"] = [
+        {
+            "id": f"pacote_{classe.lower()}",
+            "rotulo": f"Pacote {classe}",
+            "regras": [{"classe": [classe]}],
+        }
+        for classe in ("A1", "A2", "A3", "A4", "A6", "A7", "A8", "A9")
+    ]
+    perfil_modelo.save(update_fields=("definicao",))
+
+    for classe, quantidade in (("A1", 4), ("A2", 3), ("A3", 2), ("A4", 2), ("A6", 2), ("A7", 2), ("A8", 2), ("A9", 1)):
+        for indice in range(quantidade):
+            sequencial = 1001 + indice
+            documento = _documento(
+                contrato,
+                f"DE-15.25.00.00-6{classe}-{sequencial}",
+            )
+            _emissao(documento, HOJE)
+
+    resumo = carregar_resumo_inicio(usuario, contrato.pk, hoje=HOJE)
+
+    assert [card["rotulo"] for card in resumo["cards_pacotes"]] == [
+        "Pacote A1",
+        "Pacote A2",
+        "Pacote A3",
+        "Pacote A4",
+        "Pacote A6",
+        "Pacote A7",
+    ]
+    assert [card["quantidade"] for card in resumo["cards_pacotes"]] == [4, 3, 2, 2, 2, 2]
+
+
+@pytest.mark.django_db
+def test_inicio_agrupa_pelo_perfil_sem_exigir_caixa_literal_disciplina(
+    contrato, perfil_modelo, usuario
+):
+    perfil = perfil_modelo.definicao["codigo"]["segmentos"]
+    assert "disciplina" not in {segmento.get("nome") for segmento in perfil}
+    perfil_modelo.definicao["prazos"]["regras"][0]["dias"] = 1
+    perfil_modelo.save(update_fields=("definicao",))
+    for sequencial in (1001, 1002):
+        documento = _documento(contrato, f"DE-15.25.00.00-6B3-{sequencial}")
+        _emissao(documento, HOJE)
+    categoria_unitaria = _documento(contrato, "DE-15.25.00.00-6A1-1003")
+    _emissao(categoria_unitaria, HOJE)
+
+    resumo = carregar_resumo_inicio(usuario, contrato.pk, hoje=HOJE)
+
+    assert resumo["cards_pacotes"] == [
+        {"id": "arquitetura", "rotulo": "ARQUITETURA", "quantidade": 2}
+    ]
