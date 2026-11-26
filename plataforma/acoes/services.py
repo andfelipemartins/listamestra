@@ -138,12 +138,16 @@ def carregar_resumo_inicio(usuario, contrato_id=None, *, hoje=None):
         **mesa,
         "cards_janelas": cards_janelas,
         "cards_pacotes": _cards_pacotes_analise(mesa),
+        "resumo_atrasos": _resumo_atrasos(mesa),
     }
 
 
 def _cards_pacotes_analise(mesa):
     perfil = mesa.get("perfil")
-    if perfil is None or not perfil.painel.categorias:
+    if perfil is None:
+        return []
+    pacote_perfil = perfil.painel.pacote
+    if pacote_perfil is None and not perfil.painel.categorias:
         return []
     janela = next(
         (item for item in mesa["janelas"] if item["id"] == PRAZO_ANALISE),
@@ -152,32 +156,91 @@ def _cards_pacotes_analise(mesa):
     if janela is None:
         return []
 
-    documentos_por_categoria = defaultdict(set)
-    rotulos_por_categoria = {}
+    documentos_por_pacote = defaultdict(set)
+    rotulos_por_pacote = {}
     for item in janela["todos"]:
         documento = item["documento"]
         codigo = interpretar(perfil, documento.identificador_base)
         if isinstance(codigo, ErroCodigo):
             continue
-        categoria = classificar_categoria(perfil, codigo.segmentos)
-        if categoria is None:
-            continue
-        documentos_por_categoria[categoria.id].add(documento.pk)
-        rotulos_por_categoria[categoria.id] = categoria.rotulo
+        if pacote_perfil is not None:
+            valores = tuple(codigo.segmentos.get(nome, "") for nome in pacote_perfil.segmentos)
+            if not all(valores):
+                continue
+            identificador = valores
+            rotulo_codigo = "".join(valores)
+            nome = codigo.significados.get(pacote_perfil.nome_de) if pacote_perfil.nome_de else None
+            rotulo = f"{rotulo_codigo} · {nome}" if nome else rotulo_codigo
+        else:
+            categoria = classificar_categoria(perfil, codigo.segmentos)
+            if categoria is None:
+                continue
+            identificador = categoria.id
+            rotulo = categoria.rotulo
+        documentos_por_pacote[identificador].add(documento.pk)
+        rotulos_por_pacote[identificador] = rotulo
 
     pacotes = [
         {
-            "id": identificador,
-            "rotulo": rotulos_por_categoria[identificador],
+            "id": "".join(identificador) if isinstance(identificador, tuple) else identificador,
+            "rotulo": rotulos_por_pacote[identificador],
             "quantidade": len(documentos),
         }
-        for identificador, documentos in documentos_por_categoria.items()
+        for identificador, documentos in documentos_por_pacote.items()
         if len(documentos) >= 2
     ]
     return sorted(
         pacotes,
         key=lambda pacote: (-pacote["quantidade"], pacote["rotulo"].casefold()),
     )[:6]
+
+
+def _resumo_atrasos(mesa):
+    documentos_atrasados = {}
+    for janela in mesa["janelas"]:
+        if janela["id"] not in {PRAZO_ANALISE, PRAZO_DEVOLUCAO}:
+            continue
+        for item in janela["todos"]:
+            if not item["atrasado"]:
+                continue
+            documento_id = item["documento"].pk
+            atual = documentos_atrasados.get(documento_id)
+            if atual is None or item["dias"] > atual["dias"]:
+                documentos_atrasados[documento_id] = item
+
+    quantidades = defaultdict(int)
+    tons = {}
+    for item in documentos_atrasados.values():
+        rotulo = item.get("faixa_atraso")
+        if rotulo:
+            quantidades[rotulo] += 1
+            tons[rotulo] = max(tons.get(rotulo, 0), item["faixa_atraso_tom"])
+
+    faixas = []
+    for faixa in _faixas_atraso_perfil(mesa.get("perfil")):
+        quantidade = quantidades.get(faixa.rotulo, 0)
+        if quantidade:
+            faixas.append(
+                {
+                    "rotulo": faixa.rotulo,
+                    "quantidade": quantidade,
+                    "tom": tons[faixa.rotulo],
+                }
+            )
+    return {"quantidade": len(documentos_atrasados), "faixas": faixas}
+
+
+def _faixas_atraso_perfil(perfil):
+    if perfil is None or perfil.prazos is None:
+        return ()
+    faixas = list(perfil.prazos.faixas_atraso or ())
+    rotulos = {faixa.rotulo for faixa in faixas}
+    for regra in perfil.prazos.regras:
+        for faixa in regra.faixas_atraso or ():
+            if faixa.rotulo not in rotulos:
+                faixas.append(faixa)
+                rotulos.add(faixa.rotulo)
+    return tuple(faixas)
 
 
 def carregar_janela(usuario, contrato_id, tipo, *, hoje=None):
@@ -388,12 +451,20 @@ def _itens_regras_prazo(perfil, regras, documentos, hoje):
                     dias = avaliacao.dias_atraso
                     texto_prazo = f"Atrasado há {dias} {('dia' if dias == 1 else 'dias')}"
                     atrasado = True
+                    faixas = (
+                        regra.faixas_atraso
+                        if regra.faixas_atraso is not None
+                        else perfil.prazos.faixas_atraso
+                    )
+                    faixa_atraso, faixa_atraso_tom = _classificar_faixa_atraso(faixas, dias)
                 else:
                     dias = dias_ate_vencimento(regra, hoje, avaliacao.vencimento, feriados)
                     if dias > _DIAS_PARA_VENCER:
                         continue
                     texto_prazo = "Vence hoje" if dias == 0 else f"Vence em {dias} {('dia' if dias == 1 else 'dias')}"
                     atrasado = False
+                    faixa_atraso = None
+                    faixa_atraso_tom = None
                 itens.append(
                     {
                         "documento": documento,
@@ -408,6 +479,8 @@ def _itens_regras_prazo(perfil, regras, documentos, hoje):
                         "data_inicio": item_prazo.inicio,
                         "vencimento": avaliacao.vencimento,
                         "atrasado": atrasado,
+                        "faixa_atraso": faixa_atraso,
+                        "faixa_atraso_tom": faixa_atraso_tom,
                         "dias": dias,
                         "texto_prazo": texto_prazo,
                     }
@@ -421,6 +494,15 @@ def _itens_regras_prazo(perfil, regras, documentos, hoje):
             item["revisao"],
         ),
     )
+
+
+def _classificar_faixa_atraso(faixas, dias):
+    if not faixas:
+        return None, None
+    for indice, faixa in enumerate(faixas):
+        if faixa.ate_dias is None or dias <= faixa.ate_dias:
+            return faixa.rotulo, min(indice + 1, 4)
+    return faixas[-1].rotulo, min(len(faixas), 4)
 
 
 def _itens_cronograma(contrato, hoje):

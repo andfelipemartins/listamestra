@@ -2,7 +2,7 @@
   {% include "acoes/_item_erro.html" %}
 {% elif janela.id == "analise-cliente" or janela.id == "devolucao" %}
   <article class="mesa-item">
-    <div class="mesa-item-meta"><span class="mesa-selo">{{ item.texto_prazo }}</span><span>{{ item.regra_rotulo }}</span></div>
+    <div class="mesa-item-meta"><span class="mesa-selo">{{ item.texto_prazo }}</span>{% if item.atrasado and item.faixa_atraso %}<span class="mesa-selo mesa-selo-faixa-{{ item.faixa_atraso_tom }}">{{ item.faixa_atraso }}</span>{% endif %}<span>{{ item.regra_rotulo }}</span></div>
     <a href="{% url 'documento_pasta' contrato.pk item.documento.pk %}"><strong>{{ item.codigo }}</strong></a><p>{{ item.titulo }}</p>
     <div class="mesa-item-meta"><span>Rev. {{ item.revisao }}{% if item.versao != None %} · Ver. {{ item.versao }}{% endif %}</span><span>{{ item.situacao }}</span><span>Início: {{ item.data_inicio|date:"d/m/Y" }}</span><span>Vencimento: {{ item.vencimento|date:"d/m/Y" }}</span></div>
   </article>

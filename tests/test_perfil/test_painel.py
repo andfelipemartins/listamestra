@@ -184,6 +184,7 @@ def test_validacoes_negativas_do_painel(alterar, mensagem):
 def test_perfil_sem_painel_recebe_estrutura_minima_sem_estados_de_cliente():
     perfil = perfil_de_dict(_perfil_base())
 
+    assert perfil.painel.pacote is None
     assert [(grupo.id, grupo.rotulo) for grupo in perfil.painel.grupos] == [
         ("a_emitir", "A EMITIR"),
         ("em_analise", "EM ANÁLISE"),
@@ -203,6 +204,26 @@ def test_painel_spobras_usa_situacoes_do_manual():
     assert classificar(spobras, "CANCELADO").id == "cancelado"
     assert all(not grupo.oculto_no_painel for grupo in spobras.painel.grupos)
     assert spobras.painel.categorias == ()
+    assert spobras.painel.pacote is None
+
+
+def test_pacote_do_painel_e_opcional_e_valida_caixas_do_codigo():
+    dados = _perfil_base(
+        {
+            "grupos": [
+                {"id": "a_emitir", "rotulo": "A EMITIR", "sem_emissao": True},
+            ],
+            "pacote": {"segmentos": ["codigo"], "nome_de": "codigo"},
+        }
+    )
+
+    perfil = perfil_de_dict(dados)
+    assert perfil.painel.pacote.segmentos == ("codigo",)
+    assert perfil.painel.pacote.nome_de == "codigo"
+
+    dados["painel"]["pacote"]["segmentos"] = ["classe_inexistente"]
+    with pytest.raises(ErroPerfil, match="painel.pacote.segmentos.*caixa inexistente"):
+        perfil_de_dict(dados)
 
 
 def _perfil_com_categorias(categorias):

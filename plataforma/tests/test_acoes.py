@@ -447,6 +447,7 @@ def test_inicio_resume_contagens_de_janelas_incluindo_linhas_recusadas(
 def test_inicio_agrupa_pacotes_pelo_perfil_apenas_com_dois_ou_mais_e_limita_a_seis(
     contrato, perfil_modelo, usuario
 ):
+    perfil_modelo.definicao["painel"].pop("pacote")
     perfil_modelo.definicao["prazos"]["regras"][0]["dias"] = 1
     perfil_modelo.definicao["painel"]["categorias"] = [
         {
@@ -486,6 +487,7 @@ def test_inicio_agrupa_pelo_perfil_sem_exigir_caixa_literal_disciplina(
 ):
     perfil = perfil_modelo.definicao["codigo"]["segmentos"]
     assert "disciplina" not in {segmento.get("nome") for segmento in perfil}
+    perfil_modelo.definicao["painel"].pop("pacote")
     perfil_modelo.definicao["prazos"]["regras"][0]["dias"] = 1
     perfil_modelo.save(update_fields=("definicao",))
     for sequencial in (1001, 1002):
@@ -499,3 +501,110 @@ def test_inicio_agrupa_pelo_perfil_sem_exigir_caixa_literal_disciplina(
     assert resumo["cards_pacotes"] == [
         {"id": "arquitetura", "rotulo": "ARQUITETURA", "quantidade": 2}
     ]
+
+
+@pytest.mark.django_db
+def test_inicio_agrupa_por_pacote_configurado_e_exibe_nome_da_classe(
+    contrato, perfil_modelo, usuario
+):
+    perfil_modelo.definicao["prazos"]["regras"][0]["dias"] = 1
+    perfil_modelo.save(update_fields=("definicao",))
+    for sequencial in (1001, 1002):
+        documento = _documento(contrato, f"DE-15.25.00.00-6G6-{sequencial}")
+        _emissao(documento, HOJE)
+
+    resumo = carregar_resumo_inicio(usuario, contrato.pk, hoje=HOJE)
+
+    assert resumo["cards_pacotes"] == [
+        {"id": "6G6", "rotulo": "6G6 · Terraplenagem", "quantidade": 2}
+    ]
+
+
+@pytest.mark.django_db
+def test_pacote_sem_nome_cadastrado_mostra_apenas_o_codigo(contrato, perfil_modelo, usuario):
+    perfil_modelo.definicao["prazos"]["regras"][0]["dias"] = 1
+    classe = next(
+        segmento for segmento in perfil_modelo.definicao["codigo"]["segmentos"]
+        if segmento.get("nome") == "classe"
+    )
+    classe.pop("valores")
+    perfil_modelo.save(update_fields=("definicao",))
+    for sequencial in (1001, 1002):
+        documento = _documento(contrato, f"DE-15.25.00.00-6A1-{sequencial}")
+        _emissao(documento, HOJE)
+
+    resumo = carregar_resumo_inicio(usuario, contrato.pk, hoje=HOJE)
+
+    assert resumo["cards_pacotes"] == [
+        {"id": "6A1", "rotulo": "6A1", "quantidade": 2}
+    ]
+
+
+@pytest.mark.django_db
+def test_itens_atrasados_recebem_faixa_e_inicio_resume_documentos_por_faixa(
+    contrato, perfil_modelo, usuario, client
+):
+    hoje = timezone.localdate()
+    regra = perfil_modelo.definicao["prazos"]["regras"][0]
+    regra.update(dias=1, tipo_dia="corridos")
+    perfil_modelo.save(update_fields=("definicao",))
+    atrasos = ((3, "Leve", 1), (20, "Moderado", 2), (45, "Grave", 3), (90, "Crítico", 4))
+    for indice, (dias, _, _) in enumerate(atrasos, start=1):
+        codigo = f"DE-15.25.00.00-6B3-{1000 + indice}"
+        documento = _documento(contrato, codigo)
+        _emissao(documento, hoje - timedelta(days=dias + 1))
+
+    mesa = carregar_minha_mesa(usuario, contrato.pk, hoje=hoje)
+    itens = _janela(mesa, "analise-cliente")["itens"]
+    por_dias = {item["dias"]: item for item in itens}
+    assert {dias: por_dias[dias]["faixa_atraso"] for dias, _, _ in atrasos} == {
+        dias: rotulo for dias, rotulo, _ in atrasos
+    }
+    assert {dias: por_dias[dias]["faixa_atraso_tom"] for dias, _, _ in atrasos} == {
+        dias: tom for dias, _, tom in atrasos
+    }
+
+    resumo = carregar_resumo_inicio(usuario, contrato.pk, hoje=hoje)
+    assert resumo["resumo_atrasos"] == {
+        "quantidade": 4,
+        "faixas": [
+            {"rotulo": rotulo, "quantidade": 1, "tom": tom}
+            for _, rotulo, tom in atrasos
+        ],
+    }
+
+    client.force_login(usuario)
+    pendencias = client.get(reverse("acoes:pendencias"), {"contrato": contrato.pk})
+    ver_todos = client.get(
+        reverse("acoes:janela", args=("analise-cliente",)), {"contrato": contrato.pk}
+    )
+    inicio = client.get(reverse("inicio"), {"contrato": contrato.pk})
+    for _, rotulo, tom in atrasos:
+        etiqueta = f'mesa-selo mesa-selo-faixa-{tom}">{rotulo}'
+        html_pendencias = pendencias.content.decode()
+        assert etiqueta in html_pendencias
+        assert etiqueta in ver_todos.content.decode()
+        assert f'inicio-faixa-{tom}">1 {rotulo}' in inicio.content.decode()
+
+
+@pytest.mark.django_db
+def test_perfil_sem_faixas_mantem_atraso_sem_etiqueta_ou_chips(
+    contrato, perfil_modelo, usuario, client
+):
+    perfil_modelo.definicao["prazos"].pop("faixas_atraso")
+    regra = perfil_modelo.definicao["prazos"]["regras"][0]
+    regra.update(dias=1, tipo_dia="corridos")
+    perfil_modelo.save(update_fields=("definicao",))
+    documento = _documento(contrato, "DE-15.25.00.00-6B3-1001")
+    _emissao(documento, HOJE - timedelta(days=4))
+
+    mesa = carregar_minha_mesa(usuario, contrato.pk, hoje=HOJE)
+    item = _janela(mesa, "analise-cliente")["itens"][0]
+    resumo = carregar_resumo_inicio(usuario, contrato.pk, hoje=HOJE)["resumo_atrasos"]
+    client.force_login(usuario)
+    pendencias = client.get(reverse("acoes:pendencias"), {"contrato": contrato.pk})
+
+    assert item["atrasado"] is True
+    assert item["faixa_atraso"] is None
+    assert resumo == {"quantidade": 1, "faixas": []}
+    assert 'class="mesa-selo mesa-selo-faixa-' not in pendencias.content.decode()

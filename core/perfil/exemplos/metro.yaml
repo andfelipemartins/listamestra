@@ -335,6 +335,10 @@ painel:
   # Revisão Superada é somente histórica, nunca a situação vigente.
   ignorar: ["Revisão Superada"]
   avanco: [aprovado]
+  # D-077: o Início agrupa os documentos aguardando análise pelo código completo da classe.
+  pacote:
+    segmentos: [etapa, classe]
+    nome_de: classe
   # D-052: categorias do painel seguem a coluna MODALIDADE da Lista Mestra; D-057: N3 (paisagismo e urbanismo) é ARQUITETURA.
   categorias:
     - id: qualidade
@@ -370,7 +374,6 @@ prazos:
   # PE-ENG-001, item 5.6: indicador satisfatório quando 80% ou mais dos prazos são cumpridos.
   meta_percentual: 80
   meta_cronograma: 80
-  # Faixas provisórias até confirmação do dono na pergunta AD1 (D-065).
   faixas_atraso:
     - {ate_dias: 5, rotulo: Leve}
     - {ate_dias: 30, rotulo: Moderado}

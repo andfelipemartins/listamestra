@@ -118,12 +118,22 @@ class Categoria:
 
 
 @dataclass(frozen=True)
+class PacotePainel:
+    segmentos: tuple[str, ...]
+    nome_de: str | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "segmentos", tuple(self.segmentos))
+
+
+@dataclass(frozen=True)
 class PainelPerfil:
     grupos: tuple[Grupo, ...]
     ignorar: tuple[str, ...] = ()
     avanco: tuple[str, ...] = ()
     indicadores: tuple[IndicadorAprovacao, ...] = ()
     categorias: tuple[Categoria, ...] = ()
+    pacote: PacotePainel | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "grupos", tuple(self.grupos))
@@ -388,13 +398,51 @@ def _painel_de_dict(dados: Any, codigo: EstruturaCodigo) -> PainelPerfil:
 
     indicadores = _indicadores_de_dict(dados.get("indicadores", ()))
     categorias = _categorias_de_dict(dados.get("categorias"), codigo)
+    pacote = _pacote_de_dict(dados.get("pacote"), codigo)
     return PainelPerfil(
         grupos=tuple(grupos),
         ignorar=ignorar,
         avanco=avanco,
         indicadores=indicadores,
         categorias=categorias,
+        pacote=pacote,
     )
+
+
+def _pacote_de_dict(dados: Any, codigo: EstruturaCodigo) -> PacotePainel | None:
+    if dados is None:
+        return None
+    if not isinstance(dados, Mapping):
+        raise ErroPerfil("'painel.pacote' precisa ser um objeto.")
+
+    caixas = {campo.nome.casefold(): campo.nome for campo in codigo.campos}
+    segmentos_brutos = dados.get("segmentos")
+    if not isinstance(segmentos_brutos, (list, tuple)) or not segmentos_brutos:
+        raise ErroPerfil("'painel.pacote.segmentos' precisa ser uma lista não vazia de caixas do código.")
+
+    segmentos: list[str] = []
+    vistos: set[str] = set()
+    for nome_caixa in segmentos_brutos:
+        if not isinstance(nome_caixa, str) or nome_caixa.casefold() not in caixas:
+            raise ErroPerfil(
+                f"'painel.pacote.segmentos' referencia a caixa inexistente '{nome_caixa}'."
+            )
+        nome = caixas[nome_caixa.casefold()]
+        if nome.casefold() in vistos:
+            raise ErroPerfil(f"Caixa repetida em 'painel.pacote.segmentos': '{nome}'.")
+        vistos.add(nome.casefold())
+        segmentos.append(nome)
+
+    nome_de_bruto = dados.get("nome_de")
+    nome_de = None
+    if nome_de_bruto is not None:
+        if not isinstance(nome_de_bruto, str) or nome_de_bruto.casefold() not in caixas:
+            raise ErroPerfil(
+                f"'painel.pacote.nome_de' referencia a caixa inexistente '{nome_de_bruto}'."
+            )
+        nome_de = caixas[nome_de_bruto.casefold()]
+
+    return PacotePainel(segmentos=tuple(segmentos), nome_de=nome_de)
 
 
 def _categorias_de_dict(dados: Any, codigo: EstruturaCodigo) -> tuple[Categoria, ...]:

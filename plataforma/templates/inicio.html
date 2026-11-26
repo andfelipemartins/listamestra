@@ -12,6 +12,12 @@
   .inicio-card strong { font-size:28px; line-height:1.1; }
   .inicio-card span { margin-top:7px; font-size:12px; line-height:1.4; }
   .inicio-card small { margin-top:auto; padding-top:11px; color:var(--accent-link); font-size:11px; font-weight:650; }
+  .inicio-faixas { display:flex; flex-wrap:wrap; gap:6px; margin-top:11px; }
+  .inicio-faixas span { margin:0; padding:4px 8px; border-radius:999px; font-size:10px; font-weight:700; }
+  .inicio-faixa-1 { background:#fee2e2; color:#7f1d1d; }
+  .inicio-faixa-2 { background:#fecaca; color:#7f1d1d; }
+  .inicio-faixa-3 { background:#f87171; color:#1f1f1f; }
+  .inicio-faixa-4 { background:#b91c1c; color:#fff; }
   .inicio-vazio { padding:17px; border:1px solid var(--border); border-radius:10px; background:var(--surface); color:var(--text-secondary); }
   @media(max-width:1050px) { .inicio-grade { grid-template-columns:repeat(3,minmax(0,1fr)); } }
   @media(max-width:720px) { .inicio-grade { grid-template-columns:repeat(2,minmax(0,1fr)); } }
@@ -39,8 +45,15 @@
     <section class="welcome-panel"><div class="welcome-symbol">LM</div><div><h2>Nenhum contrato disponível</h2><p>Peça à administração para incluir sua participação em um contrato ativo.</p></div></section>
   {% else %}
     {% if perfil_erro %}<div class="notice" style="margin-bottom:16px">{{ perfil_erro }}</div>{% endif %}
-    {% if cards_janelas or cards_pacotes %}
+    {% if cards_janelas or cards_pacotes or resumo_atrasos.quantidade %}
       <div class="inicio-grade">
+        {% if resumo_atrasos.quantidade %}
+          <a class="inicio-card" href="{% url 'acoes:pendencias' %}?contrato={{ contrato.pk }}">
+            <strong>{{ resumo_atrasos.quantidade }}</strong><span>documentos atrasados</span>
+            {% if resumo_atrasos.faixas %}<div class="inicio-faixas" aria-label="Atrasos por faixa">{% for faixa in resumo_atrasos.faixas %}<span class="inicio-faixa-{{ faixa.tom }}">{{ faixa.quantidade }} {{ faixa.rotulo }}</span>{% endfor %}</div>{% endif %}
+            <small>Ver Pendências →</small>
+          </a>
+        {% endif %}
         {% for card in cards_janelas %}
           <a class="inicio-card" href="{% url 'acoes:pendencias' %}?contrato={{ contrato.pk }}#janela-{{ card.id }}">
             <strong>{{ card.quantidade }}</strong><span>{{ card.texto }}</span><small>Ver pendências →</small>
