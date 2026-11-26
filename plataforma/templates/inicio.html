@@ -26,7 +26,11 @@
 
     <section class="mesa-indicadores" aria-label="Resumo do contrato">
       {% for indicador in indicadores_inicio %}
+        {% if indicador.id == "pendencias" and perfil and perfil.comparar_id_cliente %}
+        <div class="mesa-indicador mesa-indicador--{{ indicador.id }}">
+        {% else %}
         <a class="mesa-indicador mesa-indicador--{{ indicador.id }}{% if indicador.id == 'atrasados' and indicador.quantidade > 0 %} mesa-indicador--alerta{% endif %}" href="{{ indicador.url }}">
+        {% endif %}
           <span class="mesa-indicador-icone" aria-hidden="true">
             {% if indicador.id == "pendencias" %}
               <svg viewBox="0 0 24 24" fill="none"><path d="m12 3 9 9-9 9-9-9 9-9Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
@@ -39,11 +43,14 @@
             {% endif %}
           </span>
           <span class="mesa-indicador-texto">
-            <span class="mesa-indicador-titulo">{{ indicador.titulo }}</span>
+            <span class="mesa-indicador-titulo">{% if indicador.id == "pendencias" and perfil and perfil.comparar_id_cliente %}<a href="{{ indicador.url }}">{{ indicador.titulo }}</a>{% else %}{{ indicador.titulo }}{% endif %}</span>
             <strong>{{ indicador.quantidade }}</strong>
             <small>{{ indicador.descricao }}</small>
+            {% if indicador.id == "pendencias" and perfil and perfil.comparar_id_cliente %}
+              {% for janela in janelas %}{% if janela.id == "erros" %}{% for contagem in janela.contagens_pendencias_id %}<small><a href="{{ urls_inicio.pendencias }}">{{ contagem.rotulo }}: {{ contagem.quantidade }}</a></small>{% endfor %}{% endif %}{% endfor %}
+            {% endif %}
           </span>
-        </a>
+        {% if indicador.id == "pendencias" and perfil and perfil.comparar_id_cliente %}</div>{% else %}</a>{% endif %}
       {% endfor %}
     </section>
 

@@ -30,6 +30,7 @@ ACOES = (
     ("importou", "Importou"),
     ("reprocessou", "Reprocessou"),
 )
+_PREFIXO_SITUACAO_PADRAO = "[Planilha padrão] "
 
 
 def carregar_eventos(contrato):
@@ -212,13 +213,20 @@ def _eventos_importacao(contrato):
         _anexar_historico_agrupado(evento, f"importacao_id:{registro.pk}")
         eventos.append(evento)
     for registro in ImportacaoSituacao.objects.filter(contrato=contrato).select_related("importado_por"):
+        situacao_padrao = registro.arquivo_nome.startswith(_PREFIXO_SITUACAO_PADRAO)
+        arquivo_nome = (
+            registro.arquivo_nome[len(_PREFIXO_SITUACAO_PADRAO):]
+            if situacao_padrao
+            else registro.arquivo_nome
+        )
+        tipo_situacao = "situação pela planilha padrão" if situacao_padrao else "situação do PW"
         evento = _evento_importacao(
                 registro,
                 chave=f"importacao-situacao-{registro.pk}",
-                tipo="situação do PW",
-                titulo="Importação de situação do PW",
+                tipo=tipo_situacao,
+                titulo=f"Importação de {tipo_situacao}",
                 resumo=(
-                    f"importou situação do PW {registro.arquivo_nome}: {registro.documentos} documentos, "
+                    f"importou {tipo_situacao} {arquivo_nome}: {registro.documentos} documentos, "
                     f"{registro.emissoes} emissões, "
                     f"{registro.analises_explicitas + registro.analises_deduzidas} análises, "
                     f"{registro.linhas_invalidas} recusadas"
@@ -226,7 +234,7 @@ def _eventos_importacao(contrato):
                 validas=registro.documentos,
                 recusadas=registro.linhas_invalidas,
                 detalhes=[
-                    ("Arquivo", registro.arquivo_nome),
+                    ("Arquivo", arquivo_nome),
                     ("Data da extração", registro.data_extracao),
                     ("Documentos", registro.documentos),
                     ("Emissões", registro.emissoes),
@@ -235,8 +243,9 @@ def _eventos_importacao(contrato):
                     ("Linhas recusadas", registro.linhas_invalidas),
                 ],
             )
-        _anexar_historico_agrupado(evento, f"importacao_situacao:{registro.pk}")
-        codigos_cancelados = _codigos_cancelados_pw(registro)
+        motivo_historico = "importacao_situacao_padrao" if situacao_padrao else "importacao_situacao"
+        _anexar_historico_agrupado(evento, f"{motivo_historico}:{registro.pk}")
+        codigos_cancelados = [] if situacao_padrao else _codigos_cancelados_pw(registro)
         if codigos_cancelados:
             evento["detalhes"].append(
                 {
@@ -470,7 +479,12 @@ def _evento_historico(registro, modelo, *, entidade, contrato, codigo, documento
         "agrupar_no_evento": bool(
             registro.history_change_reason
             and registro.history_change_reason.startswith(
-                ("importacao_id:", "importacao_situacao:", "reprocessamento:")
+                (
+                    "importacao_id:",
+                    "importacao_situacao:",
+                    "importacao_situacao_padrao:",
+                    "reprocessamento:",
+                )
             )
         ),
     }
