@@ -957,3 +957,101 @@ Aprovado, Não Conforme, Inconsistente, Erro de Assinatura, Cancelado, Revisão 
   ex.: **"6G6 · Terraplenagem"**, porque muita gente não decora as classes e o número da etapa (6 = executivo no Metrô,
   3/4 = básico; na SPObras o 5 é executivo) evita confusão se um contrato tiver mais de uma etapa.
 - Genérico: o perfil diz quais caixas do código formam o pacote (no Metrô, etapa + classe) e de qual caixa vem o nome.
+
+## D-078 · Cancelado vindo do PW sai sozinho; contratos sem PW precisam de outro caminho
+
+*Origem: AF1 · 2026-11-26*
+
+- Quando a extração de situação do PW traz **"Cancelado"**, o documento **sai do 100% sozinho**, sem confirmação de admin,
+  e **fica registrado** qual importação cancelou (Atividade). No Metrô isso resolve, porque o PW é a fonte oficial.
+- Questão do dono para contratos **sem PW/GED**: como informar os cancelados? Opções levantadas por ele: marcar
+  manualmente no web app, selecionando **mais de um documento** de uma vez e mudando o status de todos; ou enviar uma
+  **tabela simples de 2 colunas** (código e situação) que o programa lê e aplica. Fica em pergunta (AH1), com a visão de
+  um programa que se adapta a contratos e formas de preencher diferentes.
+
+## D-079 · Cancelar pelo sistema: motivo de lista + observação livre
+
+*Origem: AF2 · 2026-11-26*
+
+- O admin que cancela pelo sistema informa um **motivo de uma lista** (para filtrar e analisar) **e uma observação em
+  texto livre** (informação extra para o futuro).
+- Motivos sugeridos pelo dono: desmembrado, substituído, pedido do cliente, fora do escopo, inviável (ex.: prospecção em
+  campo mostrou que não dá para executar). Ele pediu mais sugestões. Lista proposta pelo Claude, implementada no
+  block-057 e posta para confirmação (AH2): desmembrado em outros documentos, incorporado a outro documento, substituído
+  por outro documento, pedido do cliente, fora do escopo, inviável (constatado em campo), mudança de solução de projeto,
+  duplicado/código em dobro, outro (observação obrigatória).
+
+## D-080 · O 100% é o nosso ID; o ID do PW vira contraprova
+
+*Origem: AF4 · 2026-11-26*
+
+- Documento que está no **nosso ID atualizado** e ainda não no ID do PW (ex.: F6-1030 e 1306–1309) **conta no 100%**,
+  com o aviso **"falta no PW"** na Pendências. O contrário (no PW e fora do nosso ID, ex.: 1008) também aparece para tratar.
+- Visão do dono: em contrato sem um segundo ID, o que vale é o **ID combinado entre cliente e contratada** (normalmente
+  feito pela contratada). Onde houver um segundo ID como contraprova (Metrô/PW), o sistema gera **alerta de
+  incompatibilidade**, sem trocar a fonte do 100%.
+- Para extrações de outros GEDs, o dono quer um **formato padrão** que os usuários aprendem a preencher (ou pedem a uma IA
+  para preencher) e que o programa sempre lê do mesmo jeito. Liga com a D-081.
+
+## D-081 · Contrato sem PW: cancela pela tela e também por tabela simples
+
+*Origem: AH1 · 2026-11-26*
+
+- Os dois caminhos: a **tela** (seleção múltipla na lista de Documentos, block-057) para o dia a dia, e uma **tabela
+  simples (código, situação)** que vira o **importador genérico de situação** para contratos sem PW, com prévia antes de
+  aplicar. Serve também para aprovado, em análise etc.
+- O dono não descarta personalização por contrato, mas pede que se **defina uma decisão e se siga**: o padrão é a tabela
+  de duas colunas; variações viram opção do perfil só se aparecer necessidade real.
+
+## D-082 · Cancelado por engano volta pelas mãos do admin, com registro
+
+*Origem: AF3 · 2026-11-26*
+
+- O **admin reativa** o documento cancelado pelo sistema, com a mesma confirmação e o mesmo registro do cancelamento
+  (quem, quando, motivo da reativação). Cancelado vindo do PW só volta quando o PW mudar.
+- Ideia do dono, ainda sem decisão: **backups automáticos** (diários ou de hora em hora) que um admin possa restaurar
+  ("ChronoBreak"). Se for exagero, basta o admin poder desfazer os status importantes. Fica em pergunta.
+
+## D-083 · Name errado no PW: linhas ficam recusadas até alguém corrigir
+
+*Origem: AF5 · 2026-11-26*
+
+- As linhas dos F6-1009/1010 (certo 1006/1007) **ficam recusadas com a mensagem neutra** "Name e atributo divergem"
+  (já entregue no block-056) até alguém corrigir: o dono corrige manualmente no PW, ou chega outra extração, ou uma
+  planilha no formato padrão (D-081).
+
+## D-084 · Os IDs 1001, 1002 e 1501 viraram um ID só
+
+*Origem: AF6 · 2026-11-26*
+
+- Não foi só o 1501: **todos** viraram um único ID da série 2000, inclusive o 1501. O dono pôs o ID atualizado em
+  `entrada/` (`ID-15.25.00.00-6A9-2001-1.xlsx`). O novo passa a ser o ID vigente; os antigos ficam como histórico.
+
+## D-085 · Indicador de reabertura da Linha 15: até 2 reaberturas, 1 revisão cada
+
+*Origem: AG1 · 2026-11-26*
+
+- Confirmados os parâmetros que estavam provisórios no `metro.yaml`: `max_reaberturas: 2`,
+  `max_revisoes_por_reabertura: 1` (A1 → A conta como resolvida; A1 → A2 → A não).
+
+## D-086 · Motivos de cancelamento ficam como estão e vão para o perfil
+
+*Origem: AH2 · 2026-11-26*
+
+- A lista do block-057 fica, mas passa a ser **do perfil do contrato** (configurada pelo admin), começando por ela.
+
+## D-087 · Início = "Minha mesa" no layout que o dono desenhou
+
+*Origem: AG2 · 2026-11-26*
+
+- O dono anexou um modelo da tela inicial (não precisa ser idêntico, mas é o layout que ele quer ver e continuar vendo
+  conforme entrarem mais informações). Título **"Minha mesa"**, subtítulo "Visão geral do contrato, alertas e próximos
+  acompanhamentos", seletor de contrato à direita.
+- Linha 1, quatro indicadores: **Pendências abertas**, **Em análise do cliente**, **Atrasados** (destaque de alerta) e
+  **Aprovados na semana** (últimos 7 dias).
+- Linha 2: **Pendências por pacote** (código da classe · nome, quantidade, barra e etiqueta Crítico/Atenção/Em dia),
+  **Atraso por faixa** (as faixas do perfil com contagem) e **Análise do cliente** (documentos com etiqueta "Atrasado há N
+  dias" ou "Em análise", código e título, link para a pasta).
+- Linha 3: **Pacotes em destaque**, **Atividade recente**, **Mensagens / Integrações** (espaço reservado "em breve", para
+  e-mails e alertas futuros) e **Ações rápidas** (Ver pendências, Abrir documentos, Importar PW).
+- Ordem: o que estoura prazo e o que pede ação vem antes; pacotes na sequência (próximo da opção recomendada).
