@@ -85,6 +85,11 @@ DATABASES = {
     }
 }
 
+_backup_dir_configurado = os.environ.get("SCLME_BACKUP_DIR", "").strip()
+SCLME_BACKUP_DIR = Path(_backup_dir_configurado).expanduser() if _backup_dir_configurado else REPO_ROOT / "backups"
+if not SCLME_BACKUP_DIR.is_absolute():
+    SCLME_BACKUP_DIR = REPO_ROOT / SCLME_BACKUP_DIR
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -100,6 +105,7 @@ INSTALLED_APPS = [
     "painel.apps.PainelConfig",
     "registro.apps.RegistroConfig",
     "acoes.apps.AcoesConfig",
+    "backups.apps.BackupsConfig",
 ]
 
 MIDDLEWARE = [

@@ -21,6 +21,7 @@ from importacoes.models import (
     PrevisaoEmissao,
 )
 from painel.prazos import dias_ate_vencimento, emissoes_abertas_prazo, feriados_prazo
+from backups.services import alerta_backup_para_usuario
 
 from .models import AcaoPendencia
 
@@ -160,6 +161,7 @@ def carregar_resumo_inicio(usuario, contrato_id=None, *, hoje=None):
         "mostrar_atividade": mostrar_atividade,
         "pode_importar_pw": bool(usuario.is_staff),
         "urls_inicio": urls,
+        "alerta_backup": alerta_backup_para_usuario(usuario),
     }
 
 

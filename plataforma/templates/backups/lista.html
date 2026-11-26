@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Backups do sistema{% endblock %}
+{% block content %}
+  <header class="page-header">
+    <div>
+      <span class="eyebrow">ADMINISTRAÇÃO</span>
+      <h1>Backups do sistema</h1>
+      <p>Cópias completas do banco, com retenção das 30 mais recentes.</p>
+    </div>
+  </header>
+
+  <section class="panel">
+    <h2>Pasta configurada</h2>
+    <p><code>{{ pasta_backup }}</code></p>
+    <p>Uma cópia automática é criada por dia. A pasta pode apontar para um diretório local sincronizado com SharePoint ou OneDrive.</p>
+  </section>
+
+  {% if backups %}
+    <section class="panel">
+      <h2>Cópias disponíveis</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Data</th><th>Arquivo</th><th>Tamanho</th><th>Registro</th>{% if pode_restaurar %}<th>Restauração</th>{% endif %}</tr></thead>
+          <tbody>
+            {% for backup in backups %}
+              <tr>
+                <td>{{ backup.data|date:"d/m/Y" }}</td>
+                <td><code>{{ backup.arquivo }}</code></td>
+                <td>{{ backup.tamanho_bytes|filesizeformat }}</td>
+                <td>{{ backup.status }}{% if backup.mensagem %}<br><small>{{ backup.mensagem }}</small>{% endif %}</td>
+                {% if pode_restaurar %}<td><a class="button button-quiet" href="{% url 'backups:restaurar' backup.arquivo %}">Preparar restauração</a></td>{% endif %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  {% else %}
+    <section class="panel"><p>Ainda não há cópias disponíveis.</p></section>
+  {% endif %}
+
+  {% if pode_restaurar %}
+    <section class="notice" role="note">
+      <strong>Para restaurar com segurança</strong>
+      <p>Pare o servidor Django e rode o comando apresentado na etapa de confirmação. A restauração cria primeiro uma cópia do estado atual.</p>
+    </section>
+  {% endif %}
+{% endblock %}

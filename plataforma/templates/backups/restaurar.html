@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Preparar restauração{% endblock %}
+{% block content %}
+  <header class="page-header">
+    <div>
+      <span class="eyebrow">ADMINISTRAÇÃO</span>
+      <h1>Preparar restauração</h1>
+      <p>Backup selecionado: <code>{{ arquivo }}</code></p>
+    </div>
+  </header>
+
+  <section class="notice" role="alert">
+    <strong>A restauração substitui todo o banco atual.</strong>
+      <p>Pare o servidor Django antes de executar o comando. Ele pedirá a senha do superusuário e fará uma cópia de segurança do estado atual antes de restaurar.</p>
+  </section>
+
+  {% if erro %}<div class="notice" role="alert">{{ erro }}</div>{% endif %}
+
+  {% if comando %}
+    <section class="panel">
+      <h2>Confirmação recebida</h2>
+      <p>Feche o servidor e rode este comando no PowerShell, a partir da pasta <code>plataforma</code>:</p>
+      <pre><code>{{ comando }}</code></pre>
+    </section>
+  {% else %}
+    <form class="panel" method="post">
+      {% csrf_token %}
+      <label for="confirmacao">Para continuar, digite a data do backup: <strong>{{ data_backup|default:"arquivo indisponível" }}</strong></label>
+      <input id="confirmacao" name="confirmacao" type="text" autocomplete="off" required>
+      <button class="button button-danger" type="submit">Confirmar e mostrar comando</button>
+      <a class="button button-quiet" href="{% url 'backups:lista' %}">Voltar</a>
+    </form>
+  {% endif %}
+{% endblock %}

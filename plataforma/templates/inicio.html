@@ -143,10 +143,19 @@
 
       <article class="mesa-card mesa-card-mensagens" aria-labelledby="mesa-mensagens">
         <header class="mesa-card-cabecalho"><h2 id="mesa-mensagens">Mensagens / Integrações</h2></header>
+        {% if alerta_backup %}
+          <div class="notice notice-error" role="alert">
+            <strong>Atenção ao backup do sistema</strong>
+            <p>{{ alerta_backup.mensagem }}</p>
+            <a href="{% url 'backups:lista' %}">Ver backups</a>
+          </div>
+        {% else %}
         <div class="mesa-mensagens-vazio">
           <span class="mesa-mensagens-icone" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="m4 7 8 6 8-6" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg></span>
           <p>Em breve: e-mails e alertas do contrato aparecem aqui.</p>
         </div>
+        {% endif %}
+        {% if user.is_staff %}<p class="mesa-vazio"><a href="{% url 'backups:lista' %}">Ver histórico de backups</a></p>{% endif %}
       </article>
 
       <article class="mesa-card" aria-labelledby="mesa-acoes-rapidas">
