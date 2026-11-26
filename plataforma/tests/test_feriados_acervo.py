@@ -2,6 +2,7 @@ from dataclasses import replace
 from datetime import date
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -105,19 +106,34 @@ def test_modelo_recusa_municipal_sem_municipio():
 
 
 @pytest.mark.django_db
-def test_admin_lista_o_acervo_para_usuario_staff(client, django_user_model):
+def test_admin_restringe_o_acervo_de_feriados_a_superusuario(client, django_user_model):
     staff = django_user_model.objects.create_user(
         username="staff-feriados",
         password="senha-segura",
         is_staff=True,
     )
     client.force_login(staff)
+    url_acervo = reverse("admin:contratos_feriadoacervo_changelist")
+    model_admin = admin.site._registry[FeriadoAcervo]
+    request = SimpleNamespace(user=staff)
 
-    resposta = client.get(reverse("admin:contratos_feriadoacervo_changelist"))
+    assert client.get(url_acervo).status_code == 403
+    assert not model_admin.has_module_permission(request)
+    assert not model_admin.has_view_permission(request)
+    assert not model_admin.has_add_permission(request)
+    assert not model_admin.has_change_permission(request)
+    assert not model_admin.has_delete_permission(request)
+
+    superusuario = django_user_model.objects.create_superuser(
+        username="superuser-feriados",
+        email="superuser-feriados@example.com",
+        password="senha-segura",
+    )
+    client.force_login(superusuario)
+    resposta = client.get(url_acervo)
 
     assert resposta.status_code == 200
     assert "Corpus Christi" in resposta.content.decode()
-    model_admin = admin.site._registry[FeriadoAcervo]
     assert isinstance(model_admin, FeriadoAcervoAdmin)
 
 

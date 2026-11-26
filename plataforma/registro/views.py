@@ -8,6 +8,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views import View
 
+from contas.models import Usuario
 from contratos.models import Contrato
 from .servicos import ACOES, carregar_eventos
 
@@ -110,11 +111,15 @@ class AtividadeView(LoginRequiredMixin, View):
 
 
 def _contratos_acessiveis(request):
-    if request.user.is_staff:
+    usuario = request.user
+    if not usuario.is_active:
+        return Contrato.objects.none()
+    if usuario.is_staff or usuario.is_superuser:
         return Contrato.objects.all()
     return Contrato.objects.filter(
-        participacoes__usuario=request.user,
+        participacoes__usuario=usuario,
         participacoes__ativo=True,
+        participacoes__papel=Usuario.Perfil.ADMIN,
     ).distinct()
 
 

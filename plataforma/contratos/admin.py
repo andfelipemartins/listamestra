@@ -38,7 +38,7 @@ from .models import (
 
 
 def _pode_gerenciar_acervo_feriados(usuario):
-    return bool(usuario.is_active and (usuario.is_superuser or usuario.is_staff))
+    return bool(usuario.is_active and usuario.is_superuser)
 
 
 class PerfilContratoInline(admin.TabularInline):

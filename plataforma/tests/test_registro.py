@@ -224,6 +224,9 @@ def test_filtros_por_pessoa_acao_periodo_e_codigo(client, contrato, usuario):
     outro._history_user = usuario
     outro.save(update_fields=("titulo",))
 
+    Participacao.objects.filter(usuario=usuario, contrato=contrato).update(
+        papel=get_user_model().Perfil.ADMIN
+    )
     client.force_login(usuario)
     resposta = client.get(
         reverse("atividade"),
@@ -258,6 +261,9 @@ def test_evento_de_documento_linka_codigo_a_pasta_na_lista_e_no_detalhe(
         item
         for item in carregar_eventos(contrato)
         if item["acao"] == "alterou" and item["codigo"] == codigo
+    )
+    Participacao.objects.filter(usuario=usuario, contrato=contrato).update(
+        papel=get_user_model().Perfil.ADMIN
     )
     client.force_login(usuario)
     pasta = reverse("documento_pasta", args=(contrato.pk, documento.pk))

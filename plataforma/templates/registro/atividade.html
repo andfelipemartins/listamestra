@@ -50,32 +50,38 @@
   <summary>Filtros</summary>
   <form class="painel-filtros-form" method="get" action="{% url 'atividade' %}">
     <div class="painel-filtros-grade">
-      <label>Contrato
-        <select name="contrato">
+      <div class="atividade-filtro">
+        <label for="atividade-contrato">Contrato</label>
+        <select id="atividade-contrato" name="contrato">
           {% for opcao in contratos %}<option value="{{ opcao.pk }}" {% if opcao.pk == contrato.pk %}selected{% endif %}>{{ opcao.codigo_interno }} · {{ opcao.nome }}</option>{% endfor %}
         </select>
-      </label>
-      <label>Pessoa
-        <select name="pessoa">
+      </div>
+      <div class="atividade-filtro">
+        <label for="atividade-pessoa">Pessoa</label>
+        <select id="atividade-pessoa" name="pessoa">
           <option value="">Todas</option>
           {% for id, nome in pessoas %}<option value="{{ id }}" {% if filtros.pessoa == id %}selected{% endif %}>{{ nome }}</option>{% endfor %}
         </select>
-      </label>
-      <label>Ação
-        <select name="acao">
+      </div>
+      <div class="atividade-filtro">
+        <label for="atividade-acao">Ação</label>
+        <select id="atividade-acao" name="acao">
           <option value="">Todas</option>
           {% for id, rotulo in acoes %}<option value="{{ id }}" {% if filtros.acao == id %}selected{% endif %}>{{ rotulo }}</option>{% endfor %}
         </select>
-      </label>
-      <label>De
-        <input type="date" name="de" value="{{ filtros.de }}">
-      </label>
-      <label>Até
-        <input type="date" name="ate" value="{{ filtros.ate }}">
-      </label>
-      <label>Código do documento
-        <input type="search" name="codigo" value="{{ filtros.codigo }}" placeholder="Parte do código">
-      </label>
+      </div>
+      <div class="atividade-filtro">
+        <label for="atividade-de">De</label>
+        <input id="atividade-de" type="date" name="de" value="{{ filtros.de }}">
+      </div>
+      <div class="atividade-filtro">
+        <label for="atividade-ate">Até</label>
+        <input id="atividade-ate" type="date" name="ate" value="{{ filtros.ate }}">
+      </div>
+      <div class="atividade-filtro">
+        <label for="atividade-codigo">Código do documento</label>
+        <input id="atividade-codigo" type="search" name="codigo" value="{{ filtros.codigo }}" placeholder="Parte do código">
+      </div>
     </div>
     <div class="painel-filtros-acoes">
       <button class="button button-primary" type="submit">Filtrar</button>
