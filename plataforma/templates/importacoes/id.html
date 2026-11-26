@@ -21,7 +21,41 @@
   <form method="post" enctype="multipart/form-data" hx-post="{% url 'importar_id' %}" hx-target="#resultado-previa" hx-swap="innerHTML" hx-encoding="multipart/form-data">
     {% csrf_token %}
     <input type="hidden" name="acao" value="prever">
-    {{ form.as_p }}
+    {{ form.non_field_errors }}
+    {% for field in form %}
+      {% if field.name == "escopos" %}
+        <fieldset>
+          <legend>{{ field.label }}</legend>
+          {{ field.errors }}
+          {{ field }}
+          {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
+          <div>
+            {{ form.novo_escopo.label_tag }}
+            {{ form.novo_escopo }}
+            {{ form.novo_escopo.errors }}
+            {% if form.novo_escopo.help_text %}<small>{{ form.novo_escopo.help_text }}</small>{% endif %}
+          </div>
+        </fieldset>
+        <script>
+          document.getElementById("id_contrato").addEventListener("change", (evento) => {
+            const url = new URL(window.location.href);
+            if (evento.target.value) {
+              url.searchParams.set("contrato", evento.target.value);
+            } else {
+              url.searchParams.delete("contrato");
+            }
+            window.location.assign(url);
+          });
+        </script>
+      {% elif field.name != "novo_escopo" %}
+        <p>
+          {{ field.label_tag }}
+          {{ field }}
+          {{ field.errors }}
+          {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
+        </p>
+      {% endif %}
+    {% endfor %}
     <button class="button button-primary" type="submit">Gerar prévia</button>
   </form>
 </section>

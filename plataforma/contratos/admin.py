@@ -28,7 +28,13 @@ from core.perfil.feriados import feriados_acervo_detalhados
 from core.perfil.codigo import ErroCodigo, interpretar, montar
 
 from .forms import ImportarFeriadosForm
-from .models import Contrato, FeriadoAcervo, Participacao, PerfilContrato
+from .models import (
+    Contrato,
+    EscopoContrato,
+    FeriadoAcervo,
+    Participacao,
+    PerfilContrato,
+)
 
 
 def _pode_gerenciar_acervo_feriados(usuario):
@@ -39,6 +45,11 @@ class PerfilContratoInline(admin.TabularInline):
     model = PerfilContrato
     extra = 0
     show_change_link = True
+
+
+class EscopoContratoInline(admin.TabularInline):
+    model = EscopoContrato
+    extra = 1
 
 
 class ContratoAdminForm(forms.ModelForm):
@@ -84,7 +95,7 @@ class ContratoAdmin(admin.ModelAdmin):
     list_display = ("nome", "codigo_interno", "cliente", "ativo", "criado_em")
     list_filter = ("ativo", "cliente")
     search_fields = ("nome", "codigo_interno", "cliente", "descricao")
-    inlines = (PerfilContratoInline,)
+    inlines = (PerfilContratoInline, EscopoContratoInline)
     readonly_fields = ("criado_em",)
 
 

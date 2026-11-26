@@ -79,7 +79,9 @@ def carregar_painel(contrato, por=None, filtros=None):
         Prefetch("analises", queryset=analises)
     )
     indices_vigentes = list(
-        IndiceDocumentos.objects.filter(contrato=contrato, vigente=True)
+        IndiceDocumentos.objects.filter(contrato=contrato, vigente=True).prefetch_related(
+            "escopos"
+        )
     )
     indices_por_id = {indice.pk: indice for indice in indices_vigentes}
     ids_vigentes = set(indices_por_id)
@@ -89,10 +91,16 @@ def carregar_painel(contrato, por=None, filtros=None):
         if indice.conta_no_previsto
     }
     escopos_contaveis = {
-        _valor_escopo(indice.escopo)
+        _valor_escopo(escopo.nome)
         for indice in indices_vigentes
         if indice.conta_no_previsto
+        for escopo in indice.escopos.all()
     }
+    escopos_contaveis.update(
+        _ESCOPO_SEM_ESCOPO
+        for indice in indices_vigentes
+        if indice.conta_no_previsto and not indice.escopos.all()
+    )
     itens = (
         ItemPrevisto.objects.filter(indice_id__in=ids_vigentes, excluido=False)
         .select_related("documento")
@@ -113,9 +121,10 @@ def carregar_painel(contrato, por=None, filtros=None):
         fases_por_documento.setdefault(item.documento_id, set()).add(
             _valor_fase(indice.fase)
         )
-        escopos_por_documento.setdefault(item.documento_id, set()).add(
-            _valor_escopo(indice.escopo)
-        )
+        escopos = {
+            _valor_escopo(escopo.nome) for escopo in indice.escopos.all()
+        } or {_ESCOPO_SEM_ESCOPO}
+        escopos_por_documento.setdefault(item.documento_id, set()).update(escopos)
     todos_documentos = []
     for documento in previstos.values():
         situacao_vigente = _situacao_atual(documento)

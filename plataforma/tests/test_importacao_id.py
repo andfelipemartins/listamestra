@@ -12,7 +12,7 @@ from django.urls import reverse
 from openpyxl import Workbook
 
 from core.perfil import perfil_de_dict
-from contratos.models import Contrato, Participacao, PerfilContrato
+from contratos.models import Contrato, EscopoContrato, Participacao, PerfilContrato
 from documentos.models import CodigoDocumento, Documento
 from importacoes.admin import IndiceDocumentosAdmin
 from importacoes.id_excel import FORMATOS_ID, gerar_previa_id, gerar_previa_linhas_recusadas
@@ -620,18 +620,21 @@ def test_linha_com_atributo_pw_divergente_aponta_coluna(contrato, perfil_modelo)
 
 @pytest.mark.django_db
 def test_tela_staff_mostra_previa_htmx_e_confirma_importacao(client, contrato, perfil_modelo, django_user_model):
+    arquitetura = EscopoContrato.objects.create(contrato=contrato, nome="Arquitetura")
+    civil = EscopoContrato.objects.create(contrato=contrato, nome="Civil")
     administrador = django_user_model.objects.create_superuser(
         username="admin-importador",
         email="admin-importador@example.com",
         password="senha-segura",
     )
     client.force_login(administrador)
-    formulario = client.get(reverse("importar_id"))
+    formulario = client.get(reverse("importar_id"), {"contrato": str(contrato.pk)})
     assert formulario.status_code == 200
     assert b'name="fase"' in formulario.content
-    assert b'name="escopo"' in formulario.content
-    assert "O que este ID representa".encode() in formulario.content
-    assert "ID 1001 = Arquitetura e civil".encode() in formulario.content
+    assert b'name="escopos"' in formulario.content
+    assert b'name="novo_escopo"' in formulario.content
+    assert b"Arquitetura" in formulario.content
+    assert b"Civil" in formulario.content
     arquivo = criar_excel_id([{"titulo": "Documento na tela", "sequencial": "1001"}])
     upload = SimpleUploadedFile("ID-TESTE-1.xlsx", arquivo.read(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
@@ -643,7 +646,7 @@ def test_tela_staff_mostra_previa_htmx_e_confirma_importacao(client, contrato, p
             "codigo_id": "ID-TESTE",
             "revisao": "1",
             "fase": "Fase 1",
-            "escopo": "Arquitetura e civil",
+            "escopos": [str(arquitetura.pk), str(civil.pk)],
             "arquivo": upload,
         },
         HTTP_HX_REQUEST="true",
@@ -658,18 +661,99 @@ def test_tela_staff_mostra_previa_htmx_e_confirma_importacao(client, contrato, p
     assert resposta.status_code == 200
     assert IndiceDocumentos.objects.get().importado_por == administrador
     assert IndiceDocumentos.objects.get().fase == "Fase 1"
-    assert IndiceDocumentos.objects.get().escopo == "Arquitetura e civil"
+    assert set(IndiceDocumentos.objects.get().escopos.values_list("nome", flat=True)) == {
+        "Arquitetura",
+        "Civil",
+    }
     assert IndiceDocumentos.objects.get().conta_no_previsto is True
     assert ItemPrevisto.objects.count() == 1
     assert b"importado com 1 linhas v\xc3\xa1lidas" in resposta.content
 
 
+@pytest.mark.django_db
+def test_novo_escopo_e_criado_ao_confirmar_e_reutilizado_sem_diferenciar_maiusculas(
+    client, contrato, perfil_modelo, django_user_model
+):
+    administrador = django_user_model.objects.create_superuser(
+        username="admin-novo-escopo",
+        email="admin-novo-escopo@example.com",
+        password="senha-segura",
+    )
+    client.force_login(administrador)
+    url = reverse("importar_id")
+
+    for codigo_id, novo_escopo in (("ID-NOVO-1", "Sistemas"), ("ID-NOVO-2", "sistemas")):
+        arquivo = criar_excel_id([{"titulo": codigo_id, "sequencial": "1001"}])
+        resposta = client.post(
+            url,
+            {
+                "acao": "prever",
+                "contrato": str(contrato.pk),
+                "codigo_id": codigo_id,
+                "revisao": "1",
+                "novo_escopo": novo_escopo,
+                "arquivo": SimpleUploadedFile(
+                    f"{codigo_id}.xlsx",
+                    arquivo.read(),
+                    content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                ),
+            },
+        )
+        assert resposta.status_code == 200
+        if codigo_id == "ID-NOVO-1":
+            assert not EscopoContrato.objects.filter(contrato=contrato).exists()
+        client.post(url, {"acao": "confirmar"}, follow=True)
+
+    escopos = EscopoContrato.objects.filter(contrato=contrato)
+    assert escopos.count() == 1
+    assert escopos.get().nome == "Sistemas"
+    assert IndiceDocumentos.objects.count() == 2
+    assert all(indice.escopos.get() == escopos.get() for indice in IndiceDocumentos.objects.all())
+
+
+@pytest.mark.django_db
+def test_importacao_recusa_escopo_de_outro_contrato(client, contrato, perfil_modelo, django_user_model):
+    outro_contrato = Contrato.objects.create(
+        nome="Outro contrato",
+        codigo_interno="CT-OUTRO",
+        cliente="Outro cliente",
+    )
+    escopo = EscopoContrato.objects.create(contrato=outro_contrato, nome="Sistemas")
+    administrador = django_user_model.objects.create_superuser(
+        username="admin-escopo-externo",
+        email="admin-escopo-externo@example.com",
+        password="senha-segura",
+    )
+    client.force_login(administrador)
+    arquivo = criar_excel_id([{"titulo": "Documento", "sequencial": "1001"}])
+
+    resposta = client.post(
+        reverse("importar_id"),
+        {
+            "acao": "prever",
+            "contrato": str(contrato.pk),
+            "codigo_id": "ID-ESCOPO-EXTERNO",
+            "revisao": "1",
+            "escopos": [str(escopo.pk)],
+            "arquivo": SimpleUploadedFile(
+                "ID-ESCOPO-EXTERNO.xlsx",
+                arquivo.read(),
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ),
+        },
+    )
+
+    assert resposta.status_code == 200
+    assert IndiceDocumentos.objects.count() == 0
+    assert "previa_importacao_id" not in client.session
+
+
 def test_admin_indice_documentos_expoe_escopo_na_lista_e_no_filtro():
     configuracao = IndiceDocumentosAdmin(IndiceDocumentos, AdminSite())
 
-    assert "escopo" in configuracao.list_display
-    assert "escopo" in configuracao.list_editable
-    assert "escopo" in configuracao.list_filter
+    assert "escopos_lista" in configuracao.list_display
+    assert "escopos" not in configuracao.list_editable
+    assert "escopos" in configuracao.list_filter
 
 
 @pytest.mark.django_db

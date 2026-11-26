@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views import View
@@ -8,7 +9,7 @@ from django.views import View
 from core.perfil import ErroPerfil, perfil_de_dict
 from core.perfil.codigo import ErroCodigo, interpretar
 from contas.models import Usuario
-from contratos.models import Contrato, Participacao, PerfilContrato
+from contratos.models import Contrato, EscopoContrato, Participacao, PerfilContrato
 from documentos.models import Analise, Documento, Emissao
 
 from .forms import ImportarCronogramaForm, ImportarIDForm, ImportarSituacaoPWForm
@@ -537,7 +538,12 @@ class ImportarIDView(LoginRequiredMixin, UserPassesTestMixin, View):
         return render(
             request,
             self.template_name,
-            {"form": ImportarIDForm(), "indices": IndiceDocumentos.objects.select_related("contrato")[:20]},
+            {
+                "form": ImportarIDForm(
+                    initial={"contrato": request.GET.get("contrato", "")}
+                ),
+                "indices": IndiceDocumentos.objects.select_related("contrato")[:20],
+            },
         )
 
     def post(self, request):
@@ -583,7 +589,8 @@ class ImportarIDView(LoginRequiredMixin, UserPassesTestMixin, View):
             "codigo_indice": previa.codigo_indice,
             "revisao": previa.revisao,
             "fase": form.cleaned_data["fase"].strip(),
-            "escopo": form.cleaned_data["escopo"].strip(),
+            "escopos_ids": [escopo.pk for escopo in form.cleaned_data["escopos"]],
+            "novo_escopo": form.cleaned_data["novo_escopo"],
             "arquivo_nome": previa.arquivo_nome,
             "formato": previa.formato,
             "linhas": [linha.__dict__ for linha in previa.linhas],
@@ -623,24 +630,43 @@ class ImportarIDView(LoginRequiredMixin, UserPassesTestMixin, View):
             perfil_vigente = PerfilContrato.perfil_vigente(contrato, timezone.localdate())
             if perfil_vigente is None or perfil_vigente.pk != perfil_modelo.pk:
                 raise ErroAplicacaoID("O perfil vigente mudou. Envie o arquivo e gere outra prévia.")
-            indice = aplicar_previa(
-                previa,
-                contrato=contrato,
-                perfil_modelo=perfil_modelo,
-                usuario=request.user,
+            escopos_ids = [int(pk) for pk in dados.get("escopos_ids", [])]
+            if len(set(escopos_ids)) != len(escopos_ids):
+                raise ErroAplicacaoID("A prévia contém escopos repetidos. Gere uma nova prévia.")
+            escopos = list(
+                EscopoContrato.objects.filter(
+                    contrato=contrato,
+                    pk__in=escopos_ids,
+                ).order_by("nome")
             )
-            fase = dados.get("fase", "").strip()
-            if fase and indice.fase != fase:
-                indice.fase = fase
+            if len(escopos) != len(escopos_ids):
+                raise ErroAplicacaoID(
+                    "Um dos escopos da prévia não pertence mais ao contrato. Gere uma nova prévia."
+                )
+            novo_escopo = dados.get("novo_escopo", "").strip()
+            with transaction.atomic():
+                if novo_escopo:
+                    escopo, _ = EscopoContrato.objects.get_or_create(
+                        contrato=contrato,
+                        nome__iexact=novo_escopo,
+                        defaults={"nome": novo_escopo},
+                    )
+                    escopos.append(escopo)
+                indice = aplicar_previa(
+                    previa,
+                    contrato=contrato,
+                    perfil_modelo=perfil_modelo,
+                    usuario=request.user,
+                )
+                fase = dados.get("fase", "").strip()
+                if fase and indice.fase != fase:
+                    indice.fase = fase
+                    indice._history_user = request.user
+                    indice._change_reason = f"importacao_id:{indice.pk}:fase"
+                    indice.save(update_fields=("fase",))
                 indice._history_user = request.user
-                indice._change_reason = f"importacao_id:{indice.pk}:fase"
-                indice.save(update_fields=("fase",))
-            escopo = dados.get("escopo", "").strip()
-            if escopo and indice.escopo != escopo:
-                indice.escopo = escopo
-                indice._history_user = request.user
-                indice._change_reason = f"importacao_id:{indice.pk}:escopo"
-                indice.save(update_fields=("escopo",))
+                indice._change_reason = f"importacao_id:{indice.pk}:escopos"
+                indice.escopos.set(escopos)
         except (ErroAplicacaoID, ValueError, KeyError, TypeError) as erro:
             messages.error(request, str(erro))
             return redirect("importar_id")

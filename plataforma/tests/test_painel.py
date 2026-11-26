@@ -12,7 +12,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from contratos.admin import ContratoAdminForm
-from contratos.models import Contrato, Participacao, PerfilContrato
+from contratos.models import Contrato, EscopoContrato, Participacao, PerfilContrato
 from documentos.models import Analise, Documento, Emissao
 from importacoes.models import (
     InconsistenciaImportacao,
@@ -58,20 +58,26 @@ def _indice(
     fonte=IndiceDocumentos.Fonte.EXCEL_ID,
     revisao="1",
     fase="",
-    escopo="",
+    escopos=(),
     conta_no_previsto=True,
 ):
-    return IndiceDocumentos.objects.create(
+    indice = IndiceDocumentos.objects.create(
         contrato=contrato,
         codigo=codigo,
         revisao=revisao,
         fase=fase,
-        escopo=escopo,
         conta_no_previsto=conta_no_previsto,
         fonte=fonte,
         arquivo_nome=f"{codigo}.xlsx",
         importado_em=timezone.now(),
     )
+    escopos_db = [
+        EscopoContrato.objects.get_or_create(contrato=contrato, nome=nome)[0]
+        for nome in escopos
+    ]
+    if escopos_db:
+        indice.escopos.add(*escopos_db)
+    return indice
 
 
 def _documento(
@@ -290,9 +296,14 @@ def test_sem_fases_configuradas_preserva_o_previsto_padrao(contrato, perfil_mode
 
 @pytest.mark.django_db
 def test_escopo_filtra_previsto_e_documento_compartilhado_entra_nos_dois(contrato, perfil_modelo):
-    civil = _indice(contrato, "ID-CIVIL", fase="Fase 1", escopo="Arquitetura e civil")
-    sistemas = _indice(contrato, "ID-SISTEMAS", fase="Fase 1", escopo="Sistemas")
-    qualidade = _indice(contrato, "ID-QUALIDADE", fase="Fase 2", escopo="Qualidade")
+    civil = _indice(
+        contrato,
+        "ID-CIVIL",
+        fase="Fase 1",
+        escopos=("Arquitetura", "Civil"),
+    )
+    sistemas = _indice(contrato, "ID-SISTEMAS", fase="Fase 1", escopos=("Sistemas",))
+    qualidade = _indice(contrato, "ID-QUALIDADE", fase="Fase 2", escopos=("Qualidade",))
     sem_escopo = _indice(contrato, "ID-SEM-ESCOPO", fase="Fase 1")
     compartilhado = _documento(contrato, civil, 9401, situacao="Aprovado")
     ItemPrevisto.objects.create(
@@ -321,7 +332,8 @@ def test_escopo_filtra_previsto_e_documento_compartilhado_entra_nos_dois(contrat
 
     assert geral["total_documentos_previstos"] == 5
     assert recortes == {
-        "Arquitetura e civil": 2,
+        "Arquitetura": 2,
+        "Civil": 2,
         "Qualidade": 1,
         "Sem escopo": 1,
         "Sistemas": 2,
@@ -332,13 +344,16 @@ def test_escopo_filtra_previsto_e_documento_compartilhado_entra_nos_dois(contrat
     ]
     assert combinado["total_documentos_previstos"] == 2
     assert sem_escopo_filtrado["total_documentos_previstos"] == 1
+    assert carregar_painel(contrato, filtros={"escopo": "Arquitetura"})[
+        "total_documentos_previstos"
+    ] == 2
     assert any(opcao["rotulo"] == "Sem escopo" for opcao in opcoes_escopo)
     assert any(caixa.nome == "escopo" and caixa.rotulo == "Escopo do ID" for caixa in por_escopo["caixas"])
 
 
 @pytest.mark.django_db
 def test_um_escopo_unico_nao_mostra_filtro_e_painel_abre_no_total(contrato, perfil_modelo):
-    indice = _indice(contrato, "ID-ESCOPO-UNICO", fase="Fase 1", escopo="Civil")
+    indice = _indice(contrato, "ID-ESCOPO-UNICO", fase="Fase 1", escopos=("Civil",))
     _documento(contrato, indice, 9501)
     _documento(contrato, indice, 9502)
 

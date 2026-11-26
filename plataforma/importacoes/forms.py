@@ -1,7 +1,7 @@
 from django import forms
 from django.utils import timezone
 
-from contratos.models import Contrato
+from contratos.models import Contrato, EscopoContrato
 
 
 class ImportarIDForm(forms.Form):
@@ -13,15 +13,44 @@ class ImportarIDForm(forms.Form):
     codigo_id = forms.CharField(label="Código do ID", max_length=250, required=False)
     revisao = forms.CharField(label="Revisão", max_length=100, required=False)
     fase = forms.CharField(label="Fase", max_length=100, required=False)
-    escopo = forms.CharField(
-        label="O que este ID representa",
+    escopos = forms.ModelMultipleChoiceField(
+        label="Escopos deste ID",
+        queryset=EscopoContrato.objects.none(),
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        help_text="Marque todos os escopos do contrato que este ID representa.",
+    )
+    novo_escopo = forms.CharField(
+        label="+ novo escopo",
         max_length=100,
         required=False,
-        help_text=(
-            "Ex.: ID 1001 = Arquitetura e civil; ID 1002 = Sistemas; um ID futuro pode ser de Qualidade; "
-            "ID 1501 = fase 2 com tudo."
-        ),
+        help_text="Se já existir neste contrato, será reutilizado.",
     )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        contrato_id = None
+        if self.is_bound:
+            contrato_id = self.data.get(self.add_prefix("contrato"))
+        else:
+            contrato = self.initial.get("contrato")
+            contrato_id = getattr(contrato, "pk", contrato)
+        if contrato_id:
+            self.fields["escopos"].queryset = EscopoContrato.objects.filter(
+                contrato_id=contrato_id
+            ).order_by("nome")
+
+    def clean_escopos(self):
+        escopos = self.cleaned_data["escopos"]
+        contrato = self.cleaned_data.get("contrato")
+        if contrato and any(escopo.contrato_id != contrato.pk for escopo in escopos):
+            raise forms.ValidationError(
+                "Selecione apenas escopos cadastrados para o contrato escolhido."
+            )
+        return escopos
+
+    def clean_novo_escopo(self):
+        return self.cleaned_data["novo_escopo"].strip()
 
     def clean_arquivo(self):
         arquivo = self.cleaned_data["arquivo"]

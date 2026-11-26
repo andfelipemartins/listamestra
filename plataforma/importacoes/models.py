@@ -1,8 +1,11 @@
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models.signals import m2m_changed
+from django.dispatch import receiver
 from simple_history.models import HistoricalRecords
 
-from contratos.models import Contrato
+from contratos.models import Contrato, EscopoContrato
 from documentos.models import Documento
 
 
@@ -20,7 +23,12 @@ class IndiceDocumentos(models.Model):
     codigo = models.CharField("código do ID", max_length=250)
     revisao = models.CharField("revisão", max_length=100)
     fase = models.CharField("fase", max_length=100, blank=True)
-    escopo = models.CharField("escopo", max_length=100, blank=True)
+    escopos = models.ManyToManyField(
+        EscopoContrato,
+        verbose_name="escopos",
+        related_name="indices",
+        blank=True,
+    )
     conta_no_previsto = models.BooleanField("conta no previsto", default=True)
     fonte = models.CharField("fonte", max_length=20, choices=Fonte.choices)
     arquivo_nome = models.CharField("nome do arquivo", max_length=255)
@@ -34,7 +42,7 @@ class IndiceDocumentos(models.Model):
         related_name="indices_importados",
     )
     vigente = models.BooleanField("vigente", default=True)
-    history = HistoricalRecords()
+    history = HistoricalRecords(m2m_fields=("escopos",))
 
     class Meta:
         verbose_name = "índice de documentos"
@@ -49,6 +57,22 @@ class IndiceDocumentos(models.Model):
 
     def __str__(self):
         return f"{self.codigo} — revisão {self.revisao}"
+
+
+@receiver(m2m_changed, sender=IndiceDocumentos.escopos.through)
+def validar_escopos_do_indice(sender, instance, action, reverse, pk_set, **kwargs):
+    if action != "pre_add" or not pk_set:
+        return
+    if reverse:
+        outro_contrato = IndiceDocumentos.objects.filter(pk__in=pk_set).exclude(
+            contrato_id=instance.contrato_id
+        )
+    else:
+        outro_contrato = EscopoContrato.objects.filter(pk__in=pk_set).exclude(
+            contrato_id=instance.contrato_id
+        )
+    if outro_contrato.exists():
+        raise ValidationError("Um ID só pode receber escopos do mesmo contrato.")
 
 
 class ItemPrevisto(models.Model):

@@ -1,5 +1,8 @@
 from django.contrib import admin
+from django import forms
+from django.core.exceptions import ValidationError
 
+from contratos.models import EscopoContrato
 from .models import (
     ImportacaoID,
     ImportacaoCronograma,
@@ -17,24 +20,60 @@ class ItemPrevistoInline(admin.TabularInline):
     show_change_link = True
 
 
+class IndiceDocumentosAdminForm(forms.ModelForm):
+    class Meta:
+        model = IndiceDocumentos
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["escopos"].widget = forms.CheckboxSelectMultiple()
+        contrato_id = None
+        if self.is_bound:
+            contrato_id = self.data.get(self.add_prefix("contrato"))
+        elif self.instance and self.instance.pk:
+            contrato_id = self.instance.contrato_id
+        if contrato_id:
+            self.fields["escopos"].queryset = EscopoContrato.objects.filter(
+                contrato_id=contrato_id
+            ).order_by("nome")
+        else:
+            self.fields["escopos"].queryset = EscopoContrato.objects.none()
+
+    def clean(self):
+        dados = super().clean()
+        contrato = dados.get("contrato")
+        escopos = dados.get("escopos")
+        if contrato and escopos and any(
+            escopo.contrato_id != contrato.pk for escopo in escopos
+        ):
+            raise ValidationError("Um ID só pode receber escopos do mesmo contrato.")
+        return dados
+
+
 @admin.register(IndiceDocumentos)
 class IndiceDocumentosAdmin(admin.ModelAdmin):
+    form = IndiceDocumentosAdminForm
     list_display = (
         "codigo",
         "revisao",
         "fase",
-        "escopo",
+        "escopos_lista",
         "conta_no_previsto",
         "fonte",
         "contrato",
         "importado_em",
         "vigente",
     )
-    list_editable = ("fase", "escopo", "conta_no_previsto")
-    list_filter = ("fase", "escopo", "conta_no_previsto", "fonte", "vigente", "contrato")
+    list_editable = ("fase", "conta_no_previsto")
+    list_filter = ("fase", "escopos", "conta_no_previsto", "fonte", "vigente", "contrato")
     search_fields = ("codigo", "arquivo_nome", "contrato__nome")
     readonly_fields = ("importado_em",)
     inlines = (ItemPrevistoInline,)
+
+    @admin.display(description="escopos")
+    def escopos_lista(self, obj):
+        return ", ".join(obj.escopos.values_list("nome", flat=True))
 
 
 @admin.register(ItemPrevisto)

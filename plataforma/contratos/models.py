@@ -6,6 +6,7 @@ from django.contrib.auth.hashers import check_password, make_password
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import F, Q
+from django.db.models.functions import Lower
 from simple_history.models import HistoricalRecords
 
 from contas.models import Usuario
@@ -37,6 +38,46 @@ class Contrato(models.Model):
 
     def verificar_pin_painel(self, pin):
         return bool(self.pin_painel and check_password(pin, self.pin_painel))
+
+
+class EscopoContrato(models.Model):
+    contrato = models.ForeignKey(
+        Contrato,
+        verbose_name="contrato",
+        on_delete=models.CASCADE,
+        related_name="escopos",
+    )
+    nome = models.CharField("nome", max_length=100)
+
+    class Meta:
+        verbose_name = "escopo do contrato"
+        verbose_name_plural = "escopos do contrato"
+        ordering = ("nome",)
+        constraints = [
+            models.UniqueConstraint(
+                Lower("nome"),
+                "contrato",
+                name="escopo_ct_nome_contrato_ci",
+            ),
+        ]
+
+    def __str__(self):
+        return self.nome
+
+    def clean(self):
+        super().clean()
+        self.nome = self.nome.strip()
+        if self.contrato_id and self.nome:
+            duplicado = type(self).objects.filter(
+                contrato_id=self.contrato_id,
+                nome__iexact=self.nome,
+            ).exclude(pk=self.pk)
+            if duplicado.exists():
+                raise ValidationError({"nome": "Este escopo já existe neste contrato."})
+
+    def save(self, *args, **kwargs):
+        self.nome = self.nome.strip()
+        return super().save(*args, **kwargs)
 
 
 class PerfilContrato(models.Model):
