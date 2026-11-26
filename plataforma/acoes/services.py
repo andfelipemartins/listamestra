@@ -1,14 +1,17 @@
 from collections import defaultdict
 from datetime import date, timedelta
+from urllib.parse import urlencode
 
 from django.core.exceptions import PermissionDenied
 from django.db.models import Count, F, Prefetch
+from django.urls import reverse
 from django.utils import timezone
 
 from core.perfil import ErroPerfil, perfil_de_dict
 from core.perfil.codigo import ErroCodigo, interpretar
 from core.perfil.painel import classificar, classificar_categoria
-from contratos.models import Contrato, PerfilContrato
+from contas.models import Usuario
+from contratos.models import Contrato, Participacao, PerfilContrato
 from documentos.models import Analise, Documento, Emissao
 from importacoes.cronograma import comparar_previsoes_cronograma
 from importacoes.models import (
@@ -116,6 +119,7 @@ def carregar_minha_mesa(usuario, contrato_id=None, *, hoje=None, limite=10, incl
 
 
 def carregar_resumo_inicio(usuario, contrato_id=None, *, hoje=None):
+    hoje = hoje or timezone.localdate()
     mesa = carregar_minha_mesa(usuario, contrato_id, hoje=hoje, limite=0)
     cards_janelas = []
     for janela in mesa["janelas"]:
@@ -134,12 +138,298 @@ def carregar_resumo_inicio(usuario, contrato_id=None, *, hoje=None):
             }
         )
 
+    resumo_atrasos = _resumo_atrasos(mesa)
+    documentos_analise = _itens_resumo_analise_cliente(mesa)
+    urls = _urls_inicio(mesa.get("contrato"), mesa.get("perfil"))
+    mostrar_atividade = _pode_ver_atividade(usuario, mesa.get("contrato")) if mesa.get("contrato") else False
     return {
         **mesa,
         "cards_janelas": cards_janelas,
         "cards_pacotes": _cards_pacotes_analise(mesa),
-        "resumo_atrasos": _resumo_atrasos(mesa),
+        "resumo_atrasos": resumo_atrasos,
+        "indicadores_inicio": _indicadores_inicio(
+            usuario, mesa, cards_janelas, resumo_atrasos, hoje, urls
+        ),
+        "pacotes_pendencias": _pacotes_pendencias(mesa),
+        "faixas_atraso_inicio": _faixas_atraso_inicio(mesa, resumo_atrasos),
+        "documentos_analise_cliente": documentos_analise[:5],
+        "pacotes_destaque": _pacotes_destaque(mesa, documentos_analise),
+        "atividade_recente": _atividade_recente(
+            usuario, mesa.get("contrato"), permitido=mostrar_atividade
+        ),
+        "mostrar_atividade": mostrar_atividade,
+        "pode_importar_pw": bool(usuario.is_staff),
+        "urls_inicio": urls,
     }
+
+
+def _urls_inicio(contrato, perfil=None):
+    if contrato is None:
+        return {}
+    query = urlencode({"contrato": contrato.pk})
+    grupo_aprovado = next(
+        (
+            grupo
+            for grupo in (perfil.painel.grupos if perfil else ())
+            if grupo.id.casefold() == "aprovado"
+        ),
+        None,
+    )
+    query_aprovados = urlencode(
+        {"contrato": contrato.pk, "situacao": grupo_aprovado.id}
+    ) if grupo_aprovado else query
+    return {
+        "pendencias": f"{reverse('acoes:pendencias')}?{query}",
+        "analise_cliente": f"{reverse('acoes:janela', args=(PRAZO_ANALISE,))}?{query}",
+        "documentos": f"{reverse('documentos_lista')}?{query}",
+        "documentos_aprovados": f"{reverse('documentos_lista')}?{query_aprovados}",
+        "importar_pw": f"{reverse('importar_situacao_pw')}?{query}",
+        "atividade": f"{reverse('atividade')}?{query}",
+    }
+
+
+def _indicadores_inicio(usuario, mesa, cards_janelas, resumo_atrasos, hoje, urls):
+    contrato = mesa.get("contrato")
+    perfil = mesa.get("perfil")
+    janela_analise = next(
+        (janela for janela in mesa["janelas"] if janela["id"] == PRAZO_ANALISE),
+        None,
+    )
+    documentos_analise = {
+        item["documento"].pk for item in janela_analise["todos"]
+    } if janela_analise else set()
+    grupo_aprovado = next(
+        (
+            grupo
+            for grupo in (perfil.painel.grupos if perfil else ())
+            if grupo.id.casefold() == "aprovado"
+        ),
+        None,
+    )
+    aprovados_na_semana = 0
+    if contrato is not None and perfil is not None and grupo_aprovado is not None:
+        situacoes = Analise.objects.filter(
+            emissao__documento__contrato=contrato,
+            data_analise__gte=hoje - timedelta(days=6),
+            data_analise__lte=hoje,
+        ).values_list("situacao", flat=True)
+        aprovados_na_semana = sum(
+            1 for situacao in situacoes
+            if classificar(perfil, situacao).id == grupo_aprovado.id
+        )
+
+    return [
+        {
+            "id": "pendencias",
+            "titulo": "Pendências abertas",
+            "quantidade": sum(card["quantidade"] for card in cards_janelas),
+            "descricao": "Itens com ação pendente",
+            "url": urls.get("pendencias", "#"),
+        },
+        {
+            "id": "analise-cliente",
+            "titulo": "Em análise do cliente",
+            "quantidade": len(documentos_analise),
+            "descricao": "Aguardando retorno do cliente",
+            "url": urls.get("analise_cliente", "#"),
+        },
+        {
+            "id": "atrasados",
+            "titulo": "Atrasados",
+            "quantidade": resumo_atrasos["quantidade"],
+            "descricao": "Com prazo vencido",
+            "url": urls.get("pendencias", "#"),
+        },
+        {
+            "id": "aprovados",
+            "titulo": "Aprovados na semana",
+            "quantidade": aprovados_na_semana,
+            "descricao": "Análises aprovadas nos últimos 7 dias",
+            "url": urls.get("documentos_aprovados", urls.get("documentos", "#")),
+        },
+    ]
+
+
+def _itens_resumo_analise_cliente(mesa):
+    janela = next(
+        (janela for janela in mesa["janelas"] if janela["id"] == PRAZO_ANALISE),
+        None,
+    )
+    if janela is None:
+        return []
+
+    itens_por_documento = {}
+    for item in janela["todos"]:
+        documento = item["documento"]
+        itens_por_documento.setdefault(documento.pk, item)
+
+    itens = sorted(
+        itens_por_documento.values(),
+        key=lambda item: (
+            0 if item["atrasado"] else 1,
+            -item["dias"] if item["atrasado"] else item["dias"],
+            item["codigo"].casefold(),
+        ),
+    )
+    contrato = mesa.get("contrato")
+    return [
+        {
+            "documento": item["documento"],
+            "codigo": item["codigo"],
+            "titulo": item["titulo"],
+            "atrasado": item["atrasado"],
+            "dias": item["dias"],
+            "etiqueta": (
+                f"Atrasado há {item['dias']} {'dia' if item['dias'] == 1 else 'dias'}"
+                if item["atrasado"]
+                else "Em análise"
+            ),
+            "url": reverse(
+                "documento_pasta", args=(contrato.pk, item["documento"].pk)
+            ) if contrato is not None else "#",
+        }
+        for item in itens
+    ]
+
+
+def _pacote_do_documento(perfil, documento):
+    pacote_perfil = perfil.painel.pacote
+    if pacote_perfil is None and not perfil.painel.categorias:
+        return None
+    codigo = interpretar(perfil, documento.identificador_base)
+    if isinstance(codigo, ErroCodigo):
+        return None
+    if pacote_perfil is not None:
+        valores = tuple(codigo.segmentos.get(nome, "") for nome in pacote_perfil.segmentos)
+        if not all(valores):
+            return None
+        codigo_pacote = "".join(valores)
+        nome = codigo.significados.get(pacote_perfil.nome_de) if pacote_perfil.nome_de else None
+        rotulo = f"{codigo_pacote} · {nome}" if nome else codigo_pacote
+        return valores, rotulo
+    categoria = classificar_categoria(perfil, codigo.segmentos)
+    return (categoria.id, categoria.rotulo) if categoria else None
+
+
+def _pacotes_pendencias(mesa):
+    perfil = mesa.get("perfil")
+    if perfil is None:
+        return []
+
+    documentos = {}
+    for janela in mesa["janelas"]:
+        if janela["id"] == "recusadas":
+            continue
+        for item in janela["todos"]:
+            documento = item.get("documento")
+            if documento is not None:
+                documentos.setdefault(documento.pk, documento)
+    if not documentos:
+        return []
+
+    mapa_atrasos = _mapa_documentos_atrasados(mesa)
+    faixas = _faixas_atraso_perfil(perfil)
+    faixa_critica = faixas[-1].rotulo.casefold() if faixas else None
+    por_pacote = {}
+    for documento in documentos.values():
+        pacote = _pacote_do_documento(perfil, documento)
+        if pacote is None:
+            continue
+        identificador, rotulo = pacote
+        grupo = por_pacote.setdefault(
+            identificador,
+            {"rotulo": rotulo, "documentos": set(), "critico": False, "atraso": False},
+        )
+        grupo["documentos"].add(documento.pk)
+        atraso = mapa_atrasos.get(documento.pk)
+        if atraso is not None:
+            grupo["atraso"] = True
+            if faixa_critica and (atraso.get("faixa_atraso") or "").casefold() == faixa_critica:
+                grupo["critico"] = True
+
+    resultado = [
+        {
+            "rotulo": grupo["rotulo"],
+            "quantidade": len(grupo["documentos"]),
+            "situacao": "Crítico" if grupo["critico"] else "Atenção" if grupo["atraso"] else "Em dia",
+            "tom": "critico" if grupo["critico"] else "atencao" if grupo["atraso"] else "em-dia",
+        }
+        for grupo in por_pacote.values()
+    ]
+    maior_quantidade = max((item["quantidade"] for item in resultado), default=0)
+    for item in resultado:
+        item["percentual"] = round(item["quantidade"] * 100 / maior_quantidade) if maior_quantidade else 0
+    return sorted(resultado, key=lambda item: (-item["quantidade"], item["rotulo"].casefold()))
+
+
+def _faixas_atraso_inicio(mesa, resumo_atrasos):
+    por_rotulo = {item["rotulo"]: item["quantidade"] for item in resumo_atrasos["faixas"]}
+    return [
+        {
+            "rotulo": faixa.rotulo,
+            "quantidade": por_rotulo.get(faixa.rotulo, 0),
+            "tom": min(indice + 1, 4),
+        }
+        for indice, faixa in enumerate(_faixas_atraso_perfil(mesa.get("perfil")))
+    ]
+
+
+def _pacotes_destaque(mesa, documentos_analise):
+    perfil = mesa.get("perfil")
+    if perfil is None:
+        return []
+    por_pacote = {}
+    for item in documentos_analise:
+        documento_id = item["documento"].pk
+        pacote = _pacote_do_documento(perfil, item["documento"])
+        if pacote is None:
+            continue
+        identificador, rotulo = pacote
+        grupo = por_pacote.setdefault(
+            identificador, {"rotulo": rotulo, "documentos": set()}
+        )
+        grupo["documentos"].add(documento_id)
+    pacotes = [
+        {"rotulo": grupo["rotulo"], "quantidade": len(grupo["documentos"])}
+        for grupo in por_pacote.values()
+    ]
+    return sorted(pacotes, key=lambda item: (-item["quantidade"], item["rotulo"].casefold()))[:3]
+
+
+def _atividade_recente(usuario, contrato, *, permitido=False):
+    if contrato is None or not permitido:
+        return []
+    from registro.servicos import carregar_eventos
+
+    eventos = sorted(
+        carregar_eventos(contrato),
+        key=lambda evento: evento["data_hora"],
+        reverse=True,
+    )[:3]
+    recentes = []
+    for evento in eventos:
+        query = urlencode({"contrato": contrato.pk, "evento": evento["chave"]})
+        recentes.append(
+            {
+                "resumo": evento["resumo"],
+                "data_hora": evento["data_hora"],
+                "url": f"{reverse('atividade')}?{query}",
+            }
+        )
+    return recentes
+
+
+def _pode_ver_atividade(usuario, contrato):
+    return bool(
+        usuario.is_staff
+        or usuario.is_superuser
+        or Participacao.objects.filter(
+            usuario=usuario,
+            contrato=contrato,
+            papel=Usuario.Perfil.ADMIN,
+            ativo=True,
+        ).exists()
+    )
 
 
 def _cards_pacotes_analise(mesa):
@@ -196,17 +486,7 @@ def _cards_pacotes_analise(mesa):
 
 
 def _resumo_atrasos(mesa):
-    documentos_atrasados = {}
-    for janela in mesa["janelas"]:
-        if janela["id"] not in {PRAZO_ANALISE, PRAZO_DEVOLUCAO}:
-            continue
-        for item in janela["todos"]:
-            if not item["atrasado"]:
-                continue
-            documento_id = item["documento"].pk
-            atual = documentos_atrasados.get(documento_id)
-            if atual is None or item["dias"] > atual["dias"]:
-                documentos_atrasados[documento_id] = item
+    documentos_atrasados = _mapa_documentos_atrasados(mesa)
 
     quantidades = defaultdict(int)
     tons = {}
@@ -228,6 +508,21 @@ def _resumo_atrasos(mesa):
                 }
             )
     return {"quantidade": len(documentos_atrasados), "faixas": faixas}
+
+
+def _mapa_documentos_atrasados(mesa):
+    documentos_atrasados = {}
+    for janela in mesa["janelas"]:
+        if janela["id"] not in {PRAZO_ANALISE, PRAZO_DEVOLUCAO}:
+            continue
+        for item in janela["todos"]:
+            if not item["atrasado"]:
+                continue
+            documento_id = item["documento"].pk
+            atual = documentos_atrasados.get(documento_id)
+            if atual is None or item["dias"] > atual["dias"]:
+                documentos_atrasados[documento_id] = item
+    return documentos_atrasados
 
 
 def _faixas_atraso_perfil(perfil):

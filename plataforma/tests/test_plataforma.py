@@ -33,7 +33,9 @@ def test_usuario_logado_ve_nome_e_perfil(client, django_user_model):
     response = client.get(reverse("inicio"))
 
     assert response.status_code == 200
-    assert "Bem-vindo, Ana Silva" in response.content.decode()
+    html = response.content.decode()
+    assert "Minha mesa" in html
+    assert "Visão geral do contrato, alertas e próximos acompanhamentos." in html
     assert "Chefia / coordenação" in response.content.decode()
 
 

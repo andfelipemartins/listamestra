@@ -584,7 +584,7 @@ def test_itens_atrasados_recebem_faixa_e_inicio_resume_documentos_por_faixa(
         html_pendencias = pendencias.content.decode()
         assert etiqueta in html_pendencias
         assert etiqueta in ver_todos.content.decode()
-        assert f'inicio-faixa-{tom}">1 {rotulo}' in inicio.content.decode()
+        assert f'<li class="mesa-faixa mesa-faixa--{tom}"><span>{rotulo}</span><strong>1</strong></li>' in inicio.content.decode()
 
 
 @pytest.mark.django_db

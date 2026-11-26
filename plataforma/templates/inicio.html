@@ -1,72 +1,162 @@
 {% extends "base.html" %}
-{% block title %}Início{% endblock %}
-{% block extra_head %}
-<style>
-  .inicio-topo { display:flex; align-items:flex-end; justify-content:space-between; gap:18px; margin-bottom:22px; }
-  .inicio-seletor { display:flex; align-items:flex-end; gap:9px; }
-  .inicio-seletor label { display:grid; gap:6px; color:var(--text-secondary); font-size:12px; }
-  .inicio-seletor select { min-width:min(280px,54vw); min-height:40px; padding:7px 10px; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--text-primary); }
-  .inicio-grade { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
-  .inicio-card { min-width:0; min-height:116px; display:flex; flex-direction:column; align-items:flex-start; padding:15px; border:1px solid var(--border); border-radius:11px; background:var(--surface); box-shadow:0 2px 8px #1b2b3d0d; color:var(--text-primary); text-decoration:none; transition:border-color .15s,transform .15s; }
-  .inicio-card:hover { border-color:var(--accent-link); transform:translateY(-2px); }
-  .inicio-card strong { font-size:28px; line-height:1.1; }
-  .inicio-card span { margin-top:7px; font-size:12px; line-height:1.4; }
-  .inicio-card small { margin-top:auto; padding-top:11px; color:var(--accent-link); font-size:11px; font-weight:650; }
-  .inicio-faixas { display:flex; flex-wrap:wrap; gap:6px; margin-top:11px; }
-  .inicio-faixas span { margin:0; padding:4px 8px; border-radius:999px; font-size:10px; font-weight:700; }
-  .inicio-faixa-1 { background:#fee2e2; color:#7f1d1d; }
-  .inicio-faixa-2 { background:#fecaca; color:#7f1d1d; }
-  .inicio-faixa-3 { background:#f87171; color:#1f1f1f; }
-  .inicio-faixa-4 { background:#b91c1c; color:#fff; }
-  .inicio-vazio { padding:17px; border:1px solid var(--border); border-radius:10px; background:var(--surface); color:var(--text-secondary); }
-  @media(max-width:1050px) { .inicio-grade { grid-template-columns:repeat(3,minmax(0,1fr)); } }
-  @media(max-width:720px) { .inicio-grade { grid-template-columns:repeat(2,minmax(0,1fr)); } }
-  @media(max-width:500px) { .inicio-topo { align-items:stretch; flex-direction:column; } .inicio-seletor { align-items:stretch; flex-direction:column; } .inicio-seletor select { width:100%; } .inicio-grade { grid-template-columns:1fr; } }
-</style>
-{% endblock %}
+{% block title %}Minha mesa{% endblock %}
 {% block content %}
-  <div class="inicio-topo">
-    <div class="page-heading" style="margin:0">
-      <div><span class="eyebrow">ESPAÇO DE TRABALHO</span><h1>Início</h1><p>Bem-vindo, {{ user.get_full_name|default:user.username }}. Resumo do que pede atenção.</p></div>
+  <header class="mesa-cabecalho">
+    <div class="mesa-titulo">
+      <span class="eyebrow">ESPAÇO DE TRABALHO</span>
+      <h1>Minha mesa</h1>
+      <p>Visão geral do contrato, alertas e próximos acompanhamentos.</p>
     </div>
     {% if contratos %}
-      <form class="inicio-seletor" method="get">
-        <label for="inicio-contrato">Contrato
-          <select id="inicio-contrato" name="contrato" onchange="this.form.submit()">
+      <form class="mesa-seletor" method="get">
+        <label for="mesa-contrato">Contrato
+          <select id="mesa-contrato" name="contrato" onchange="this.form.submit()">
             {% for opcao in contratos %}<option value="{{ opcao.pk }}" {% if contrato.pk == opcao.pk %}selected{% endif %}>{{ opcao.codigo_interno }} · {{ opcao.nome }}</option>{% endfor %}
           </select>
         </label>
         <noscript><button class="button button-quiet" type="submit">Abrir</button></noscript>
       </form>
     {% endif %}
-  </div>
+  </header>
 
   {% if not contrato %}
     <section class="welcome-panel"><div class="welcome-symbol">LM</div><div><h2>Nenhum contrato disponível</h2><p>Peça à administração para incluir sua participação em um contrato ativo.</p></div></section>
   {% else %}
     {% if perfil_erro %}<div class="notice" style="margin-bottom:16px">{{ perfil_erro }}</div>{% endif %}
-    {% if cards_janelas or cards_pacotes or resumo_atrasos.quantidade %}
-      <div class="inicio-grade">
-        {% if resumo_atrasos.quantidade %}
-          <a class="inicio-card" href="{% url 'acoes:pendencias' %}?contrato={{ contrato.pk }}">
-            <strong>{{ resumo_atrasos.quantidade }}</strong><span>documentos atrasados</span>
-            {% if resumo_atrasos.faixas %}<div class="inicio-faixas" aria-label="Atrasos por faixa">{% for faixa in resumo_atrasos.faixas %}<span class="inicio-faixa-{{ faixa.tom }}">{{ faixa.quantidade }} {{ faixa.rotulo }}</span>{% endfor %}</div>{% endif %}
-            <small>Ver Pendências →</small>
-          </a>
+
+    <section class="mesa-indicadores" aria-label="Resumo do contrato">
+      {% for indicador in indicadores_inicio %}
+        <a class="mesa-indicador mesa-indicador--{{ indicador.id }}{% if indicador.id == 'atrasados' and indicador.quantidade > 0 %} mesa-indicador--alerta{% endif %}" href="{{ indicador.url }}">
+          <span class="mesa-indicador-icone" aria-hidden="true">
+            {% if indicador.id == "pendencias" %}
+              <svg viewBox="0 0 24 24" fill="none"><path d="m12 3 9 9-9 9-9-9 9-9Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+            {% elif indicador.id == "analise-cliente" %}
+              <svg viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3" stroke="currentColor" stroke-width="1.8"/><path d="M3.5 20v-1.5A4.5 4.5 0 0 1 8 14h2a4.5 4.5 0 0 1 4.5 4.5V20M16 5.5a3 3 0 0 1 0 5.8M17 14.5a4.5 4.5 0 0 1 3.5 4.4V20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            {% elif indicador.id == "atrasados" %}
+              <svg viewBox="0 0 24 24" fill="none"><path d="m12 3 10 18H2L12 3Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 9v5m0 3h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            {% else %}
+              <svg viewBox="0 0 24 24" fill="none"><path d="m5 12 4.5 4.5L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            {% endif %}
+          </span>
+          <span class="mesa-indicador-texto">
+            <span class="mesa-indicador-titulo">{{ indicador.titulo }}</span>
+            <strong>{{ indicador.quantidade }}</strong>
+            <small>{{ indicador.descricao }}</small>
+          </span>
+        </a>
+      {% endfor %}
+    </section>
+
+    <section class="mesa-grade-principal" aria-label="Pendências e prazos">
+      <article class="mesa-card mesa-card-pacotes" aria-labelledby="mesa-pendencias-pacote">
+        <header class="mesa-card-cabecalho">
+          <h2 id="mesa-pendencias-pacote">Pendências por pacote</h2>
+          <a href="{{ urls_inicio.pendencias }}">Ver pendências <span aria-hidden="true">→</span></a>
+        </header>
+        {% if pacotes_pendencias %}
+          <ul class="mesa-pacote-lista">
+            {% for pacote in pacotes_pendencias %}
+              <li class="mesa-pacote-linha">
+                <span class="mesa-pacote-nome">{{ pacote.rotulo }}</span>
+                <strong class="mesa-pacote-quantidade">{{ pacote.quantidade }}</strong>
+                <span class="mesa-barra" role="img" aria-label="{{ pacote.percentual }}% do pacote com mais pendências">
+                  <span style="width: {{ pacote.percentual }}%"></span>
+                </span>
+                <span class="mesa-selo mesa-selo--{{ pacote.tom }}">{{ pacote.situacao }}</span>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="mesa-vazio">Nenhuma pendência por pacote.</p>
         {% endif %}
-        {% for card in cards_janelas %}
-          <a class="inicio-card" href="{% url 'acoes:pendencias' %}?contrato={{ contrato.pk }}#janela-{{ card.id }}">
-            <strong>{{ card.quantidade }}</strong><span>{{ card.texto }}</span><small>Ver pendências →</small>
-          </a>
-        {% endfor %}
-        {% for pacote in cards_pacotes %}
-          <a class="inicio-card" href="{% url 'acoes:pendencias' %}?contrato={{ contrato.pk }}#janela-analise-cliente">
-            <strong>{{ pacote.quantidade }}</strong><span>documentos de {{ pacote.rotulo }} aguardando análise do cliente</span><small>Ver pacote →</small>
-          </a>
-        {% endfor %}
-      </div>
-    {% else %}
-      <p class="inicio-vazio">Nada pedindo ação agora.</p>
-    {% endif %}
+      </article>
+
+      <article class="mesa-card mesa-card-faixas" aria-labelledby="mesa-atraso-faixa">
+        <header class="mesa-card-cabecalho"><h2 id="mesa-atraso-faixa">Atraso por faixa</h2></header>
+        {% if not resumo_atrasos.quantidade %}<p class="mesa-vazio">Nada atrasado.</p>{% endif %}
+        {% if faixas_atraso_inicio %}
+          <ul class="mesa-faixa-lista">
+            {% for faixa in faixas_atraso_inicio %}
+              <li class="mesa-faixa mesa-faixa--{{ faixa.tom }}"><span>{{ faixa.rotulo }}</span><strong>{{ faixa.quantidade }}</strong></li>
+            {% endfor %}
+          </ul>
+        {% elif resumo_atrasos.quantidade %}
+          <p class="mesa-vazio">Nenhuma faixa de atraso configurada no perfil.</p>
+        {% endif %}
+      </article>
+
+      <article class="mesa-card mesa-card-analise" aria-labelledby="mesa-analise-cliente">
+        <header class="mesa-card-cabecalho">
+          <h2 id="mesa-analise-cliente">Análise do cliente</h2>
+          <a href="{{ urls_inicio.analise_cliente }}">Ver todos <span aria-hidden="true">→</span></a>
+        </header>
+        {% if documentos_analise_cliente %}
+          <ul class="mesa-documento-lista">
+            {% for documento in documentos_analise_cliente %}
+              <li>
+                <a class="mesa-documento" href="{{ documento.url }}">
+                  <span class="mesa-selo mesa-selo--{{ documento.atrasado|yesno:'atrasado,analise' }}">{{ documento.etiqueta }}</span>
+                  <strong>{{ documento.codigo }}</strong>
+                  <span class="mesa-documento-titulo">{{ documento.titulo }}</span>
+                  <span class="mesa-documento-icone" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M7 3h7l4 4v14H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M14 3v5h5" stroke="currentColor" stroke-width="1.7"/></svg></span>
+                </a>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="mesa-vazio">Nenhum documento aguardando o cliente.</p>
+        {% endif %}
+      </article>
+    </section>
+
+    <section class="mesa-grade-inferior{% if not mostrar_atividade %} mesa-grade-inferior--sem-atividade{% endif %}" aria-label="Acompanhamentos e atalhos">
+      <article class="mesa-card" aria-labelledby="mesa-pacotes-destaque">
+        <header class="mesa-card-cabecalho"><h2 id="mesa-pacotes-destaque">Pacotes em destaque</h2></header>
+        {% if pacotes_destaque %}
+          <ul class="mesa-destaque-lista">
+            {% for pacote in pacotes_destaque %}
+              <li><span>{{ pacote.rotulo }}</span><strong>{{ pacote.quantidade }} aguardando o cliente</strong></li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="mesa-vazio">Nenhum pacote aguardando o cliente.</p>
+        {% endif %}
+      </article>
+
+      {% if mostrar_atividade %}
+        <article class="mesa-card" aria-labelledby="mesa-atividade-recente">
+          <header class="mesa-card-cabecalho">
+            <h2 id="mesa-atividade-recente">Atividade recente</h2>
+            <a href="{{ urls_inicio.atividade }}">Ver toda a atividade <span aria-hidden="true">→</span></a>
+          </header>
+          {% if atividade_recente %}
+            <ul class="mesa-atividade-lista">
+              {% for evento in atividade_recente %}
+                <li><a href="{{ evento.url }}"><strong>{{ evento.resumo }}</strong><time>{{ evento.data_hora|date:"d/m H:i" }}</time></a></li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="mesa-vazio">Nenhuma atividade registrada.</p>
+          {% endif %}
+        </article>
+      {% endif %}
+
+      <article class="mesa-card mesa-card-mensagens" aria-labelledby="mesa-mensagens">
+        <header class="mesa-card-cabecalho"><h2 id="mesa-mensagens">Mensagens / Integrações</h2></header>
+        <div class="mesa-mensagens-vazio">
+          <span class="mesa-mensagens-icone" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="m4 7 8 6 8-6" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg></span>
+          <p>Em breve: e-mails e alertas do contrato aparecem aqui.</p>
+        </div>
+      </article>
+
+      <article class="mesa-card" aria-labelledby="mesa-acoes-rapidas">
+        <header class="mesa-card-cabecalho"><h2 id="mesa-acoes-rapidas">Ações rápidas</h2></header>
+        <nav class="mesa-acoes-rapidas" aria-label="Ações rápidas">
+          <a href="{{ urls_inicio.pendencias }}"><span aria-hidden="true">◇</span>Ver pendências <span aria-hidden="true">→</span></a>
+          <a href="{{ urls_inicio.documentos }}"><span aria-hidden="true">▤</span>Abrir documentos <span aria-hidden="true">→</span></a>
+          {% if pode_importar_pw %}<a href="{{ urls_inicio.importar_pw }}"><span aria-hidden="true">⇧</span>Importar situação PW <span aria-hidden="true">→</span></a>{% endif %}
+        </nav>
+      </article>
+    </section>
   {% endif %}
 {% endblock %}
