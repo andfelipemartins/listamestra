@@ -8,6 +8,17 @@ from contratos.models import Contrato, PerfilContrato
 
 
 class Documento(models.Model):
+    class MotivoCancelamento(models.TextChoices):
+        DESMEMBRADO = "desmembrado", "Desmembrado em outros documentos"
+        INCORPORADO = "incorporado", "Incorporado a outro documento"
+        SUBSTITUIDO = "substituido", "Substituído por outro documento"
+        CLIENTE = "cliente", "Pedido do cliente"
+        FORA_ESCOPO = "fora_escopo", "Fora do escopo"
+        INVIAVEL = "inviavel", "Inviável (constatado em campo)"
+        SOLUCAO = "solucao", "Mudança de solução de projeto"
+        DUPLICADO = "duplicado", "Duplicado / código em dobro"
+        OUTRO = "outro", "Outro"
+
     contrato = models.ForeignKey(
         Contrato,
         verbose_name="contrato",
@@ -22,6 +33,28 @@ class Documento(models.Model):
     atributos = models.JSONField("atributos interpretados", default=dict, blank=True)
     fora_do_id = models.BooleanField("fora do ID", default=False)
     ativo = models.BooleanField("ativo", default=True)
+    cancelado_em = models.DateTimeField("cancelado em", null=True, blank=True)
+    cancelado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="cancelado por",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="documentos_cancelados",
+    )
+    motivo_cancelamento = models.CharField(
+        "motivo do cancelamento",
+        max_length=20,
+        choices=MotivoCancelamento.choices,
+        blank=True,
+        default="",
+    )
+    motivo_cancelamento_obs = models.CharField(
+        "observação do cancelamento",
+        max_length=1000,
+        blank=True,
+        default="",
+    )
     criado_em = models.DateTimeField("criado em", auto_now_add=True)
     history = HistoricalRecords()
 

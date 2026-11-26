@@ -34,11 +34,45 @@ class AnaliseInline(admin.TabularInline):
 
 @admin.register(Documento)
 class DocumentoAdmin(admin.ModelAdmin):
-    list_display = ("identificador_base", "titulo", "tipo", "disciplina", "trecho", "contrato", "ativo")
-    list_filter = ("ativo", "tipo", "disciplina", "trecho", "contrato")
+    list_display = (
+        "identificador_base",
+        "titulo",
+        "tipo",
+        "disciplina",
+        "trecho",
+        "contrato",
+        "ativo",
+        "cancelado_em",
+        "motivo_cancelamento",
+    )
+    list_filter = (
+        "ativo",
+        "tipo",
+        "disciplina",
+        "trecho",
+        "contrato",
+        "motivo_cancelamento",
+        ("cancelado_em", admin.EmptyFieldListFilter),
+    )
     search_fields = ("identificador_base", "titulo", "codigos__codigo", "contrato__nome")
     inlines = (CodigoDocumentoInline, EmissaoInline)
-    readonly_fields = ("criado_em",)
+    readonly_fields = ("criado_em", "cancelado_por", "cancelado_em")
+    fields = (
+        "contrato",
+        "identificador_base",
+        "tipo",
+        "titulo",
+        "disciplina",
+        "trecho",
+        "atributos",
+        "fora_do_id",
+        "ativo",
+        "cancelado_em",
+        "cancelado_por",
+        "motivo_cancelamento",
+        "motivo_cancelamento_obs",
+        "criado_em",
+    )
 
 
 @admin.register(CodigoDocumento)

@@ -5,6 +5,8 @@ from django.utils import timezone
 from django.contrib.auth import get_user_model
 from django.db.models import Q
 
+from core.perfil import ErroPerfil, perfil_de_dict
+from core.perfil.painel import classificar
 from contratos.models import PerfilContrato
 from documentos.models import Analise, CodigoDocumento, Documento, Emissao
 from importacoes.models import (
@@ -23,6 +25,7 @@ ACOES = (
     ("criou", "Criou"),
     ("alterou", "Alterou"),
     ("excluiu", "Excluiu"),
+    ("cancelou", "Cancelou"),
     ("importou", "Importou"),
     ("reprocessou", "Reprocessou"),
 )
@@ -39,18 +42,23 @@ def carregar_eventos(contrato):
         Documento.history.filter(contrato_id=contrato.pk).select_related("history_user")
     )
     documentos_por_id = {}
+    cancelamentos_sistema = {}
     for registro in sorted(historicos_documentos, key=_chave_historico):
         documentos_por_id[registro.id] = registro.identificador_base
-        eventos.append(
-            _evento_historico(
-                registro,
-                Documento,
-                entidade="documento",
-                contrato=contrato,
-                codigo=registro.identificador_base,
-                documento_id=registro.id if registro.id in documentos_existentes_ids else None,
+        motivo = registro.history_change_reason or ""
+        if motivo.startswith("cancelamento_sistema:"):
+            cancelamentos_sistema.setdefault(motivo, []).append(registro)
+        else:
+            eventos.append(
+                _evento_historico(
+                    registro,
+                    Documento,
+                    entidade="documento",
+                    contrato=contrato,
+                    codigo=registro.identificador_base,
+                    documento_id=registro.id if registro.id in documentos_existentes_ids else None,
+                )
             )
-        )
     documentos_ids = set(documentos_por_id) | documentos_existentes_ids
 
     for registro in CodigoDocumento.history.filter(documento_id__in=documentos_ids).select_related("history_user"):
@@ -160,6 +168,10 @@ def carregar_eventos(contrato):
             )
         )
 
+    eventos.extend(
+        _evento_cancelamento_sistema(registros, contrato)
+        for registros in cancelamentos_sistema.values()
+    )
     eventos.extend(_eventos_importacao(contrato))
     return sorted(
         (evento for evento in eventos if not evento.get("agrupar_no_evento")),
@@ -216,6 +228,18 @@ def _eventos_importacao(contrato):
                 ],
             )
         _anexar_historico_agrupado(evento, f"importacao_situacao:{registro.pk}")
+        codigos_cancelados = _codigos_cancelados_pw(registro)
+        if codigos_cancelados:
+            evento["detalhes"].append(
+                {
+                    "campo": "Cancelados pelo PW",
+                    "antes": "",
+                    "depois": (
+                        f"{len(codigos_cancelados)} documentos cancelados pelo PW: "
+                        f"{', '.join(codigos_cancelados)}"
+                    ),
+                }
+            )
         eventos.append(evento)
     for registro in ImportacaoCronograma.objects.filter(contrato=contrato).select_related("importado_por"):
         eventos.append(
@@ -246,6 +270,89 @@ def _eventos_importacao(contrato):
         _anexar_historico_agrupado(evento, f"reprocessamento:{registro.pk}")
         eventos.append(evento)
     return eventos
+
+
+def _evento_cancelamento_sistema(registros, contrato):
+    registros = sorted(registros, key=_chave_historico)
+    documento_ids = {registro.id for registro in registros}
+    codigos = {registro.identificador_base for registro in registros}
+    codigos.update(
+        CodigoDocumento.objects.filter(documento_id__in=documento_ids).values_list("codigo", flat=True)
+    )
+    codigos = sorted(codigo for codigo in codigos if codigo)
+    ultimo = registros[-1]
+    ator = _ator_historico(ultimo)
+    nome = _nome_usuario(ator)
+    motivo = dict(Documento.MotivoCancelamento.choices).get(
+        ultimo.motivo_cancelamento,
+        "Não informado",
+    )
+    detalhes = [
+        {"campo": "Quantidade", "antes": "", "depois": len(registros)},
+        {"campo": "Motivo", "antes": "", "depois": motivo},
+        {"campo": "Códigos", "antes": "", "depois": ", ".join(codigos)},
+    ]
+    if ultimo.motivo_cancelamento_obs:
+        detalhes.append(
+            {"campo": "Observação", "antes": "", "depois": ultimo.motivo_cancelamento_obs}
+        )
+    return {
+        "chave": f"cancelamento-sistema-{ultimo.history_change_reason.partition(':')[2]}",
+        "data_hora": _localizar(max(registro.history_date for registro in registros)),
+        "acao": "cancelou",
+        "acao_rotulo": "Cancelou",
+        "entidade": "Cancelamento de documentos",
+        "tipo_importacao": "",
+        "codigo": ", ".join(codigos),
+        "codigos": codigos,
+        "usuario": ator,
+        "usuario_id": getattr(ator, "pk", None),
+        "usuario_nome": nome,
+        "resumo": f"Cancelado por {nome} · {motivo}",
+        "detalhes": detalhes,
+        "validas": len(registros),
+        "recusadas": None,
+        "documento_id": None,
+        "contrato_id": contrato.pk,
+        "link_recusadas": False,
+        "agrupar_no_evento": False,
+    }
+
+
+def _codigos_cancelados_pw(registro):
+    perfil_modelo = PerfilContrato.perfil_vigente(registro.contrato, registro.data_extracao)
+    if perfil_modelo is None:
+        return []
+    try:
+        perfil = perfil_de_dict(perfil_modelo.definicao)
+    except ErroPerfil:
+        return []
+
+    motivo = f"importacao_situacao:{registro.pk}"
+    analises = Analise.history.filter(history_change_reason=motivo).order_by(
+        "history_date", "history_id"
+    )
+    emissoes_canceladas = {
+        analise.emissao_id
+        for analise in analises
+        if classificar(perfil, analise.situacao).id.casefold() == "cancelado"
+    }
+    documento_ids = set(
+        Emissao.objects.filter(pk__in=emissoes_canceladas).values_list("documento_id", flat=True)
+    )
+    if not documento_ids:
+        return []
+
+    codigos = set(
+        CodigoDocumento.objects.filter(
+            documento_id__in=documento_ids,
+            perfil=perfil_modelo,
+        ).values_list("codigo", flat=True)
+    )
+    codigos.update(
+        Documento.objects.filter(pk__in=documento_ids).values_list("identificador_base", flat=True)
+    )
+    return sorted(codigo for codigo in codigos if codigo)
 
 
 def _evento_importacao(registro, *, chave, tipo, titulo, resumo, validas, recusadas, detalhes):
@@ -526,7 +633,13 @@ def _ator_historico(registro):
     usuario = registro.history_user
     if usuario is not None:
         return usuario
-    for campo in ("criado_por", "registrado_por", "importado_por", "resolvida_por"):
+    for campo in (
+        "criado_por",
+        "registrado_por",
+        "importado_por",
+        "resolvida_por",
+        "cancelado_por",
+    ):
         usuario_id = getattr(registro, f"{campo}_id", None)
         if usuario_id:
             return get_user_model().objects.filter(pk=usuario_id).first()

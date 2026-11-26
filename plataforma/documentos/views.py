@@ -1,12 +1,16 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
+from django.http import QueryDict
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.views import View
 
 from .servicos import (
     DocumentosIndisponiveis,
     atualizar_motivo_reabertura,
+    cancelar_documentos,
+    carregar_confirmacao_cancelamento,
     carregar_lista_documentos,
     carregar_pasta_documento,
 )
@@ -43,6 +47,74 @@ class DocumentosListaView(LoginRequiredMixin, View):
         return render(request, self.template_name, contexto)
 
 
+class CancelarDocumentosView(LoginRequiredMixin, View):
+    template_name = "documentos/lista.html"
+
+    def get(self, request, contrato_id):
+        try:
+            contexto = carregar_confirmacao_cancelamento(
+                request.user,
+                contrato_id,
+                request.GET.getlist("documento"),
+            )
+        except PermissionDenied:
+            raise
+        except (DocumentosIndisponiveis, ValueError) as erro:
+            messages.error(request, str(erro))
+            return redirect(_url_lista(contrato_id, request.GET.get("lista_query", "")))
+        return self._render_confirmacao(request, contexto, request.GET)
+
+    def post(self, request, contrato_id):
+        ids = request.POST.getlist("documento")
+        try:
+            contexto = carregar_confirmacao_cancelamento(request.user, contrato_id, ids)
+        except PermissionDenied:
+            raise
+        except (DocumentosIndisponiveis, ValueError) as erro:
+            messages.error(request, str(erro))
+            return redirect(_url_lista(contrato_id, request.POST.get("lista_query", "")))
+
+        try:
+            resultado = cancelar_documentos(
+                request.user,
+                contexto["contrato"],
+                ids,
+                request.POST.get("motivo_cancelamento", ""),
+                request.POST.get("motivo_cancelamento_obs", ""),
+            )
+        except PermissionDenied:
+            raise
+        except (DocumentosIndisponiveis, ValueError) as erro:
+            contexto["erro_cancelamento"] = str(erro)
+            return self._render_confirmacao(request, contexto, request.POST, status=400)
+
+        if resultado["quantidade_cancelada"]:
+            messages.success(
+                request,
+                f'{resultado["quantidade_cancelada"]} documento(s) cancelado(s).',
+            )
+        else:
+            messages.info(request, "Nenhum documento novo foi cancelado.")
+        if resultado["ignorados"]:
+            avisos = "; ".join(
+                f'{item["codigo"]}: {item["motivo"]}' for item in resultado["ignorados"]
+            )
+            messages.warning(request, f"Documentos ignorados: {avisos}.")
+        return redirect(_url_lista(contrato_id, request.POST.get("lista_query", "")))
+
+    def _render_confirmacao(self, request, contexto, dados, *, status=200):
+        contexto.update(
+            {
+                "confirmar_cancelamento": True,
+                "lista_query": dados.get("lista_query", ""),
+                "motivo_cancelamento_selecionado": dados.get("motivo_cancelamento", ""),
+                "observacao_cancelamento": dados.get("motivo_cancelamento_obs", ""),
+                "url_lista": _url_lista(contexto["contrato"].pk, dados.get("lista_query", "")),
+            }
+        )
+        return render(request, self.template_name, contexto, status=status)
+
+
 class DocumentoPastaView(LoginRequiredMixin, View):
     template_name = "documentos/pasta.html"
 
@@ -70,3 +142,9 @@ class DocumentoPastaView(LoginRequiredMixin, View):
         else:
             messages.success(request, "Motivo da reabertura atualizado.")
         return redirect("documento_pasta", contrato_id=contrato_id, documento_id=documento_id)
+
+
+def _url_lista(contrato_id, consulta):
+    parametros = QueryDict(consulta or "", mutable=True)
+    parametros["contrato"] = str(contrato_id)
+    return f"{reverse('documentos_lista')}?{parametros.urlencode()}"

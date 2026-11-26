@@ -139,7 +139,9 @@ def carregar_painel(contrato, por=None, filtros=None):
         escopos_por_documento.setdefault(item.documento_id, set()).update(escopos)
     todos_documentos = []
     for documento in previstos.values():
-        situacao_vigente = _situacao_atual(documento)
+        situacao_vigente, incluir_no_painel = _situacao_atual(documento, perfil)
+        if not incluir_no_painel:
+            continue
         historico = _historico_situacoes(documento)
         grupo_atual = classificar(perfil, situacao_vigente)
         situacao_painel = (
@@ -753,16 +755,30 @@ def _cartoes_categorias(perfil, documentos_em_conta, todos_documentos):
     return cartoes
 
 
-def _situacao_atual(documento):
+def _situacao_atual(documento, perfil):
     emissao_mais_recente = max(
         documento.emissoes.all(),
         key=lambda emissao: (emissao.data_emissao, emissao.pk),
         default=None,
     )
     if emissao_mais_recente is None:
-        return None
-    analise_mais_recente = next(iter(emissao_mais_recente.analises.all()), None)
-    return analise_mais_recente.situacao if analise_mais_recente else ""
+        situacao = None
+    else:
+        analise_mais_recente = next(iter(emissao_mais_recente.analises.all()), None)
+        situacao = analise_mais_recente.situacao if analise_mais_recente else ""
+    return _aplicar_cancelamento_sistema(documento, perfil, situacao)
+
+
+def _aplicar_cancelamento_sistema(documento, perfil, situacao_pw):
+    if not documento.cancelado_em:
+        return situacao_pw, True
+    grupo_cancelado = next(
+        (grupo for grupo in perfil.painel.grupos if grupo.id.casefold() == "cancelado"),
+        None,
+    )
+    if grupo_cancelado is None:
+        return "Cancelado", False
+    return next(iter(grupo_cancelado.estados), grupo_cancelado.rotulo), True
 
 
 def _historico_situacoes(documento):

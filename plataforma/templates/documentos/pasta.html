@@ -7,6 +7,7 @@
   .pasta-titulo { margin: 0; color: var(--text-secondary); font-size: 14px; line-height: 1.5; }
   .pasta-destaques { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 17px; }
   .pasta-destaque { padding: 8px 11px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); font-size: 12px; }
+  .pasta-cancelamento { margin-top: 15px; padding: 11px 13px; border: 1px solid var(--warning-border, var(--border)); border-radius: 8px; background: var(--warning-surface, var(--surface-raised)); font-size: 12px; }
   .pasta-destaque span { display: block; margin-bottom: 4px; color: var(--text-secondary); font-size: 10px; }
   .pasta-partes { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 9px; }
   .pasta-parte { padding: 11px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); }
@@ -50,14 +51,18 @@
     <span class="eyebrow">{{ contrato.codigo_interno }} · PASTA DO DOCUMENTO</span>
     <h1 class="pasta-codigo">{{ codigo }}</h1>
     <p class="pasta-titulo">{{ documento.titulo|default:"(sem título)" }}</p>
+    {% if cancelamento %}<div class="pasta-cancelamento"><strong>Cancelado em {{ cancelamento.em|date:"d/m/Y" }} por {{ cancelamento.por }}</strong> · {{ cancelamento.motivo }}{% if cancelamento.observacao %} · {{ cancelamento.observacao }}{% endif %}</div>{% endif %}
     <div class="pasta-destaques">
       <div class="pasta-destaque"><span>Categoria</span>{{ categoria }}</div>
-      <div class="pasta-destaque"><span>Situação vigente</span>{{ situacao_grupo.rotulo }}{% if situacao %} · {{ situacao }}{% endif %}</div>
+      <div class="pasta-destaque"><span>Situação vigente</span>{{ situacao_rotulo }}{% if situacao %} · {{ situacao }}{% endif %}</div>
       {% if data_situacao %}<div class="pasta-destaque"><span>Última situação em</span>{{ data_situacao|date:"d/m/Y" }}</div>{% endif %}
       {% if previsao %}<div class="pasta-destaque"><span>Previsão do cronograma</span>{{ previsao.data_prevista|date:"d/m/Y" }}</div>{% endif %}
     </div>
   </div>
-  <a class="button button-quiet" href="{{ url_lista }}">Voltar à lista</a>
+  <div>
+    {% if pode_cancelar_documentos and not cancelamento and situacao_grupo.id != "cancelado" %}<a class="button button-primary" href="{% url 'documentos_cancelar' contrato.pk %}?documento={{ documento.pk }}&amp;lista_query=contrato%3D{{ contrato.pk }}">Cancelar documento</a>{% endif %}
+    <a class="button button-quiet" href="{{ url_lista }}">Voltar à lista</a>
+  </div>
 </section>
 
 <section class="panel" aria-labelledby="partes-codigo-titulo">
