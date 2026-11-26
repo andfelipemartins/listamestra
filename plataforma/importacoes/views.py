@@ -24,7 +24,7 @@ from .id_excel import (
     gerar_previa_id,
 )
 from .models import InconsistenciaImportacao, ImportacaoID, ImportacaoSituacao, IndiceDocumentos, ItemPrevisto
-from .services import ErroAplicacaoID, aplicar_previa
+from .services import ErroAplicacaoID, aplicar_previa, resumir_substituicao
 from .situacao_pw import (
     ErroFormatoSituacaoPW,
     PreviaSituacaoPW,
@@ -542,7 +542,7 @@ class ImportarIDView(LoginRequiredMixin, UserPassesTestMixin, View):
                 "form": ImportarIDForm(
                     initial={"contrato": request.GET.get("contrato", "")}
                 ),
-                "indices": IndiceDocumentos.objects.select_related("contrato")[:20],
+                "indices": _indices_para_listagem(),
             },
         )
 
@@ -581,6 +581,35 @@ class ImportarIDView(LoginRequiredMixin, UserPassesTestMixin, View):
         except (ErroFormatoID, ErroPerfil, ValueError) as erro:
             return self._render_result(request, {"form": form, "erro": str(erro)})
 
+        indices_substituidos = list(form.cleaned_data["substituidos"])
+        if indices_substituidos and previa.fonte != IndiceDocumentos.Fonte.EXCEL_ID:
+            form.add_error(
+                "substituidos",
+                "A substituição está disponível apenas para IDs importados por Excel.",
+            )
+            return self._render_result(request, {"form": form})
+        if any(
+            indice.codigo == previa.codigo_indice
+            and indice.revisao == previa.revisao
+            for indice in indices_substituidos
+        ):
+            form.add_error("substituidos", "Um ID não pode substituir a si mesmo.")
+            return self._render_result(request, {"form": form})
+        if indices_substituidos and any(
+            linha.categoria in {"codigos_invalidos", "atributos_divergentes", "linhas_ilegiveis"}
+            for linha in previa.linhas
+        ):
+            form.add_error(
+                "substituidos",
+                "Corrija as linhas recusadas antes de substituir um ID vigente.",
+            )
+            return self._render_result(request, {"form": form})
+        substituicao = (
+            resumir_substituicao(previa, indices_substituidos)
+            if indices_substituidos
+            else None
+        )
+
         request.session[CHAVE_SESSAO] = {
             "usuario_id": request.user.pk,
             "contrato_id": previa.contrato_id,
@@ -590,6 +619,7 @@ class ImportarIDView(LoginRequiredMixin, UserPassesTestMixin, View):
             "revisao": previa.revisao,
             "fase": form.cleaned_data["fase"].strip(),
             "escopos_ids": [escopo.pk for escopo in form.cleaned_data["escopos"]],
+            "substituir_ids": [indice.pk for indice in indices_substituidos],
             "novo_escopo": form.cleaned_data["novo_escopo"],
             "arquivo_nome": previa.arquivo_nome,
             "formato": previa.formato,
@@ -600,11 +630,13 @@ class ImportarIDView(LoginRequiredMixin, UserPassesTestMixin, View):
             {
                 "form": form,
                 "previa": previa,
+                "substituicao": substituicao,
+                "indices_substituidos": indices_substituidos,
                 "contagens": [
                     (ROTULOS_CATEGORIA[categoria], previa.contagens[categoria])
                     for categoria in CATEGORIAS
                 ],
-                "indices": IndiceDocumentos.objects.select_related("contrato")[:20],
+                "indices": _indices_para_listagem(),
             },
         )
 
@@ -644,6 +676,27 @@ class ImportarIDView(LoginRequiredMixin, UserPassesTestMixin, View):
                     "Um dos escopos da prévia não pertence mais ao contrato. Gere uma nova prévia."
                 )
             novo_escopo = dados.get("novo_escopo", "").strip()
+            substituir_ids = [int(pk) for pk in dados.get("substituir_ids", [])]
+            if len(set(substituir_ids)) != len(substituir_ids):
+                raise ErroAplicacaoID("A prévia contém IDs substituídos repetidos. Gere uma nova prévia.")
+            indices_substituidos = list(
+                IndiceDocumentos.objects.filter(
+                    pk__in=substituir_ids,
+                    contrato=contrato,
+                    fonte=IndiceDocumentos.Fonte.EXCEL_ID,
+                    vigente=True,
+                    substituido_por__isnull=True,
+                ).order_by("pk")
+            )
+            if len(indices_substituidos) != len(substituir_ids):
+                raise ErroAplicacaoID(
+                    "Um ID selecionado não está mais vigente ou não pertence a este contrato. Gere nova prévia."
+                )
+            substituicao = (
+                resumir_substituicao(previa, indices_substituidos)
+                if indices_substituidos
+                else None
+            )
             with transaction.atomic():
                 if novo_escopo:
                     escopo, _ = EscopoContrato.objects.get_or_create(
@@ -657,6 +710,7 @@ class ImportarIDView(LoginRequiredMixin, UserPassesTestMixin, View):
                     contrato=contrato,
                     perfil_modelo=perfil_modelo,
                     usuario=request.user,
+                    substituir_ids=substituir_ids,
                 )
                 fase = dados.get("fase", "").strip()
                 if fase and indice.fase != fase:
@@ -677,6 +731,13 @@ class ImportarIDView(LoginRequiredMixin, UserPassesTestMixin, View):
             f"{previa.linhas_validas} linhas válidas e "
             f"{previa.linhas_fora} inválidas ou ilegíveis registradas.",
         )
+        if substituicao and substituicao["codigos_com_movimentacao"]:
+            messages.warning(
+                request,
+                "Aviso: código saiu do ID vigente e possui movimentação: "
+                + ", ".join(substituicao["codigos_com_movimentacao"])
+                + ".",
+            )
         return redirect("importar_id")
 
 
@@ -691,6 +752,26 @@ def _previsao_da_sessao(dados):
         formato=dados["formato"],
         linhas=tuple(LinhaPrevia(**linha) for linha in dados["linhas"]),
     )
+
+
+def _indices_para_listagem():
+    indices = list(
+        IndiceDocumentos.objects.select_related("contrato", "substituido_por")
+        .order_by("-importado_em", "-pk")[:20]
+    )
+    ids_substituidos = [indice.pk for indice in indices if indice.substituido_por_id]
+    historicos = IndiceDocumentos.history.model.objects.filter(
+        id__in=ids_substituidos,
+        vigente=False,
+    ).exclude(substituido_por__isnull=True).order_by("-history_date")
+    por_indice = {}
+    for historico in historicos:
+        por_indice.setdefault(historico.id, historico)
+    for indice in indices:
+        historico = por_indice.get(indice.pk)
+        indice.substituido_em = historico.history_date if historico else None
+        indice.substituido_por_usuario = historico.history_user if historico else None
+    return indices
 
 
 class ImportarSituacaoPWView(LoginRequiredMixin, UserPassesTestMixin, View):

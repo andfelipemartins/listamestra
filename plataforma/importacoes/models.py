@@ -42,6 +42,14 @@ class IndiceDocumentos(models.Model):
         related_name="indices_importados",
     )
     vigente = models.BooleanField("vigente", default=True)
+    substituido_por = models.ForeignKey(
+        "self",
+        verbose_name="substituído por",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="indices_substituidos",
+    )
     history = HistoricalRecords(m2m_fields=("escopos",))
 
     class Meta:

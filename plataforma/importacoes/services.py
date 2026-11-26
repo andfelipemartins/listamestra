@@ -28,6 +28,7 @@ def aplicar_previa(
     perfil_modelo,
     usuario=None,
     inconsistencias_existentes=None,
+    substituir_ids=(),
 ):
     """Aplica uma prévia validada de forma atômica e idempotente."""
     reprocessamento = inconsistencias_existentes is not None
@@ -36,6 +37,31 @@ def aplicar_previa(
         raise ErroAplicacaoID("A prévia, o perfil e o contrato precisam ser os mesmos.")
     if previa.perfil_id != perfil_modelo.pk:
         raise ErroAplicacaoID("O perfil vigente mudou. Gere uma nova prévia antes de confirmar.")
+    substituir_ids = tuple(int(pk) for pk in substituir_ids)
+    if len(set(substituir_ids)) != len(substituir_ids):
+        raise ErroAplicacaoID("A prévia contém IDs substituídos repetidos. Gere uma nova prévia.")
+    if substituir_ids:
+        if previa.fonte != IndiceDocumentos.Fonte.EXCEL_ID:
+            raise ErroAplicacaoID("A substituição está disponível apenas para IDs importados por Excel.")
+        if any(linha.categoria in {"codigos_invalidos", "atributos_divergentes", "linhas_ilegiveis"} for linha in previa.linhas):
+            raise ErroAplicacaoID(
+                "Corrija as linhas recusadas antes de substituir um ID vigente. Gere uma nova prévia."
+            )
+        indices_substituidos = list(
+            IndiceDocumentos.objects.select_for_update().filter(
+                pk__in=substituir_ids,
+                contrato=contrato,
+                fonte=IndiceDocumentos.Fonte.EXCEL_ID,
+                vigente=True,
+                substituido_por__isnull=True,
+            ).order_by("pk")
+        )
+        if len(indices_substituidos) != len(substituir_ids):
+            raise ErroAplicacaoID(
+                "Um ID selecionado não está mais vigente ou não pertence a este contrato. Gere nova prévia."
+            )
+    else:
+        indices_substituidos = []
     problemáticas = [
         linha for linha in previa.linhas
         if linha.categoria in {"codigos_invalidos", "atributos_divergentes", "linhas_ilegiveis"}
@@ -55,6 +81,8 @@ def aplicar_previa(
         "revisao": previa.revisao,
     }
     indice = IndiceDocumentos.objects.filter(**chave).first()
+    if indice is not None and indice.pk in substituir_ids:
+        raise ErroAplicacaoID("Um ID não pode substituir a si mesmo.")
     agora = timezone.now()
     motivo_historico = f"importacao_id:pendente:{uuid4().hex}"
     if reprocessamento:
@@ -289,7 +317,64 @@ def aplicar_previa(
             _marcar_historico(item, usuario, motivo_historico)
             item.delete()
 
+    for anterior in indices_substituidos:
+        anterior.vigente = False
+        anterior.substituido_por = indice
+        _marcar_historico(
+            anterior,
+            usuario,
+            f"{motivo_historico}:substituido_por:{indice.pk}",
+        )
+        anterior.save(update_fields=("vigente", "substituido_por"))
+
     return indice
+
+
+def resumir_substituicao(previa, indices_substituidos):
+    """Compara os documentos contáveis do novo ID com os IDs marcados na prévia."""
+    indices_substituidos = list(indices_substituidos)
+    identificadores_novos = {
+        linha.identificador_base
+        for linha in previa.linhas
+        if linha.identificador_base and not linha.excluido
+    }
+    ids_substituidos = [indice.pk for indice in indices_substituidos]
+    previstos_antes = set(
+        ItemPrevisto.objects.filter(
+            indice__contrato_id=previa.contrato_id,
+            indice__vigente=True,
+            indice__conta_no_previsto=True,
+            excluido=False,
+        ).values_list("documento__identificador_base", flat=True)
+    )
+    previstos_depois = set(
+        ItemPrevisto.objects.filter(
+            indice__contrato_id=previa.contrato_id,
+            indice__vigente=True,
+            indice__conta_no_previsto=True,
+            excluido=False,
+        )
+        .exclude(indice_id__in=ids_substituidos)
+        .values_list("documento__identificador_base", flat=True)
+    ) | identificadores_novos
+    continuam = previstos_antes & previstos_depois
+    entram = previstos_depois - previstos_antes
+    saem = previstos_antes - previstos_depois
+    com_movimentacao = set(
+        Documento.objects.filter(
+            contrato_id=previa.contrato_id,
+            identificador_base__in=saem,
+            emissoes__isnull=False,
+        ).values_list("identificador_base", flat=True).distinct()
+    )
+    return {
+        "continuam": len(continuam),
+        "entram": len(entram),
+        "saem": len(saem),
+        "codigos_que_entram": sorted(entram),
+        "codigos_que_saem": sorted(saem),
+        "codigos_com_movimentacao": sorted(com_movimentacao),
+    }
 
 
 def previstos_vigentes(contrato):

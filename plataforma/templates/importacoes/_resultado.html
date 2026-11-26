@@ -11,6 +11,16 @@
     {% endfor %}
   </div>
   <p class="notice">{{ previa.linhas_validas }} linhas serão importadas, {{ previa.linhas_fora }} ficarão de fora (ver lista).</p>
+  {% if substituicao %}
+  <section class="notice" aria-label="Efeito da substituição">
+    <strong>Substituição selecionada:</strong>
+    {% for indice in indices_substituidos %}{% if not forloop.first %}, {% endif %}{{ indice.codigo }} (revisão {{ indice.revisao }}){% endfor %}.
+    <p>{{ substituicao.continuam }} documentos continuam, {{ substituicao.entram }} entram e {{ substituicao.saem }} saem do previsto.</p>
+    {% if substituicao.codigos_que_entram %}<p>Entram: {{ substituicao.codigos_que_entram|join:", " }}.</p>{% endif %}
+    {% if substituicao.codigos_que_saem %}<p>Saem: {{ substituicao.codigos_que_saem|join:", " }}.</p>{% endif %}
+    {% if substituicao.codigos_com_movimentacao %}<p>Aviso: estes códigos têm movimentação e sairão do ID vigente: {{ substituicao.codigos_com_movimentacao|join:", " }}.</p>{% endif %}
+  </section>
+  {% endif %}
   <div class="table-wrap">
     <table>
       <thead><tr><th>Linha</th><th>Categoria e próximo passo</th><th>Código</th><th>Título</th><th>Excluído</th><th>Detalhe</th></tr></thead>

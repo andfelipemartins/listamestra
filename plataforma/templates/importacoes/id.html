@@ -23,7 +23,14 @@
     <input type="hidden" name="acao" value="prever">
     {{ form.non_field_errors }}
     {% for field in form %}
-      {% if field.name == "escopos" %}
+      {% if field.name == "substituidos" %}
+        <fieldset>
+          <legend>{{ field.label }}</legend>
+          {{ field.errors }}
+          {{ field }}
+          {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
+        </fieldset>
+      {% elif field.name == "escopos" %}
         <fieldset>
           <legend>{{ field.label }}</legend>
           {{ field.errors }}
@@ -70,7 +77,7 @@
   <h2>Índices recentes</h2>
   <div class="table-wrap">
     <table><thead><tr><th>Contrato</th><th>Fonte</th><th>ID</th><th>Revisão</th><th>Importado em</th><th>Vigente</th></tr></thead>
-      <tbody>{% for indice in indices %}<tr><td>{{ indice.contrato.nome }}</td><td>{{ indice.get_fonte_display }}</td><td>{{ indice.codigo }}</td><td>{{ indice.revisao }}</td><td>{{ indice.importado_em }}</td><td>{% if indice.vigente %}Sim{% else %}Não{% endif %}</td></tr>{% endfor %}</tbody>
+      <tbody>{% for indice in indices %}<tr><td>{{ indice.contrato.nome }}</td><td>{{ indice.get_fonte_display }}</td><td>{{ indice.codigo }}</td><td>{{ indice.revisao }}</td><td>{{ indice.importado_em }}</td><td>{% if indice.vigente %}Vigente{% elif indice.substituido_por %}Histórico — substituído pelo {{ indice.substituido_por.codigo }}{% if indice.substituido_em %} em {{ indice.substituido_em|date:"d/m/Y" }}{% if indice.substituido_por_usuario %} por {{ indice.substituido_por_usuario }}{% endif %}{% endif %}{% else %}Histórico{% endif %}</td></tr>{% endfor %}</tbody>
     </table>
   </div>
 </section>

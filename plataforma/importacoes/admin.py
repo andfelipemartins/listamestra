@@ -60,6 +60,7 @@ class IndiceDocumentosAdmin(admin.ModelAdmin):
         "fase",
         "escopos_lista",
         "conta_no_previsto",
+        "substituido_por",
         "fonte",
         "contrato",
         "importado_em",
@@ -68,7 +69,7 @@ class IndiceDocumentosAdmin(admin.ModelAdmin):
     list_editable = ("fase", "conta_no_previsto")
     list_filter = ("fase", "escopos", "conta_no_previsto", "fonte", "vigente", "contrato")
     search_fields = ("codigo", "arquivo_nome", "contrato__nome")
-    readonly_fields = ("importado_em",)
+    readonly_fields = ("importado_em", "substituido_por")
     inlines = (ItemPrevistoInline,)
 
     @admin.display(description="escopos")

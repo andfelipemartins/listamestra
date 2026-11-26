@@ -352,6 +352,27 @@ def test_escopo_filtra_previsto_e_documento_compartilhado_entra_nos_dois(contrat
 
 
 @pytest.mark.django_db
+def test_painel_filtra_escopo_e_classe_ao_mesmo_tempo(contrato, perfil_modelo):
+    civil = _indice(contrato, "ID-CIVIL-CLASSES", escopos=("Civil",))
+    sistemas = _indice(contrato, "ID-SISTEMAS-CLASSES", escopos=("Sistemas",))
+    _documento(contrato, civil, 9601, classe="A1")
+    _documento(contrato, civil, 9602, classe="P7")
+    _documento(contrato, sistemas, 9603, classe="A1")
+
+    dados = carregar_painel(
+        contrato,
+        filtros={"escopo": "Civil", "classe": "A1"},
+    )
+
+    assert dados["total_documentos_previstos"] == 1
+    assert {filtro["nome"] for filtro in dados["filtros"]} >= {"escopo", "classe"}
+    assert {filtro["rotulo"] for filtro in dados["filtros_ativos"]} >= {
+        "Escopo do ID",
+        "classe e subclasse",
+    }
+
+
+@pytest.mark.django_db
 def test_um_escopo_unico_nao_mostra_filtro_e_painel_abre_no_total(contrato, perfil_modelo):
     indice = _indice(contrato, "ID-ESCOPO-UNICO", fase="Fase 1", escopos=("Civil",))
     _documento(contrato, indice, 9501)

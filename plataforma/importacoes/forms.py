@@ -2,6 +2,7 @@ from django import forms
 from django.utils import timezone
 
 from contratos.models import Contrato, EscopoContrato
+from .models import IndiceDocumentos
 
 
 class ImportarIDForm(forms.Form):
@@ -10,6 +11,16 @@ class ImportarIDForm(forms.Form):
         queryset=Contrato.objects.filter(ativo=True).order_by("nome"),
     )
     arquivo = forms.FileField(label="Arquivo Excel (.xlsx)")
+    substituidos = forms.ModelMultipleChoiceField(
+        label="Este ID substitui",
+        queryset=IndiceDocumentos.objects.none(),
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        help_text=(
+            "Opcional. Marque os IDs vigentes deste contrato que este Excel substitui; "
+            "eles permanecem no histórico e deixam de compor o previsto."
+        ),
+    )
     codigo_id = forms.CharField(label="Código do ID", max_length=250, required=False)
     revisao = forms.CharField(label="Revisão", max_length=100, required=False)
     fase = forms.CharField(label="Fase", max_length=100, required=False)
@@ -39,6 +50,25 @@ class ImportarIDForm(forms.Form):
             self.fields["escopos"].queryset = EscopoContrato.objects.filter(
                 contrato_id=contrato_id
             ).order_by("nome")
+            self.fields["substituidos"].queryset = IndiceDocumentos.objects.filter(
+                contrato_id=contrato_id,
+                fonte=IndiceDocumentos.Fonte.EXCEL_ID,
+                vigente=True,
+            ).order_by("codigo", "revisao")
+
+    def clean_substituidos(self):
+        indices = self.cleaned_data["substituidos"]
+        contrato = self.cleaned_data.get("contrato")
+        if contrato and any(
+            indice.contrato_id != contrato.pk
+            or indice.fonte != IndiceDocumentos.Fonte.EXCEL_ID
+            or not indice.vigente
+            for indice in indices
+        ):
+            raise forms.ValidationError(
+                "Selecione apenas IDs vigentes de Excel do contrato escolhido."
+            )
+        return indices
 
     def clean_escopos(self):
         escopos = self.cleaned_data["escopos"]
