@@ -900,3 +900,60 @@ Aprovado, Não Conforme, Inconsistente, Erro de Assinatura, Cancelado, Revisão 
 - Visão do dono: o PE certo seria a fonte, e alimentar o sistema com um PE é trabalho de início de contrato. É preciso
   criar meios fáceis de imputar essas regras (ex.: uma IA resume o PE num formato que o programa entende), em vez de um
   formulário gigante. Fica como direção para o perfil/configuração.
+
+## D-072 · F6-1006/1007 de São Mateus: o código certo é 1006/1007
+
+*Origem: AC1 · 2026-11-26*
+
+- Os dois desenhos de sinalização e RTD das baias da SPTrans são **DE-15.23.17.84-6F6-1006 e -1007**. O Name no PW
+  (-1009/-1010) está errado; o atributo Sequencial e o nosso ID estão certos. Os documentos ainda não foram emitidos
+  (travados por aprovação de órgão), por isso o erro passou. O dono vai pedir a correção no PW.
+- O ID do PW tem o 1008 (fibra óptica de RTD), que não está no ID em Excel: foi pedido um **ID parcial** e o ID completo
+  não foi atualizado. Isso deve acontecer mais vezes (documento no ID do PW que não está no ID completo).
+- Lição para a mensagem do sistema: quando Name e atributo divergem, nem sempre o atributo é o errado.
+
+## D-073 · F6-1030 e 1306–1309 ainda vão sair; o certo é o 100% pelo nosso ID atualizado
+
+*Origem: AC5 · 2026-11-26*
+
+- Esses desenhos existem e vão ser emitidos; faltou pedir um ID parcial no PW (travados por aprovação de órgão).
+- Visão do dono: o certo é o 100% ser contado pelo **nosso ID atualizado** (ID-15.25.00 1001, 1002 e 1501, que viraram
+  faixa 2000 e ainda precisam de correção). Às vezes nós prevemos documentos que o cliente ainda não aceitou: é falha de
+  processo, mas acontece em todo lugar. Como isso convive com a D-058 (hoje só o PW conta) ficou para a pergunta AF2.
+
+## D-074 · Documento só muda quando muda oficialmente; cancelamento tem dono
+
+*Origem: AC6 · 2026-11-26*
+
+- O RT de sondagem de São Mateus **conta no 100% até ser cancelado**. Regra geral: o documento só muda quando a mudança é
+  oficial (no Metrô, quando muda no PW). Exceções existem e são do contrato/empresa (ex.: "para aprovação" conta como
+  aprovado).
+- O sistema vai precisar de um **controle de cancelamento**: no ID, filtrar e selecionar documentos para cancelar, com
+  confirmação ("tem certeza?"), registrado no login de quem cancelou. Não é qualquer um: no mínimo um admin. Sem
+  aprovação formal por e-mail.
+
+## D-075 · Faixas de atraso da Linha 15 confirmadas; atraso crítico na Minha mesa
+
+*Origem: AD1 e AD2 · 2026-11-26*
+
+- Faixas: **até 5 / 6–30 / 31–60 / mais de 60 dias** (as provisórias do block-048 ficam valendo).
+- Além do painel, o atraso aparece na **Minha mesa (Pendências), do mais atrasado para o menos**, com etiqueta de cor da
+  faixa. No Início, um card de resumo: "N documentos atrasados", quantos em cada cor.
+
+## D-076 · Atividade só para admin; feriados só o admin da plataforma; motivo por admin e editores
+
+*Origem: AE1, AC4 e AE3 · 2026-11-26*
+
+- A tela **Atividade** (histórico geral) fica só para admin. O histórico de cada documento continua na pasta dele.
+- O **acervo de feriados** por região é cadastrado e corrigido só pelo **admin da plataforma** (superusuário), não pelo
+  admin de um contrato.
+- O **motivo da reabertura** é informado por admin e editores do contrato (como o block-051 fez).
+
+## D-077 · Pacote do Início = classe completa do código, com o nome
+
+*Origem: AE2 · 2026-11-26*
+
+- O cliente aprova e reprova por pacote. No card do Início o pacote aparece com o **código completo da classe e o nome**,
+  ex.: **"6G6 · Terraplenagem"**, porque muita gente não decora as classes e o número da etapa (6 = executivo no Metrô,
+  3/4 = básico; na SPObras o 5 é executivo) evita confusão se um contrato tiver mais de uma etapa.
+- Genérico: o perfil diz quais caixas do código formam o pacote (no Metrô, etapa + classe) e de qual caixa vem o nome.
