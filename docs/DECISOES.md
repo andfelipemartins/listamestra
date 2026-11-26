@@ -860,3 +860,43 @@ Aprovado, Não Conforme, Inconsistente, Erro de Assinatura, Cancelado, Revisão 
 - Os IDs ficam todos num só previsto, mas quem configura diz **o que cada ID representa** (ex.: ID 1001 = arquitetura e
   civil, ID 1002 = sistemas, um ID de qualidade, o ID 1501 = fase 2 com tudo). Esse agrupamento vira filtro no painel e
   nos gráficos.
+
+## D-069 · Escopo do ID vira lista do contrato, marcada em caixinhas
+
+*Origem: Y2 · 2026-11-26*
+
+- O campo livre "escopo" do ID (block-049) é trocado por uma **lista de escopos cadastrada para o contrato**: o admin
+  cadastra uma vez (ex.: Arquitetura, Civil, Sistemas, Qualidade).
+- Na tela do ID, a pessoa **marca caixinhas** em vez de digitar. Um ID pode ter **mais de um escopo** (o 1001 marca
+  Arquitetura e Civil).
+- Se faltar um escopo, ela clica em **"+ novo escopo"**: ele entra na lista e passa a valer para todos os IDs do contrato.
+
+## D-070 · Y2 aprovada; Início e Pendências deixam de ser a mesma tela
+
+*Origem: Y2 · 2026-11-26*
+
+- O dono aprova os blocks 027 a 049 ("tá muito mais legível"). O Admin ainda precisa de muita mudança, mas fica para
+  depois; o foco segue nas telas iniciais.
+- **Início** e **Pendências** hoje são iguais. O Início passa a ser uma tela de bater o olho: **cards menores de alerta**,
+  com resumos (ex.: "você tem N documentos da disciplina X pendentes", já que o cliente aprova e reprova em pacotes, por
+  disciplina ou classe). A tela **Pendências** fica com o detalhe item a item (e ainda vai ser refinada: espaços vazios).
+- Ideia futura, não agora: cards alimentados por fontes externas (ex.: resumo de e-mail do cliente via Outlook).
+- **Atividade** (histórico de tudo): o dono gostou, mas pergunta se deve ser visível a todos ou só ao admin (no PW o
+  histórico fica por documento; no SharePoint há o log geral). Fica em aberto (pergunta nova).
+- Refinos visuais registrados para não passar batido: em Atividade, o rótulo "Pessoa" sobrepõe a caixa "Contrato" (o
+  clique pega o campo errado); no Painel, o título com o nome do contrato invade o card ao lado, e um nome longo
+  extrapolaria. Os enquadramentos precisam aguentar nomes grandes.
+
+## D-071 · Motivo da reabertura em lista fixa; indicador da reabertura resolvida já entra, sem meta
+
+*Origem: AB2 e AB3 · 2026-11-26*
+
+- Cada reabertura de documento aprovado (A1, B1…) ganha um **motivo**, escolhido numa **lista fixa** (sem interpretação de
+  texto, porque no web app não há LLM por trás): problema de campo, erro de projeto, pedido do cliente, outro. Esses
+  parâmetros servem depois para análises e visualizações para diretoria e reunião. Se precisar mudar, adequa-se.
+- O indicador **"reabertura resolvida numa revisão só"** (A1 → A, até 2 reaberturas assim) **já entra no painel, sem
+  meta**, como informação para apoiar a revisão do PE. Os parâmetros (quantas reaberturas, quantas revisões por
+  reabertura) ficam **configuráveis no perfil**, porque cada empresa/contrato tem o seu padrão de qualidade.
+- Visão do dono: o PE certo seria a fonte, e alimentar o sistema com um PE é trabalho de início de contrato. É preciso
+  criar meios fáceis de imputar essas regras (ex.: uma IA resume o PE num formato que o programa entende), em vez de um
+  formulário gigante. Fica como direção para o perfil/configuração.
