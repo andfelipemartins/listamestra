@@ -228,6 +228,37 @@ class PrazosPerfil:
             object.__setattr__(self, "faixas_atraso", tuple(self.faixas_atraso))
 
 
+@dataclass(frozen=True)
+class MotivoCancelamentoPerfil:
+    id: str
+    rotulo: str
+    exige_observacao: bool = False
+
+
+@dataclass(frozen=True)
+class CancelamentoPerfil:
+    motivos: tuple[MotivoCancelamentoPerfil, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "motivos", tuple(self.motivos))
+
+
+def _cancelamento_padrao() -> CancelamentoPerfil:
+    return CancelamentoPerfil(
+        motivos=(
+            MotivoCancelamentoPerfil("desmembrado", "Desmembrado em outros documentos"),
+            MotivoCancelamentoPerfil("incorporado", "Incorporado a outro documento"),
+            MotivoCancelamentoPerfil("substituido", "Substituído por outro documento"),
+            MotivoCancelamentoPerfil("cliente", "Pedido do cliente"),
+            MotivoCancelamentoPerfil("fora_escopo", "Fora do escopo"),
+            MotivoCancelamentoPerfil("inviavel", "Inviável (constatado em campo)"),
+            MotivoCancelamentoPerfil("solucao", "Mudança de solução de projeto"),
+            MotivoCancelamentoPerfil("duplicado", "Duplicado / código em dobro"),
+            MotivoCancelamentoPerfil("outro", "Outro", exige_observacao=True),
+        )
+    )
+
+
 def _painel_minimo() -> PainelPerfil:
     return PainelPerfil(
         grupos=(
@@ -248,6 +279,7 @@ class PerfilContrato:
     analise: CicloAnalise
     painel: PainelPerfil = field(default_factory=_painel_minimo)
     prazos: PrazosPerfil | None = None
+    cancelamento: CancelamentoPerfil = field(default_factory=_cancelamento_padrao)
 
 
 def perfil_de_dict(dados: Mapping[str, Any]) -> PerfilContrato:
@@ -264,7 +296,18 @@ def perfil_de_dict(dados: Mapping[str, Any]) -> PerfilContrato:
         analise = ciclo_analise_de_dict(dados.get("analise") or {})
         painel = _painel_de_dict(dados.get("painel"), codigo, emissao)
         prazos = _prazos_de_dict(dados.get("prazos"))
-        return PerfilContrato(nome, versao, vigencia, codigo, emissao, analise, painel, prazos)
+        cancelamento = _cancelamento_de_dict(dados.get("cancelamento"))
+        return PerfilContrato(
+            nome,
+            versao,
+            vigencia,
+            codigo,
+            emissao,
+            analise,
+            painel,
+            prazos,
+            cancelamento,
+        )
     except ErroPerfil:
         raise
     except (KeyError, TypeError, ValueError, re.error) as erro:
@@ -275,6 +318,45 @@ def perfil_de_dict(dados: Mapping[str, Any]) -> PerfilContrato:
 def carregar_perfil(dados: Mapping[str, Any]) -> PerfilContrato:
     """Alias explícito para carregamento a partir de dict."""
     return perfil_de_dict(dados)
+
+
+def _cancelamento_de_dict(dados: Any) -> CancelamentoPerfil:
+    if dados is None:
+        return _cancelamento_padrao()
+    if not isinstance(dados, Mapping):
+        raise ErroPerfil("'cancelamento' precisa ser um objeto.")
+    motivos_brutos = dados.get("motivos")
+    if not isinstance(motivos_brutos, (list, tuple)) or not motivos_brutos:
+        raise ErroPerfil("'cancelamento.motivos' precisa ser uma lista não vazia.")
+
+    motivos: list[MotivoCancelamentoPerfil] = []
+    ids: set[str] = set()
+    for posicao, item in enumerate(motivos_brutos, start=1):
+        campo = f"cancelamento.motivos[{posicao}]"
+        if not isinstance(item, Mapping):
+            raise ErroPerfil(f"{campo} precisa ser um objeto.")
+        identificador = _texto_obrigatorio(item.get("id"), f"id em {campo}")
+        if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,49}", identificador):
+            raise ErroPerfil(
+                f"O id '{identificador}' em {campo} deve usar letras minúsculas, números, '_' ou '-'."
+            )
+        if identificador in ids:
+            raise ErroPerfil(f"Id de motivo repetido em 'cancelamento.motivos': '{identificador}'.")
+        ids.add(identificador)
+        rotulo = _texto_obrigatorio(item.get("rotulo"), f"rótulo do motivo '{identificador}'")
+        exige_observacao = item.get("exige_observacao", False)
+        if not isinstance(exige_observacao, bool):
+            raise ErroPerfil(
+                f"'exige_observacao' do motivo '{identificador}' precisa ser booleano."
+            )
+        motivos.append(
+            MotivoCancelamentoPerfil(
+                id=identificador,
+                rotulo=rotulo,
+                exige_observacao=exige_observacao,
+            )
+        )
+    return CancelamentoPerfil(motivos=tuple(motivos))
 
 
 def carregar_yaml(caminho: str | Path) -> PerfilContrato:

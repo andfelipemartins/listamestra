@@ -8,17 +8,6 @@ from contratos.models import Contrato, PerfilContrato
 
 
 class Documento(models.Model):
-    class MotivoCancelamento(models.TextChoices):
-        DESMEMBRADO = "desmembrado", "Desmembrado em outros documentos"
-        INCORPORADO = "incorporado", "Incorporado a outro documento"
-        SUBSTITUIDO = "substituido", "Substituído por outro documento"
-        CLIENTE = "cliente", "Pedido do cliente"
-        FORA_ESCOPO = "fora_escopo", "Fora do escopo"
-        INVIAVEL = "inviavel", "Inviável (constatado em campo)"
-        SOLUCAO = "solucao", "Mudança de solução de projeto"
-        DUPLICADO = "duplicado", "Duplicado / código em dobro"
-        OUTRO = "outro", "Outro"
-
     contrato = models.ForeignKey(
         Contrato,
         verbose_name="contrato",
@@ -44,13 +33,18 @@ class Documento(models.Model):
     )
     motivo_cancelamento = models.CharField(
         "motivo do cancelamento",
-        max_length=20,
-        choices=MotivoCancelamento.choices,
+        max_length=50,
         blank=True,
         default="",
     )
     motivo_cancelamento_obs = models.CharField(
         "observação do cancelamento",
+        max_length=1000,
+        blank=True,
+        default="",
+    )
+    observacao_reativacao = models.CharField(
+        "observação da reativação",
         max_length=1000,
         blank=True,
         default="",

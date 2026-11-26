@@ -26,6 +26,7 @@ ACOES = (
     ("alterou", "Alterou"),
     ("excluiu", "Excluiu"),
     ("cancelou", "Cancelou"),
+    ("reativou", "Reativou"),
     ("importou", "Importou"),
     ("reprocessou", "Reprocessou"),
 )
@@ -43,11 +44,14 @@ def carregar_eventos(contrato):
     )
     documentos_por_id = {}
     cancelamentos_sistema = {}
+    reativacoes_sistema = {}
     for registro in sorted(historicos_documentos, key=_chave_historico):
         documentos_por_id[registro.id] = registro.identificador_base
         motivo = registro.history_change_reason or ""
         if motivo.startswith("cancelamento_sistema:"):
             cancelamentos_sistema.setdefault(motivo, []).append(registro)
+        elif motivo.startswith("reativacao_sistema:"):
+            reativacoes_sistema.setdefault(motivo, []).append(registro)
         else:
             eventos.append(
                 _evento_historico(
@@ -172,6 +176,10 @@ def carregar_eventos(contrato):
         _evento_cancelamento_sistema(registros, contrato)
         for registros in cancelamentos_sistema.values()
     )
+    eventos.extend(
+        _evento_reativacao_sistema(registros, contrato)
+        for registros in reativacoes_sistema.values()
+    )
     eventos.extend(_eventos_importacao(contrato))
     return sorted(
         (evento for evento in eventos if not evento.get("agrupar_no_evento")),
@@ -283,10 +291,7 @@ def _evento_cancelamento_sistema(registros, contrato):
     ultimo = registros[-1]
     ator = _ator_historico(ultimo)
     nome = _nome_usuario(ator)
-    motivo = dict(Documento.MotivoCancelamento.choices).get(
-        ultimo.motivo_cancelamento,
-        "Não informado",
-    )
+    motivo = _rotulo_motivo_cancelamento(contrato, ultimo.motivo_cancelamento)
     detalhes = [
         {"campo": "Quantidade", "antes": "", "depois": len(registros)},
         {"campo": "Motivo", "antes": "", "depois": motivo},
@@ -317,6 +322,61 @@ def _evento_cancelamento_sistema(registros, contrato):
         "link_recusadas": False,
         "agrupar_no_evento": False,
     }
+
+
+def _evento_reativacao_sistema(registros, contrato):
+    registros = sorted(registros, key=_chave_historico)
+    documento_ids = {registro.id for registro in registros}
+    codigos = {registro.identificador_base for registro in registros}
+    codigos.update(
+        CodigoDocumento.objects.filter(documento_id__in=documento_ids).values_list("codigo", flat=True)
+    )
+    codigos = sorted(codigo for codigo in codigos if codigo)
+    ultimo = registros[-1]
+    ator = _ator_historico(ultimo)
+    nome = _nome_usuario(ator)
+    observacao = ultimo.observacao_reativacao
+    detalhes = [
+        {"campo": "Quantidade", "antes": "", "depois": len(registros)},
+        {"campo": "Códigos", "antes": "", "depois": ", ".join(codigos)},
+    ]
+    if observacao:
+        detalhes.append({"campo": "Motivo da reativação", "antes": "", "depois": observacao})
+    return {
+        "chave": f"reativacao-sistema-{ultimo.history_change_reason.partition(':')[2]}",
+        "data_hora": _localizar(max(registro.history_date for registro in registros)),
+        "acao": "reativou",
+        "acao_rotulo": "Reativou",
+        "entidade": "Reativação de documentos",
+        "tipo_importacao": "",
+        "codigo": ", ".join(codigos),
+        "codigos": codigos,
+        "usuario": ator,
+        "usuario_id": getattr(ator, "pk", None),
+        "usuario_nome": nome,
+        "resumo": f"Reativado por {nome}" + (f" · {observacao}" if observacao else ""),
+        "detalhes": detalhes,
+        "validas": len(registros),
+        "recusadas": None,
+        "documento_id": None,
+        "contrato_id": contrato.pk,
+        "link_recusadas": False,
+        "agrupar_no_evento": False,
+    }
+
+
+def _rotulo_motivo_cancelamento(contrato, identificador):
+    perfil_modelo = PerfilContrato.perfil_vigente(contrato, timezone.localdate())
+    if perfil_modelo is None:
+        return identificador or "Não informado"
+    try:
+        perfil = perfil_de_dict(perfil_modelo.definicao)
+    except ErroPerfil:
+        return identificador or "Não informado"
+    return next(
+        (motivo.rotulo for motivo in perfil.cancelamento.motivos if motivo.id == identificador),
+        identificador or "Não informado",
+    )
 
 
 def _codigos_cancelados_pw(registro):

@@ -11,8 +11,10 @@ from .servicos import (
     atualizar_motivo_reabertura,
     cancelar_documentos,
     carregar_confirmacao_cancelamento,
+    carregar_confirmacao_reativacao,
     carregar_lista_documentos,
     carregar_pasta_documento,
+    reativar_documentos,
 )
 
 
@@ -109,6 +111,72 @@ class CancelarDocumentosView(LoginRequiredMixin, View):
                 "lista_query": dados.get("lista_query", ""),
                 "motivo_cancelamento_selecionado": dados.get("motivo_cancelamento", ""),
                 "observacao_cancelamento": dados.get("motivo_cancelamento_obs", ""),
+                "url_lista": _url_lista(contexto["contrato"].pk, dados.get("lista_query", "")),
+            }
+        )
+        return render(request, self.template_name, contexto, status=status)
+
+
+class ReativarDocumentosView(LoginRequiredMixin, View):
+    template_name = "documentos/lista.html"
+
+    def get(self, request, contrato_id):
+        try:
+            contexto = carregar_confirmacao_reativacao(
+                request.user,
+                contrato_id,
+                request.GET.getlist("documento"),
+            )
+        except PermissionDenied:
+            raise
+        except (DocumentosIndisponiveis, ValueError) as erro:
+            messages.error(request, str(erro))
+            return redirect(_url_lista(contrato_id, request.GET.get("lista_query", "")))
+        return self._render_confirmacao(request, contexto, request.GET)
+
+    def post(self, request, contrato_id):
+        ids = request.POST.getlist("documento")
+        try:
+            contexto = carregar_confirmacao_reativacao(request.user, contrato_id, ids)
+        except PermissionDenied:
+            raise
+        except (DocumentosIndisponiveis, ValueError) as erro:
+            messages.error(request, str(erro))
+            return redirect(_url_lista(contrato_id, request.POST.get("lista_query", "")))
+
+        try:
+            resultado = reativar_documentos(
+                request.user,
+                contexto["contrato"],
+                ids,
+                request.POST.get("observacao_reativacao", ""),
+            )
+        except PermissionDenied:
+            raise
+        except (DocumentosIndisponiveis, ValueError) as erro:
+            contexto["erro_reativacao"] = str(erro)
+            return self._render_confirmacao(request, contexto, request.POST, status=400)
+
+        if resultado["quantidade_reativada"]:
+            messages.success(
+                request,
+                f'{resultado["quantidade_reativada"]} documento(s) reativado(s).',
+            )
+        else:
+            messages.info(request, "Nenhum documento foi reativado.")
+        if resultado["ignorados"]:
+            avisos = "; ".join(
+                f'{item["codigo"]}: {item["motivo"]}' for item in resultado["ignorados"]
+            )
+            messages.warning(request, f"Documentos ignorados: {avisos}.")
+        return redirect(_url_lista(contrato_id, request.POST.get("lista_query", "")))
+
+    def _render_confirmacao(self, request, contexto, dados, *, status=200):
+        contexto.update(
+            {
+                "confirmar_reativacao": True,
+                "lista_query": dados.get("lista_query", ""),
+                "observacao_reativacao": dados.get("observacao_reativacao", ""),
                 "url_lista": _url_lista(contexto["contrato"].pk, dados.get("lista_query", "")),
             }
         )

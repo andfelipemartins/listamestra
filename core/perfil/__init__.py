@@ -2,11 +2,13 @@
 
 from .modelo import (
     ErroPerfil,
+    CancelamentoPerfil,
     EstruturaCodigo,
     ExcecaoPrazo,
     FeriadosPerfil,
     Grupo,
     IndicadorAprovacao,
+    MotivoCancelamentoPerfil,
     PacotePainel,
     PainelPerfil,
     PerfilContrato,
@@ -44,11 +46,13 @@ from .painel import resolver_situacao_oculta
 
 __all__ = [
     "ErroPerfil",
+    "CancelamentoPerfil",
     "EstruturaCodigo",
     "ExcecaoPrazo",
     "FeriadosPerfil",
     "Grupo",
     "IndicadorAprovacao",
+    "MotivoCancelamentoPerfil",
     "PacotePainel",
     "PainelPerfil",
     "PerfilContrato",

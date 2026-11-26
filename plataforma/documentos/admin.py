@@ -56,7 +56,7 @@ class DocumentoAdmin(admin.ModelAdmin):
     )
     search_fields = ("identificador_base", "titulo", "codigos__codigo", "contrato__nome")
     inlines = (CodigoDocumentoInline, EmissaoInline)
-    readonly_fields = ("criado_em", "cancelado_por", "cancelado_em")
+    readonly_fields = ("criado_em", "cancelado_por", "cancelado_em", "observacao_reativacao")
     fields = (
         "contrato",
         "identificador_base",
@@ -71,6 +71,7 @@ class DocumentoAdmin(admin.ModelAdmin):
         "cancelado_por",
         "motivo_cancelamento",
         "motivo_cancelamento_obs",
+        "observacao_reativacao",
         "criado_em",
     )
 

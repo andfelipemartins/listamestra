@@ -75,6 +75,7 @@ def carregar_lista_documentos(
     for documento in documentos:
         codigo, valores = _codigo_e_valores(documento, perfil, perfil_modelo.pk)
         emissao, analise, situacao_atual, grupo = _situacao_atual(documento, perfil)
+        _, _, _, grupo_pw = _situacao_sem_cancelamento_sistema(documento, perfil)
         categoria_obj = classificar_categoria(perfil, valores)
         categoria_id = categoria_obj.id if categoria_obj else ""
         categoria_rotulo = categoria_obj.rotulo if categoria_obj else "—"
@@ -94,6 +95,9 @@ def carregar_lista_documentos(
                     "Cancelado"
                     if documento.cancelado_em or grupo.id.casefold() == "cancelado"
                     else grupo.rotulo
+                ),
+                "cancelado_sistema": bool(
+                    documento.cancelado_em and grupo_pw.id.casefold() != "cancelado"
                 ),
                 "ultima_emissao": _rotulo_ultima_emissao(documento, perfil),
                 "ultima_movimentacao": ultima_movimentacao.get(documento.pk),
@@ -206,7 +210,7 @@ def carregar_confirmacao_cancelamento(usuario, contrato_id, ids_documentos):
             for documento in documentos
         ],
         "ids_cancelamento": ids,
-        "motivos_cancelamento": Documento.MotivoCancelamento.choices,
+        "motivos_cancelamento": perfil.cancelamento.motivos,
         "pode_cancelar_documentos": True,
     }
 
@@ -218,15 +222,18 @@ def cancelar_documentos(usuario, contrato, ids_documentos, motivo, observacao=""
     ids = _normalizar_ids_documentos(ids_documentos)
     motivo = (motivo or "").strip()
     observacao = (observacao or "").strip()
-    motivos_validos = {valor for valor, _ in Documento.MotivoCancelamento.choices}
-    if motivo not in motivos_validos:
+    perfil_modelo, perfil = _perfil_vigente(contrato)
+    motivo_configurado = next(
+        (item for item in perfil.cancelamento.motivos if item.id == motivo),
+        None,
+    )
+    if motivo_configurado is None:
         raise ValueError("Selecione um motivo da lista.")
-    if motivo == Documento.MotivoCancelamento.OUTRO and not observacao:
-        raise ValueError("Informe a observação quando o motivo for Outro.")
+    if motivo_configurado.exige_observacao and not observacao:
+        raise ValueError("Informe a observação para este motivo.")
     if len(observacao) > 1000:
         raise ValueError("A observação deve ter no máximo 1000 caracteres.")
 
-    perfil_modelo, perfil = _perfil_vigente(contrato)
     lote = uuid4().hex
     agora = timezone.now()
     cancelados = []
@@ -286,6 +293,115 @@ def cancelar_documentos(usuario, contrato, ids_documentos, motivo, observacao=""
     return {
         "quantidade_cancelada": len(cancelados),
         "codigos_cancelados": tuple(cancelados),
+        "ignorados": tuple(ignorados),
+    }
+
+
+def carregar_confirmacao_reativacao(usuario, contrato_id, ids_documentos):
+    contrato = resolver_contrato(usuario, contrato_id)
+    if contrato is None:
+        raise PermissionDenied("Você não participa deste contrato.")
+    if not pode_cancelar_documentos(usuario, contrato):
+        raise PermissionDenied("Somente o administrador do contrato pode reativar documentos.")
+
+    ids = _normalizar_ids_documentos(ids_documentos)
+    perfil_modelo, perfil = _perfil_vigente(contrato)
+    documentos = list(
+        _documentos_com_historico(contrato, perfil_modelo)
+        .filter(pk__in=ids)
+        .order_by("identificador_base", "pk")
+    )
+    if len(documentos) != len(ids):
+        raise ValueError("Um ou mais documentos não pertencem a este contrato.")
+
+    itens = []
+    for documento in documentos:
+        _, _, _, grupo_pw = _situacao_sem_cancelamento_sistema(documento, perfil)
+        cancelado_pw = grupo_pw.id.casefold() == "cancelado"
+        reativavel = bool(documento.cancelado_em and not cancelado_pw)
+        if cancelado_pw:
+            aviso = "Só volta quando o PW mudar."
+        elif not documento.cancelado_em:
+            aviso = "Não está cancelado pelo sistema."
+        else:
+            aviso = ""
+        itens.append(
+            {
+                "documento": documento,
+                "codigo": _codigo_e_valores(documento, perfil, perfil_modelo.pk)[0],
+                "reativavel": reativavel,
+                "aviso": aviso,
+            }
+        )
+    return {
+        "contrato": contrato,
+        "documentos_reativacao": itens,
+        "ids_reativacao": ids,
+        "quantidade_reativavel": sum(item["reativavel"] for item in itens),
+        "pode_cancelar_documentos": True,
+    }
+
+
+def reativar_documentos(usuario, contrato, ids_documentos, observacao):
+    if not pode_cancelar_documentos(usuario, contrato):
+        raise PermissionDenied("Somente o administrador do contrato pode reativar documentos.")
+
+    ids = _normalizar_ids_documentos(ids_documentos)
+    observacao = (observacao or "").strip()
+    if not observacao:
+        raise ValueError("Informe o motivo da reativação.")
+    if len(observacao) > 1000:
+        raise ValueError("A observação deve ter no máximo 1000 caracteres.")
+
+    perfil_modelo, perfil = _perfil_vigente(contrato)
+    lote = uuid4().hex
+    reativados = []
+    ignorados = []
+    with transaction.atomic():
+        documentos = list(
+            _documentos_com_historico(contrato, perfil_modelo)
+            .select_for_update()
+            .filter(pk__in=ids)
+            .order_by("identificador_base", "pk")
+        )
+        if len(documentos) != len(ids):
+            raise ValueError("Um ou mais documentos não pertencem a este contrato.")
+
+        for documento in documentos:
+            codigo = _codigo_e_valores(documento, perfil, perfil_modelo.pk)[0]
+            _, _, _, grupo_pw = _situacao_sem_cancelamento_sistema(documento, perfil)
+            if grupo_pw.id.casefold() == "cancelado":
+                ignorados.append(
+                    {"codigo": codigo, "motivo": "cancelado pelo PW; só volta quando o PW mudar"}
+                )
+                continue
+            if not documento.cancelado_em:
+                ignorados.append(
+                    {"codigo": codigo, "motivo": "não cancelado pelo sistema"}
+                )
+                continue
+
+            documento.cancelado_em = None
+            documento.cancelado_por = None
+            documento.motivo_cancelamento = ""
+            documento.motivo_cancelamento_obs = ""
+            documento.observacao_reativacao = observacao
+            documento._history_user = usuario
+            documento._change_reason = f"reativacao_sistema:{lote}"
+            documento.save(
+                update_fields=(
+                    "cancelado_em",
+                    "cancelado_por",
+                    "motivo_cancelamento",
+                    "motivo_cancelamento_obs",
+                    "observacao_reativacao",
+                )
+            )
+            reativados.append(codigo)
+
+    return {
+        "quantidade_reativada": len(reativados),
+        "codigos_reativados": tuple(reativados),
         "ignorados": tuple(ignorados),
     }
 
@@ -365,13 +481,19 @@ def carregar_pasta_documento(usuario, contrato_id, documento_id, *, hoje=None):
             {
                 "em": documento.cancelado_em,
                 "por": _nome_usuario(documento.cancelado_por),
-                "motivo": documento.get_motivo_cancelamento_display(),
+                "motivo": _rotulo_motivo_cancelamento(perfil, documento.motivo_cancelamento),
                 "observacao": documento.motivo_cancelamento_obs,
             }
             if documento.cancelado_em
             else None
         ),
         "pode_cancelar_documentos": pode_cancelar_documentos(usuario, contrato),
+        "pode_reativar_documentos": (
+            pode_cancelar_documentos(usuario, contrato)
+            and bool(documento.cancelado_em)
+            and _situacao_sem_cancelamento_sistema(documento, perfil)[3].id.casefold()
+            != "cancelado"
+        ),
         "previsao": previsao,
         "linha_tempo": linha_tempo,
         "motivos_reabertura": [
@@ -612,6 +734,22 @@ def _situacao_atual(documento, perfil):
     situacao = analise.situacao if analise else perfil.analise.inicial
     situacao, _ = _aplicar_cancelamento_sistema(documento, perfil, situacao)
     return emissao, analise, situacao, classificar(perfil, situacao)
+
+
+def _situacao_sem_cancelamento_sistema(documento, perfil):
+    cancelado_em = documento.cancelado_em
+    documento.cancelado_em = None
+    try:
+        return _situacao_atual(documento, perfil)
+    finally:
+        documento.cancelado_em = cancelado_em
+
+
+def _rotulo_motivo_cancelamento(perfil, identificador):
+    return next(
+        (motivo.rotulo for motivo in perfil.cancelamento.motivos if motivo.id == identificador),
+        identificador,
+    )
 
 
 def _rotulo_ultima_emissao(documento, perfil):

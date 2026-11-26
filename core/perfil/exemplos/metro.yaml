@@ -374,6 +374,17 @@ painel:
       rotulo: Reaberturas
       max_reaberturas: 2
       max_revisoes_por_reabertura: 1
+cancelamento:
+  motivos:
+    - {id: desmembrado, rotulo: Desmembrado em outros documentos}
+    - {id: incorporado, rotulo: Incorporado a outro documento}
+    - {id: substituido, rotulo: Substituído por outro documento}
+    - {id: cliente, rotulo: Pedido do cliente}
+    - {id: fora_escopo, rotulo: Fora do escopo}
+    - {id: inviavel, rotulo: Inviável (constatado em campo)}
+    - {id: solucao, rotulo: Mudança de solução de projeto}
+    - {id: duplicado, rotulo: Duplicado / código em dobro}
+    - {id: outro, rotulo: Outro, exige_observacao: true}
 prazos:
   # D-064: o acervo usa a região configurada para o contrato.
   feriados: {nacionais: true, regiao: {uf: SP, municipio: São Paulo}, extras: []}

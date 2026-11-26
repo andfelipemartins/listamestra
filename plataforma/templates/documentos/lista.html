@@ -17,6 +17,7 @@
   .documentos-paginas { display: flex; flex-wrap: wrap; gap: 5px; }
   .documentos-paginas a, .documentos-paginas span { min-width: 34px; padding: 7px 9px; border: 1px solid var(--border); border-radius: 6px; text-align: center; }
   .documentos-paginas .atual { background: var(--selection-bg); color: var(--selection-text); font-weight: 700; }
+  #reativar-selecionados[hidden] { display: none; }
   @media (max-width: 767px) { .documentos-filtros-topo { grid-template-columns: 1fr; } }
 </style>
 {% endblock %}
@@ -47,10 +48,10 @@
       <label for="motivo-cancelamento">Motivo
         <select id="motivo-cancelamento" name="motivo_cancelamento" required>
           <option value="">Selecione</option>
-          {% for valor, rotulo in motivos_cancelamento %}<option value="{{ valor }}" {% if motivo_cancelamento_selecionado == valor %}selected{% endif %}>{{ rotulo }}</option>{% endfor %}
+          {% for motivo in motivos_cancelamento %}<option value="{{ motivo.id }}" data-exige-observacao="{{ motivo.exige_observacao|yesno:'true,false' }}" {% if motivo_cancelamento_selecionado == motivo.id %}selected{% endif %}>{{ motivo.rotulo }}</option>{% endfor %}
         </select>
       </label>
-      <label for="motivo-cancelamento-obs">Observação <span>(obrigatória para Outro; opcional nos demais motivos)</span>
+      <label for="motivo-cancelamento-obs">Observação <span>(obrigatória quando o motivo exigir)</span>
         <input id="motivo-cancelamento-obs" name="motivo_cancelamento_obs" maxlength="1000" value="{{ observacao_cancelamento }}">
       </label>
       <div class="painel-filtros-acoes"><button class="button button-primary" type="submit">Confirmar cancelamento</button><a class="button button-quiet" href="{{ url_lista }}">Voltar</a></div>
@@ -60,11 +61,29 @@
     const motivoCancelamento = document.getElementById("motivo-cancelamento");
     const observacaoCancelamento = document.getElementById("motivo-cancelamento-obs");
     const atualizarObservacaoCancelamento = () => {
-      observacaoCancelamento.required = motivoCancelamento.value === "outro";
+      observacaoCancelamento.required = motivoCancelamento.selectedOptions[0]?.dataset.exigeObservacao === "true";
     };
     motivoCancelamento.addEventListener("change", atualizarObservacaoCancelamento);
     atualizarObservacaoCancelamento();
   </script>
+{% elif confirmar_reativacao %}
+  <section class="panel documentos-confirmacao" aria-labelledby="confirmar-reativacao-titulo">
+    <div class="panel-heading"><div><h2 id="confirmar-reativacao-titulo">Confirmar reativação</h2><p>{{ contrato.codigo_interno }} · {{ contrato.nome }}</p></div></div>
+    {% if erro_reativacao %}<div class="notice notice-error">{{ erro_reativacao }}</div>{% endif %}
+    {% if quantidade_reativavel == 1 %}<p><strong>Este documento volta a contar no 100%.</strong></p>{% else %}<p><strong>{{ quantidade_reativavel }} documentos reativáveis voltarão a contar no 100%.</strong></p>{% endif %}
+    <ul class="documentos-confirmacao-lista">
+      {% for item in documentos_reativacao %}<li><strong>{{ item.codigo }}</strong>{% if item.documento.titulo %} · {{ item.documento.titulo }}{% endif %}{% if item.aviso %}<br><span>{{ item.aviso }}</span>{% endif %}</li>{% endfor %}
+    </ul>
+    <form method="post" action="{% url 'documentos_reativar' contrato.pk %}" class="documentos-confirmacao-campos">
+      {% csrf_token %}
+      {% for id in ids_reativacao %}<input type="hidden" name="documento" value="{{ id }}">{% endfor %}
+      <input type="hidden" name="lista_query" value="{{ lista_query }}">
+      <label for="observacao-reativacao">Motivo da reativação (obrigatório)
+        <textarea id="observacao-reativacao" name="observacao_reativacao" rows="3" maxlength="1000" required>{{ observacao_reativacao }}</textarea>
+      </label>
+      <div class="painel-filtros-acoes"><button class="button button-primary" type="submit">Confirmar reativação</button><a class="button button-quiet" href="{{ url_lista }}">Voltar</a></div>
+    </form>
+  </section>
 {% else %}
   <section class="panel" aria-labelledby="filtros-documentos">
     <div class="panel-heading"><div><h2 id="filtros-documentos">{{ contrato.codigo_interno }} · {{ contrato.nome }}</h2><p>Busque por código ou título e refine pelas caixas configuradas no perfil.</p></div></div>
@@ -116,6 +135,7 @@
     <div class="documentos-selecao">
       <label><input id="selecionar-todos-documentos" type="checkbox"> Selecionar todos desta página</label>
       <button class="button button-quiet" type="submit" form="form-cancelar-selecionados">Cancelar selecionados</button>
+      <button id="reativar-selecionados" class="button button-quiet" type="submit" form="form-cancelar-selecionados" formaction="{% url 'documentos_reativar' contrato.pk %}" hidden>Reativar selecionados</button>
     </div>
     {% endif %}
     <div class="table-wrap">
@@ -124,7 +144,7 @@
         <tbody>
           {% for linha in pagina.object_list %}
           <tr>
-            {% if pode_cancelar_documentos %}<td><input type="checkbox" name="documento" value="{{ linha.documento.pk }}" form="form-cancelar-selecionados" aria-label="Selecionar {{ linha.codigo }}"></td>{% endif %}
+            {% if pode_cancelar_documentos %}<td><input type="checkbox" name="documento" value="{{ linha.documento.pk }}" data-cancelado-sistema="{{ linha.cancelado_sistema|yesno:'true,false' }}" form="form-cancelar-selecionados" aria-label="Selecionar {{ linha.codigo }}"></td>{% endif %}
             <td><a href="{% url 'documento_pasta' contrato.pk linha.documento.pk %}"><strong>{{ linha.codigo }}</strong></a></td>
             <td>{{ linha.titulo }}</td>
             <td>{{ linha.categoria }}</td>
@@ -149,12 +169,19 @@
   </section>
   {% if pode_cancelar_documentos %}
   <script>
-    const selecionarTodosDocumentos = document.getElementById("selecionar-todos-documentos");
-    selecionarTodosDocumentos.addEventListener("change", () => {
-      document.querySelectorAll('input[name="documento"][form="form-cancelar-selecionados"]').forEach((caixa) => {
-        caixa.checked = selecionarTodosDocumentos.checked;
-      });
-    });
+     const selecionarTodosDocumentos = document.getElementById("selecionar-todos-documentos");
+     const reativarSelecionados = document.getElementById("reativar-selecionados");
+     const caixasDocumentos = [...document.querySelectorAll('input[name="documento"][form="form-cancelar-selecionados"]')];
+     const atualizarBotaoReativacao = () => {
+       reativarSelecionados.hidden = !caixasDocumentos.some((caixa) => caixa.checked && caixa.dataset.canceladoSistema === "true");
+     };
+     selecionarTodosDocumentos.addEventListener("change", () => {
+       caixasDocumentos.forEach((caixa) => {
+         caixa.checked = selecionarTodosDocumentos.checked;
+       });
+       atualizarBotaoReativacao();
+     });
+     caixasDocumentos.forEach((caixa) => caixa.addEventListener("change", atualizarBotaoReativacao));
   </script>
   {% endif %}
 {% endif %}

@@ -13,8 +13,10 @@ from core.perfil import perfil_de_dict
 from documentos.models import Analise, Documento, Emissao
 from documentos.servicos import (
     cancelar_documentos,
+    carregar_confirmacao_cancelamento,
     carregar_lista_documentos,
     carregar_pasta_documento,
+    reativar_documentos,
 )
 from importacoes.models import ImportacaoSituacao, IndiceDocumentos, ItemPrevisto
 from painel.servicos import carregar_painel
@@ -195,6 +197,178 @@ def test_outro_exige_observacao_e_motivo_deve_ser_da_lista(
 
 
 @pytest.mark.django_db
+def test_motivo_e_rotulo_vem_do_perfil_e_observacao_e_exigida_quando_configurado(
+    contrato, perfil_modelo, admin_contrato
+):
+    perfil_modelo.definicao["cancelamento"] = {
+        "motivos": [
+            {"id": "restricao_local", "rotulo": "Restrição local", "exige_observacao": True},
+            {"id": "decisao_cliente", "rotulo": "Decisão do cliente"},
+        ]
+    }
+    perfil_modelo.save(update_fields=("definicao",))
+    documento = _documento(contrato, 1020)
+
+    confirmacao = carregar_confirmacao_cancelamento(
+        admin_contrato, contrato.pk, [documento.pk]
+    )
+    assert [(item.id, item.rotulo) for item in confirmacao["motivos_cancelamento"]] == [
+        ("restricao_local", "Restrição local"),
+        ("decisao_cliente", "Decisão do cliente"),
+    ]
+    with pytest.raises(ValueError, match="observação"):
+        cancelar_documentos(admin_contrato, contrato, [documento.pk], "restricao_local")
+
+    cancelar_documentos(
+        admin_contrato,
+        contrato,
+        [documento.pk],
+        "restricao_local",
+        "A faixa não permite a implantação.",
+    )
+    pasta = carregar_pasta_documento(admin_contrato, contrato.pk, documento.pk)
+
+    assert pasta["cancelamento"]["motivo"] == "Restrição local"
+    evento = next(
+        item for item in carregar_eventos(contrato) if item["acao"] == "cancelou"
+    )
+    assert evento["resumo"] == "Cancelado por Ana Administradora · Restrição local"
+
+    perfil_modelo.definicao["cancelamento"] = {
+        "motivos": [{"id": "decisao_cliente", "rotulo": "Decisão do cliente"}]
+    }
+    perfil_modelo.save(update_fields=("definicao",))
+    pasta_com_perfil_atualizado = carregar_pasta_documento(
+        admin_contrato, contrato.pk, documento.pk
+    )
+    assert pasta_com_perfil_atualizado["cancelamento"]["motivo"] == "restricao_local"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("papel", [Usuario.Perfil.EQUIPE, Usuario.Perfil.CHEFIA])
+def test_equipe_e_visualizador_nao_podem_reativar(
+    papel, contrato, perfil_modelo, django_user_model
+):
+    usuario = django_user_model.objects.create_user(username=f"{papel}-reativacao", password="senha")
+    Participacao.objects.create(usuario=usuario, contrato=contrato, papel=papel, ativo=True)
+
+    with pytest.raises(PermissionDenied):
+        reativar_documentos(usuario, contrato, [1], "Desfazer cancelamento incorreto.")
+
+
+@pytest.mark.django_db
+def test_reativacao_exige_observacao(contrato, perfil_modelo, admin_contrato):
+    documento = _documento(contrato, 1021)
+    cancelar_documentos(admin_contrato, contrato, [documento.pk], "cliente")
+
+    with pytest.raises(ValueError, match="motivo da reativação"):
+        reativar_documentos(admin_contrato, contrato, [documento.pk], "  ")
+
+
+@pytest.mark.django_db
+def test_pw_e_documento_ativo_sao_ignorados_na_reativacao(
+    client, contrato, perfil_modelo, admin_contrato
+):
+    cancelado_pw = _documento(contrato, 1022, situacao="Cancelado")
+    ativo = _documento(contrato, 1023)
+
+    resultado = reativar_documentos(
+        admin_contrato,
+        contrato,
+        [cancelado_pw.pk, ativo.pk],
+        "Revisão do controle.",
+    )
+
+    assert resultado["quantidade_reativada"] == 0
+    avisos = {item["codigo"]: item["motivo"] for item in resultado["ignorados"]}
+    assert avisos[cancelado_pw.identificador_base] == "cancelado pelo PW; só volta quando o PW mudar"
+    assert avisos[ativo.identificador_base] == "não cancelado pelo sistema"
+    cancelado_pw.refresh_from_db()
+    assert cancelado_pw.cancelado_em is None
+    client.force_login(admin_contrato)
+    pasta_pw = client.get(
+        reverse("documento_pasta", args=(contrato.pk, cancelado_pw.pk))
+    )
+    assert "Reativar documento" not in pasta_pw.content.decode()
+
+
+@pytest.mark.django_db
+def test_reativacao_em_lote_volta_ao_painel_e_agrupa_historico_e_atividade(
+    contrato, perfil_modelo, admin_contrato
+):
+    indice = _indice(contrato)
+    aprovado = _documento(contrato, 1024, situacao="Aprovado", indice=indice)
+    documentos = [_documento(contrato, 1025, indice=indice), _documento(contrato, 1026, indice=indice)]
+    cancelar_documentos(
+        admin_contrato,
+        contrato,
+        [documento.pk for documento in documentos],
+        "cliente",
+    )
+
+    assert carregar_painel(contrato)["resumo"].total_previsto == 1
+    resultado = reativar_documentos(
+        admin_contrato,
+        contrato,
+        [documento.pk for documento in documentos],
+        "Cancelados por engano durante a revisão do ID.",
+    )
+
+    assert resultado["quantidade_reativada"] == 2
+    assert carregar_painel(contrato)["resumo"].total_previsto == 3
+    assert aprovado.pk not in [documento.pk for documento in documentos]
+    for documento in documentos:
+        documento.refresh_from_db()
+        assert documento.cancelado_em is None
+        assert documento.cancelado_por is None
+        assert documento.motivo_cancelamento == ""
+        assert documento.motivo_cancelamento_obs == ""
+        assert documento.observacao_reativacao == "Cancelados por engano durante a revisão do ID."
+        historico = documento.history.latest()
+        assert historico.history_user == admin_contrato
+        assert historico.history_change_reason.startswith("reativacao_sistema:")
+        assert historico.observacao_reativacao == documento.observacao_reativacao
+
+    eventos = [evento for evento in carregar_eventos(contrato) if evento["acao"] == "reativou"]
+    assert len(eventos) == 1
+    assert eventos[0]["resumo"] == (
+        "Reativado por Ana Administradora · Cancelados por engano durante a revisão do ID."
+    )
+    assert all(documento.identificador_base in eventos[0]["codigo"] for documento in documentos)
+    pasta = carregar_pasta_documento(admin_contrato, contrato.pk, documentos[0].pk)
+    assert any(eventos[0]["resumo"] in item["resumo"] for item in pasta["atividades"])
+
+
+@pytest.mark.django_db
+def test_tela_confirma_reativacao_com_motivo_e_conclui(
+    client, contrato, perfil_modelo, admin_contrato
+):
+    documento = _documento(contrato, 1027)
+    cancelar_documentos(admin_contrato, contrato, [documento.pk], "cliente")
+    client.force_login(admin_contrato)
+    url = reverse("documentos_reativar", args=(contrato.pk,))
+
+    confirmacao = client.get(url, {"documento": documento.pk, "lista_query": f"contrato={contrato.pk}"})
+
+    assert confirmacao.status_code == 200
+    assert "Este documento volta a contar no 100%." in confirmacao.content.decode()
+    resposta = client.post(
+        url,
+        {
+            "documento": documento.pk,
+            "lista_query": f"contrato={contrato.pk}",
+            "observacao_reativacao": "Cancelado por engano.",
+        },
+        follow=True,
+    )
+
+    assert resposta.status_code == 200
+    assert "1 documento(s) reativado(s)." in resposta.content.decode()
+    documento.refresh_from_db()
+    assert documento.cancelado_em is None
+
+
+@pytest.mark.django_db
 def test_cancelados_existentes_sao_ignorados_com_aviso_no_retorno(
     client, contrato, perfil_modelo, admin_contrato
 ):
@@ -265,6 +439,7 @@ def test_lista_mostra_cancelado_e_controles_somente_para_admin(
     resposta_admin = client.get(reverse("documentos_lista"), {"contrato": contrato.pk})
     assert resposta_admin.status_code == 200
     assert "Cancelar selecionados" in resposta_admin.content.decode()
+    assert "Reativar selecionados" in resposta_admin.content.decode()
     assert 'name="documento"' in resposta_admin.content.decode()
     assert "Cancelado" in resposta_admin.content.decode()
 
@@ -286,6 +461,7 @@ def test_pasta_exibe_faixa_e_botao_de_cancelamento(
     antes = client.get(url)
     assert antes.status_code == 200
     assert "Cancelar documento" in antes.content.decode()
+    assert "Reativar documento" not in antes.content.decode()
 
     cancelar_documentos(
         admin_contrato,
@@ -302,6 +478,7 @@ def test_pasta_exibe_faixa_e_botao_de_cancelamento(
     assert "Ana Administradora" in html
     assert "Outro" in html
     assert "Documento substituído por pacote consolidado" in html
+    assert "Reativar documento" in html
 
 
 @pytest.mark.django_db
