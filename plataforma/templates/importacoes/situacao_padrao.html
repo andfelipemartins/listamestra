@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}Importar situação por planilha padrão{% endblock %}
+
+{% block content %}
+<section class="page-heading">
+  <div>
+    <span class="eyebrow">Importações</span>
+    <h1>Importar situação por planilha padrão</h1>
+    <p>Use o mesmo modelo para contratos sem PW ou para dados de outros GEDs. A prévia mostra as linhas que podem ser aplicadas.</p>
+  </div>
+</section>
+
+{% if messages %}
+  {% for message in messages %}<p class="notice notice-{{ message.tags }}">{{ message }}</p>{% endfor %}
+{% endif %}
+
+<section class="panel">
+  <div class="panel-heading">
+    <div><h2>Arquivo e contrato</h2><p>O código é obrigatório. As outras colunas são opcionais.</p></div>
+    <a class="button" href="{% url 'modelo_situacao_padrao' %}">Baixar modelo</a>
+  </div>
+  <form method="post" enctype="multipart/form-data" hx-post="{% url 'importar_situacao_padrao' %}" hx-target="#resultado-previa-padrao" hx-swap="innerHTML" hx-encoding="multipart/form-data">
+    {% csrf_token %}
+    <input type="hidden" name="acao" value="prever">
+    {{ form.non_field_errors }}
+    {% for field in form %}
+      <p>{{ field.label_tag }} {{ field }} {{ field.errors }}{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}</p>
+    {% endfor %}
+    <button class="button button-primary" type="submit">Gerar prévia</button>
+  </form>
+</section>
+
+<div id="resultado-previa-padrao">
+  {% include "importacoes/_resultado_situacao_padrao.html" %}
+</div>
+
+{% if importacoes %}
+<section class="panel">
+  <h2>Planilhas aplicadas recentemente</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Contrato</th><th>Data</th><th>Arquivo</th><th>Documentos</th><th>Linhas inválidas</th><th>Importado por</th></tr></thead>
+      <tbody>
+        {% for importacao in importacoes %}
+        <tr>
+          <td>{{ importacao.contrato.nome }}</td>
+          <td>{{ importacao.data_extracao|date:"d/m/Y" }}</td>
+          <td>{{ importacao.arquivo_nome }}</td>
+          <td>{{ importacao.documentos }}</td>
+          <td>{{ importacao.linhas_invalidas }}</td>
+          <td>{{ importacao.importado_por|default:"—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

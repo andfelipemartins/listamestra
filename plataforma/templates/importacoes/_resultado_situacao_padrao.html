@@ -1,0 +1,46 @@
+{% if erro %}<p class="notice notice-error">{{ erro }}</p>{% endif %}
+{% if form.errors %}<div class="notice notice-error">{{ form.errors }}</div>{% endif %}
+{% if previa %}
+<section class="panel">
+  <div class="panel-heading">
+    <div><h2>Prévia: {{ previa.arquivo_nome }}</h2><p>Data de importação: {{ previa.data_importacao|date:"d/m/Y" }} · Perfil {{ previa.perfil_id }}</p></div>
+  </div>
+  <div class="metric-grid">
+    <article class="metric-card"><span>Linhas</span><strong>{{ previa.total_linhas }}</strong></article>
+    <article class="metric-card"><span>Documentos encontrados</span><strong>{{ previa.documentos_encontrados }}</strong></article>
+    <article class="metric-card"><span>Documentos não encontrados</span><strong>{{ previa.documentos_nao_encontrados }}</strong></article>
+    <article class="metric-card"><span>Códigos inválidos</span><strong>{{ previa.codigos_invalidos }}</strong></article>
+    <article class="metric-card"><span>Situações inválidas</span><strong>{{ previa.situacoes_invalidas }}</strong></article>
+    <article class="metric-card"><span>Mudanças de situação</span><strong>{{ previa.mudancas_situacao }}</strong></article>
+  </div>
+  <p>Revisão vazia seleciona a última revisão. Data vazia usa a data de importação. Observação pode ser atualizada; GRD, Data de envio e Data de retorno aparecem como “ignorado nesta versão” quando preenchidos.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Linha</th><th>Código</th><th>Revisão</th><th>Situação</th><th>Data</th><th>Mudança de situação</th><th>Resultado</th><th>Campos ignorados nesta versão</th></tr></thead>
+      <tbody>
+        {% for linha in previa.linhas %}
+        <tr>
+          <td>{{ linha.numero_linha }}</td>
+          <td>{{ linha.codigo }}</td>
+          <td>{{ linha.revisao|default:"Última" }}</td>
+          <td>{{ linha.situacao|default:"—" }}</td>
+          <td>{{ linha.data_analise|date:"d/m/Y"|default:"—" }}</td>
+          <td>{% if linha.situacao_depois and linha.situacao_antes != linha.situacao_depois %}{{ linha.situacao_antes|default:"Sem situação anterior" }} → {{ linha.situacao_depois }}{% else %}—{% endif %}</td>
+          <td>{% if linha.valida %}Válida{% else %}{{ linha.mensagem }}{% endif %}</td>
+          <td>{% for campo in linha.campos_ignorados %}{{ campo.nome }}: {{ campo.valor }}{% if not forloop.last %}<br>{% endif %}{% empty %}—{% endfor %}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8">Nenhuma linha preenchida foi encontrada.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if previa.total_linhas %}
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="acao" value="aplicar">
+    <button class="button button-primary" type="submit">Aplicar linhas válidas</button>
+  </form>
+  {% endif %}
+</section>
+{% endif %}

@@ -109,6 +109,35 @@ class ImportarSituacaoPWForm(forms.Form):
         return arquivo
 
 
+class ImportarSituacaoPadraoForm(forms.Form):
+    contrato = forms.ModelChoiceField(
+        label="Contrato",
+        queryset=Contrato.objects.none(),
+    )
+    arquivo = forms.FileField(label="Planilha de situação (.xlsx ou .csv)")
+
+    def __init__(self, *args, usuario=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        contratos = Contrato.objects.filter(ativo=True)
+        if usuario and not usuario.is_staff:
+            from contas.models import Usuario
+            from contratos.models import Participacao
+
+            ids = Participacao.objects.filter(
+                usuario=usuario,
+                ativo=True,
+                papel__in=(Usuario.Perfil.ADMIN, Usuario.Perfil.EQUIPE),
+            ).values_list("contrato_id", flat=True)
+            contratos = contratos.filter(pk__in=ids)
+        self.fields["contrato"].queryset = contratos.order_by("nome")
+
+    def clean_arquivo(self):
+        arquivo = self.cleaned_data["arquivo"]
+        if not arquivo.name.lower().endswith((".xlsx", ".csv")):
+            raise forms.ValidationError("Envie um arquivo .xlsx ou .csv.")
+        return arquivo
+
+
 class ImportarCronogramaForm(forms.Form):
     contrato = forms.ModelChoiceField(
         label="Contrato",

@@ -2,6 +2,7 @@ from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.db import transaction
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views import View
@@ -12,7 +13,12 @@ from contas.models import Usuario
 from contratos.models import Contrato, EscopoContrato, Participacao, PerfilContrato
 from documentos.models import Analise, Documento, Emissao
 
-from .forms import ImportarCronogramaForm, ImportarIDForm, ImportarSituacaoPWForm
+from .forms import (
+    ImportarCronogramaForm,
+    ImportarIDForm,
+    ImportarSituacaoPadraoForm,
+    ImportarSituacaoPWForm,
+)
 from .id_excel import (
     CATEGORIAS,
     ROTULOS_CATEGORIA,
@@ -47,12 +53,23 @@ from .cronograma import (
     gerar_previa_cronograma,
 )
 from .models import ImportacaoCronograma
+from .situacao_padrao import (
+    ErroFormatoSituacaoPadrao,
+    CampoIgnorado,
+    LinhaSituacaoPadrao,
+    PreviaSituacaoPadrao,
+    aplicar_previa_situacao_padrao,
+    gerar_modelo_situacao_padrao,
+    gerar_previa_situacao_padrao,
+)
 
 
 CHAVE_SESSAO = "previa_importacao_id"
 CHAVE_SESSAO_SITUACAO = "previa_importacao_situacao_pw"
 CHAVE_SESSAO_REPROCESSAMENTO = "previa_reprocessamento_recusadas"
 CHAVE_SESSAO_CRONOGRAMA = "previa_importacao_cronograma"
+CHAVE_SESSAO_SITUACAO_PADRAO = "previa_importacao_situacao_padrao"
+PREFIXO_ARQUIVO_SITUACAO_PADRAO = "[Planilha padrão] "
 
 
 class LinhasRecusadasView(LoginRequiredMixin, View):
@@ -788,7 +805,8 @@ class ImportarSituacaoPWView(LoginRequiredMixin, UserPassesTestMixin, View):
             self.template_name,
             {
                 "form": ImportarSituacaoPWForm(),
-                "importacoes": ImportacaoSituacao.objects.select_related("contrato", "importado_por")[:20],
+                "importacoes": ImportacaoSituacao.objects.select_related("contrato", "importado_por")
+                .exclude(arquivo_nome__startswith=PREFIXO_ARQUIVO_SITUACAO_PADRAO)[:20],
             },
         )
 
@@ -840,7 +858,8 @@ class ImportarSituacaoPWView(LoginRequiredMixin, UserPassesTestMixin, View):
                     ("Históricos truncados", len(previa.historicos_truncados)),
                     ("Linhas inválidas", len(previa.linhas_invalidas)),
                 ],
-                "importacoes": ImportacaoSituacao.objects.select_related("contrato", "importado_por")[:20],
+                "importacoes": ImportacaoSituacao.objects.select_related("contrato", "importado_por")
+                .exclude(arquivo_nome__startswith=PREFIXO_ARQUIVO_SITUACAO_PADRAO)[:20],
             },
         )
 
@@ -1030,6 +1049,217 @@ def _previsao_situacao_da_sessao(dados):
         historicos_truncados=tuple(HistoricoTruncadoPW(**linha) for linha in dados["historicos_truncados"]),
         mudancas_situacao=tuple(MudancaSituacaoPW(**linha) for linha in dados["mudancas_situacao"]),
     )
+
+
+class PermissaoImportarSituacaoPadraoMixin(LoginRequiredMixin, UserPassesTestMixin):
+    raise_exception = True
+
+    def test_func(self):
+        return self.request.user.is_staff or Participacao.objects.filter(
+            usuario=self.request.user,
+            ativo=True,
+            papel__in=(Usuario.Perfil.ADMIN, Usuario.Perfil.EQUIPE),
+        ).exists()
+
+
+class BaixarModeloSituacaoPadraoView(PermissaoImportarSituacaoPadraoMixin, View):
+    def get(self, request):
+        resposta = HttpResponse(
+            gerar_modelo_situacao_padrao(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        resposta["Content-Disposition"] = 'attachment; filename="modelo_situacao_padrao.xlsx"'
+        return resposta
+
+
+class ImportarSituacaoPadraoView(PermissaoImportarSituacaoPadraoMixin, View):
+    template_name = "importacoes/situacao_padrao.html"
+
+    def get(self, request):
+        request.session.pop(CHAVE_SESSAO_SITUACAO_PADRAO, None)
+        return render(
+            request,
+            self.template_name,
+            {
+                "form": ImportarSituacaoPadraoForm(usuario=request.user),
+                "importacoes": _importacoes_situacao_padrao(),
+            },
+        )
+
+    def post(self, request):
+        if request.POST.get("acao") == "aplicar":
+            return self._aplicar(request)
+        return self._prever(request)
+
+    def _prever(self, request):
+        form = ImportarSituacaoPadraoForm(request.POST, request.FILES, usuario=request.user)
+        if not form.is_valid():
+            return self._render_result(request, {"form": form})
+        contrato = form.cleaned_data["contrato"]
+        data_importacao = timezone.localdate()
+        perfil_modelo = PerfilContrato.perfil_vigente(contrato, data_importacao)
+        if perfil_modelo is None:
+            form.add_error("contrato", "O contrato não tem perfil vigente para a data de hoje.")
+            return self._render_result(request, {"form": form})
+        try:
+            arquivo = form.cleaned_data["arquivo"]
+            previa = gerar_previa_situacao_padrao(
+                arquivo,
+                nome_arquivo=arquivo.name,
+                contrato_id=contrato.pk,
+                perfil_id=perfil_modelo.pk,
+                perfil=perfil_de_dict(perfil_modelo.definicao),
+                documentos_existentes=_dados_existentes_situacao_padrao(contrato),
+                data_importacao=data_importacao,
+            )
+        except (ErroFormatoSituacaoPadrao, ErroPerfil, ValueError) as erro:
+            return self._render_result(request, {"form": form, "erro": str(erro)})
+
+        request.session[CHAVE_SESSAO_SITUACAO_PADRAO] = {
+            "usuario_id": request.user.pk,
+            "previa": _serializar_previa_situacao_padrao(previa),
+        }
+        return self._render_result(
+            request,
+            {
+                "form": form,
+                "previa": previa,
+                "importacoes": _importacoes_situacao_padrao(),
+            },
+        )
+
+    def _render_result(self, request, context):
+        template = self.template_name
+        if request.headers.get("HX-Request") == "true":
+            template = "importacoes/_resultado_situacao_padrao.html"
+        return render(request, template, context)
+
+    def _aplicar(self, request):
+        dados = request.session.get(CHAVE_SESSAO_SITUACAO_PADRAO)
+        if not dados or dados.get("usuario_id") != request.user.pk:
+            messages.error(request, "A prévia expirou. Envie o arquivo novamente.")
+            return redirect("importar_situacao_padrao")
+        try:
+            previa = _previsao_situacao_padrao_da_sessao(dados["previa"])
+            contrato = get_object_or_404(Contrato, pk=previa.contrato_id)
+            if not _usuario_pode_importar_situacao_padrao(request.user, contrato):
+                raise PermissionDenied
+            perfil_modelo = get_object_or_404(
+                PerfilContrato,
+                pk=previa.perfil_id,
+                contrato=contrato,
+            )
+            vigente = PerfilContrato.perfil_vigente(contrato, previa.data_importacao)
+            if vigente is None or vigente.pk != perfil_modelo.pk:
+                raise ValueError("O perfil vigente mudou. Envie o arquivo e gere outra prévia.")
+            importacao = aplicar_previa_situacao_padrao(
+                previa,
+                contrato=contrato,
+                perfil_modelo=perfil_modelo,
+                usuario=request.user,
+            )
+        except PermissionDenied:
+            raise
+        except (ValueError, KeyError, TypeError) as erro:
+            messages.error(request, str(erro))
+            return redirect("importar_situacao_padrao")
+
+        request.session.pop(CHAVE_SESSAO_SITUACAO_PADRAO, None)
+        messages.success(
+            request,
+            f"Planilha {previa.arquivo_nome} aplicada: {previa.linhas_validas} linhas válidas, "
+            f"{previa.linhas_invalidas} inválidas e {previa.mudancas_situacao} mudanças de situação.",
+        )
+        return redirect("importar_situacao_padrao")
+
+
+def _usuario_pode_importar_situacao_padrao(usuario, contrato):
+    return usuario.is_staff or Participacao.objects.filter(
+        usuario=usuario,
+        contrato=contrato,
+        ativo=True,
+        papel__in=(Usuario.Perfil.ADMIN, Usuario.Perfil.EQUIPE),
+    ).exists()
+
+
+def _dados_existentes_situacao_padrao(contrato):
+    resultado = {}
+    documentos = Documento.objects.filter(contrato=contrato).prefetch_related("emissoes__analises")
+    for documento in documentos:
+        emissoes = []
+        for emissao in documento.emissoes.all():
+            emissoes.append(
+                {
+                    "id": emissao.pk,
+                    "revisao": emissao.revisao,
+                    "versao": emissao.versao,
+                    "fase": emissao.fase,
+                    "data_emissao": emissao.data_emissao.isoformat(),
+                    "analises": [
+                        {
+                            "id": analise.pk,
+                            "situacao": analise.situacao,
+                            "data_analise": analise.data_analise.isoformat() if analise.data_analise else None,
+                            "observacao": analise.observacao,
+                            "registrado_em": analise.registrado_em.isoformat(),
+                        }
+                        for analise in emissao.analises.all()
+                    ],
+                }
+            )
+        resultado[documento.identificador_base] = {"id": documento.pk, "emissoes": emissoes}
+    return resultado
+
+
+def _serializar_previa_situacao_padrao(previa):
+    return {
+        "contrato_id": previa.contrato_id,
+        "perfil_id": previa.perfil_id,
+        "data_importacao": previa.data_importacao.isoformat(),
+        "arquivo_nome": previa.arquivo_nome,
+        "cabecalhos": list(previa.cabecalhos),
+        "documentos_encontrados": previa.documentos_encontrados,
+        "documentos_nao_encontrados": previa.documentos_nao_encontrados,
+        "codigos_invalidos": previa.codigos_invalidos,
+        "situacoes_invalidas": previa.situacoes_invalidas,
+        "linhas": [
+            {
+                **linha.__dict__,
+                "data_analise": linha.data_analise.isoformat() if linha.data_analise else None,
+                "campos_ignorados": [campo.__dict__ for campo in linha.campos_ignorados],
+            }
+            for linha in previa.linhas
+        ],
+    }
+
+
+def _previsao_situacao_padrao_da_sessao(dados):
+    from datetime import date
+
+    linhas = []
+    for item in dados["linhas"]:
+        linha = dict(item)
+        linha["data_analise"] = date.fromisoformat(linha["data_analise"]) if linha["data_analise"] else None
+        linha["campos_ignorados"] = tuple(CampoIgnorado(**campo) for campo in linha["campos_ignorados"])
+        linhas.append(LinhaSituacaoPadrao(**linha))
+    return PreviaSituacaoPadrao(
+        contrato_id=dados["contrato_id"],
+        perfil_id=dados["perfil_id"],
+        data_importacao=date.fromisoformat(dados["data_importacao"]),
+        arquivo_nome=dados["arquivo_nome"],
+        cabecalhos=tuple(dados["cabecalhos"]),
+        linhas=tuple(linhas),
+        documentos_encontrados=dados["documentos_encontrados"],
+        documentos_nao_encontrados=dados["documentos_nao_encontrados"],
+        codigos_invalidos=dados["codigos_invalidos"],
+        situacoes_invalidas=dados["situacoes_invalidas"],
+    )
+
+
+def _importacoes_situacao_padrao():
+    return ImportacaoSituacao.objects.filter(
+        arquivo_nome__startswith=PREFIXO_ARQUIVO_SITUACAO_PADRAO
+    ).select_related("contrato", "importado_por")[:20]
 
 
 class ImportarCronogramaView(LoginRequiredMixin, UserPassesTestMixin, View):
