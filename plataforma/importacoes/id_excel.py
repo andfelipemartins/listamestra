@@ -501,10 +501,10 @@ def _mensagem_atributos_divergentes(divergencias):
     if not divergencias:
         return ""
     partes = [
-        f"No PW, o Name diz {rotulo} {esperado}, mas a coluna {coluna} diz {valor}."
+        f"Name e atributo divergem: o Name diz {rotulo} {esperado}; a coluna {coluna} diz {valor}."
         for rotulo, esperado, coluna, valor in divergencias
     ]
-    return " ".join((*partes, "Corrija o atributo no PW ou reextraia."))
+    return " ".join((*partes, "Confira no PW qual está certo, corrija e reextraia."))
 
 
 def _mensagem_extracao_defeituosa():

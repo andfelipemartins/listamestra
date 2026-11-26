@@ -20,7 +20,7 @@
           <td>{{ linha.numero_linha }}</td>
           <td>
             {{ linha.categoria_display }}
-            {% if linha.categoria == "atributos_divergentes" %}<br><small>Corrija o atributo no PW ou reextraia.</small>{% endif %}
+            {% if linha.categoria == "atributos_divergentes" %}<br><small>Confira no PW qual está certo, corrija e reextraia.</small>{% endif %}
             {% if linha.categoria == "linhas_ilegiveis" and previa.formato == "extracao_pw" %}<br><small>Reextraia a disciplina e importe de novo.</small>{% endif %}
           </td>
           <td>{{ linha.codigo }}</td>

@@ -520,7 +520,7 @@ def _instrucao_recusa(categoria, origem=""):
             return "Reextraia essa disciplina e importe de novo."
         return "Corrija os dados na planilha e importe de novo."
     return {
-        "atributos_divergentes": "Corrija o atributo no PW ou reextraia a planilha e importe de novo.",
+        "atributos_divergentes": "Confira no PW qual está certo, corrija e reextraia a planilha e importe de novo.",
         "codigos_invalidos": "Corrija o código na planilha ou no PW e importe de novo.",
         "dados_invalidos": "Corrija os dados na planilha ou no PW e importe de novo.",
     }.get(categoria, "Corrija a linha na planilha ou no PW e importe de novo.")

@@ -15,7 +15,12 @@ from core.perfil import perfil_de_dict
 from contratos.models import Contrato, EscopoContrato, Participacao, PerfilContrato
 from documentos.models import CodigoDocumento, Documento
 from importacoes.admin import IndiceDocumentosAdmin
-from importacoes.id_excel import FORMATOS_ID, gerar_previa_id, gerar_previa_linhas_recusadas
+from importacoes.id_excel import (
+    FORMATOS_ID,
+    _mensagem_atributos_divergentes,
+    gerar_previa_id,
+    gerar_previa_linhas_recusadas,
+)
 from importacoes.models import InconsistenciaImportacao, ImportacaoID, IndiceDocumentos, ItemPrevisto
 from importacoes.services import aplicar_previa, previstos_vigentes
 
@@ -614,8 +619,19 @@ def test_linha_com_atributo_pw_divergente_aponta_coluna(contrato, perfil_modelo)
     )
 
     assert previa.contagens["atributos_divergentes"] == 1
-    assert "Name diz classe e subclasse A1" in previa.linhas[0].mensagem
-    assert "diz B1" in previa.linhas[0].mensagem
+    assert "Name e atributo divergem: o Name diz classe e subclasse A1; a coluna Classe e Subclasse" in previa.linhas[0].mensagem
+    assert "diz B1." in previa.linhas[0].mensagem
+
+
+def test_mensagem_atributos_divergentes_nao_acusa_um_lado():
+    mensagem = _mensagem_atributos_divergentes(
+        [("sequencial", "1009", "Sequencial", "1006")]
+    )
+
+    assert "Name e atributo divergem" in mensagem
+    assert "o Name diz sequencial 1009" in mensagem
+    assert "a coluna Sequencial diz 1006" in mensagem
+    assert "atributo no PW" not in mensagem
 
 
 @pytest.mark.django_db
@@ -785,12 +801,12 @@ def test_extracao_pw_separa_linha_defeituosa_de_atributos_divergentes(contrato, 
     )
     assert previa.linhas[1].mensagem == previa.linhas[0].mensagem
     assert previa.linhas[2].mensagem == (
-        "No PW, o Name diz tipo documental DE, mas a coluna Sigla diz RT. "
-        "Corrija o atributo no PW ou reextraia."
+        "Name e atributo divergem: o Name diz tipo documental DE; a coluna Sigla diz RT. "
+        "Confira no PW qual está certo, corrija e reextraia."
     )
     assert previa.linhas[3].mensagem == (
-        "No PW, o Name diz sequencial 1009, mas a coluna Sequencial diz 1006. "
-        "Corrija o atributo no PW ou reextraia."
+        "Name e atributo divergem: o Name diz sequencial 1009; a coluna Sequencial diz 1006. "
+        "Confira no PW qual está certo, corrija e reextraia."
     )
 
 
