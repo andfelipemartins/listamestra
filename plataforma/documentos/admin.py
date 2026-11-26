@@ -13,7 +13,15 @@ class EmissaoInline(admin.TabularInline):
     model = Emissao
     extra = 0
     show_change_link = True
-    fields = ("revisao", "versao", "fase", "data_emissao", "origem")
+    fields = (
+        "revisao",
+        "versao",
+        "fase",
+        "data_emissao",
+        "origem",
+        "motivo_reabertura",
+        "motivo_reabertura_obs",
+    )
 
 
 class AnaliseInline(admin.TabularInline):
@@ -42,8 +50,16 @@ class CodigoDocumentoAdmin(admin.ModelAdmin):
 
 @admin.register(Emissao)
 class EmissaoAdmin(admin.ModelAdmin):
-    list_display = ("documento", "revisao", "versao", "fase", "data_emissao", "origem")
-    list_filter = ("fase", "origem", "data_emissao")
+    list_display = (
+        "documento",
+        "revisao",
+        "versao",
+        "fase",
+        "data_emissao",
+        "origem",
+        "motivo_reabertura",
+    )
+    list_filter = ("fase", "origem", "motivo_reabertura", "data_emissao")
     search_fields = ("documento__identificador_base", "documento__titulo", "revisao")
     inlines = (AnaliseInline,)
     readonly_fields = ("criado_em",)

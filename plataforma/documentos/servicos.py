@@ -1,7 +1,7 @@
 from collections import defaultdict
 from datetime import date, datetime, time
 
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db.models import F, Prefetch
 from django.http import Http404
@@ -10,11 +10,12 @@ from django.utils import timezone
 
 from acoes.models import AcaoPendencia
 from acoes.services import contratos_acessiveis, resolver_contrato
+from contas.models import Usuario
 from core.perfil import ErroPerfil, perfil_de_dict
 from core.perfil.ciclo import _normalizar_situacao, rotulos_ciclo
 from core.perfil.codigo import ErroCodigo, interpretar
 from core.perfil.painel import classificar, classificar_categoria
-from contratos.models import PerfilContrato
+from contratos.models import Participacao, PerfilContrato
 from painel.prazos import (
     _itens_avaliados_da_regra,
     dias_ate_vencimento,
@@ -197,6 +198,8 @@ def carregar_pasta_documento(usuario, contrato_id, documento_id, *, hoje=None):
     )
     hoje = hoje or timezone.localdate()
     linha_tempo = _linha_tempo(perfil, documento, hoje)
+    pode_editar_motivo = _pode_editar_motivo_reabertura(usuario, contrato)
+    _anotar_motivos_reabertura(perfil, documento, linha_tempo, pode_editar_motivo)
     atividades = _atividades_documento(contrato, documento, codigo)
     return {
         "contrato": contrato,
@@ -210,9 +213,177 @@ def carregar_pasta_documento(usuario, contrato_id, documento_id, *, hoje=None):
         "data_situacao": _data_analise(analise_atual) if analise_atual else None,
         "previsao": previsao,
         "linha_tempo": linha_tempo,
+        "motivos_reabertura": [
+            ("", "Não informado"),
+            *Emissao.MotivoReabertura.choices,
+        ],
         "atividades": atividades,
         "url_lista": f"{reverse('documentos_lista')}?contrato={contrato.pk}",
     }
+
+
+def atualizar_motivo_reabertura(
+    usuario,
+    contrato_id,
+    documento_id,
+    emissao_id,
+    motivo,
+    observacao="",
+):
+    contrato = resolver_contrato(usuario, contrato_id)
+    if contrato is None:
+        raise PermissionDenied("Você não participa deste contrato.")
+    if not _pode_editar_motivo_reabertura(usuario, contrato):
+        raise PermissionDenied("Seu papel neste contrato permite apenas visualizar.")
+
+    try:
+        emissao_id = int(emissao_id)
+    except (TypeError, ValueError) as erro:
+        raise ValueError("Selecione uma emissão de reabertura válida.") from erro
+    emissao = (
+        Emissao.objects.select_related("documento")
+        .filter(pk=emissao_id, documento_id=documento_id, documento__contrato=contrato)
+        .first()
+    )
+    if emissao is None:
+        raise Http404
+
+    motivo = (motivo or "").strip()
+    observacao = (observacao or "").strip()
+    motivos_validos = {valor for valor, _ in Emissao.MotivoReabertura.choices}
+    if motivo not in motivos_validos:
+        raise ValueError("Selecione um motivo da lista.")
+    if observacao and motivo != Emissao.MotivoReabertura.OUTRO:
+        raise ValueError("A observação só pode ser preenchida para o motivo Outro.")
+    if len(observacao) > 300:
+        raise ValueError("A observação deve ter no máximo 300 caracteres.")
+    if not _emissao_eh_primeira_reabertura(emissao):
+        raise ValueError("O motivo só pode ser alterado na primeira emissão de uma reabertura.")
+
+    emissao.motivo_reabertura = motivo
+    emissao.motivo_reabertura_obs = observacao
+    try:
+        emissao.full_clean()
+    except ValidationError as erro:
+        raise ValueError(" ".join(erro.messages)) from erro
+    emissao._history_user = usuario
+    emissao.save(update_fields=("motivo_reabertura", "motivo_reabertura_obs"))
+    return emissao
+
+
+def listar_reaberturas_do_contrato(contrato, *, hoje=None):
+    """Lista reaberturas deduzidas do perfil, sem alterar emissões ou documentos."""
+    _, perfil = _perfil_vigente(contrato, hoje=hoje)
+    documentos = (
+        Documento.objects.filter(contrato=contrato)
+        .prefetch_related("emissoes")
+        .order_by("identificador_base", "pk")
+    )
+    resultado = []
+    for documento in documentos:
+        emissoes = sorted(documento.emissoes.all(), key=lambda item: (item.data_emissao, item.pk))
+        for grupo in _grupos_reabertura(perfil, emissoes):
+            primeira = grupo["emissoes"][0]
+            motivo = primeira.motivo_reabertura or ""
+            resultado.append(
+                {
+                    "documento": documento,
+                    "serie": grupo["serie"],
+                    "revisoes": tuple(dict.fromkeys(item.revisao for item in grupo["emissoes"])),
+                    "motivo": motivo,
+                    "motivo_rotulo": _rotulo_motivo_reabertura(motivo),
+                    "motivo_obs": primeira.motivo_reabertura_obs or "",
+                }
+            )
+    return resultado
+
+
+def _pode_editar_motivo_reabertura(usuario, contrato):
+    return bool(
+        usuario.is_staff
+        or Participacao.objects.filter(
+            usuario=usuario,
+            contrato=contrato,
+            ativo=True,
+            papel__in=(Usuario.Perfil.ADMIN, Usuario.Perfil.EQUIPE),
+        ).exists()
+    )
+
+
+def _emissao_eh_primeira_reabertura(emissao):
+    if not emissao.documento_id or not emissao.data_emissao:
+        return False
+    documento = emissao.documento
+    perfil_modelo = PerfilContrato.perfil_vigente(documento.contrato, emissao.data_emissao)
+    if perfil_modelo is None:
+        return False
+    try:
+        perfil = perfil_de_dict(perfil_modelo.definicao)
+    except ErroPerfil:
+        return False
+
+    emissoes = list(
+        Emissao.objects.filter(documento_id=documento.pk)
+        .exclude(pk=emissao.pk)
+        .order_by("data_emissao", "pk")
+    )
+    emissoes.append(emissao)
+    emissoes.sort(
+        key=lambda item: (
+            item.data_emissao,
+            item.pk if item.pk is not None else float("inf"),
+        )
+    )
+    return any(
+        grupo["emissoes"][0] is emissao
+        for grupo in _grupos_reabertura(perfil, emissoes)
+    )
+
+
+def _grupos_reabertura(perfil, emissoes):
+    grupos = []
+    grupo_atual = None
+    for emissao, rotulo in zip(emissoes, rotulos_ciclo(perfil, emissoes)):
+        if not rotulo.startswith("Reabertura"):
+            grupo_atual = None
+            continue
+        prefixo = rotulo.partition(" · ")[0]
+        serie = prefixo.removeprefix("Reabertura ").strip() or "Reabertura"
+        if grupo_atual is None or grupo_atual["serie"] != serie:
+            grupo_atual = {"serie": serie, "emissoes": []}
+            grupos.append(grupo_atual)
+        grupo_atual["emissoes"].append(emissao)
+    return grupos
+
+
+def _anotar_motivos_reabertura(perfil, documento, linha_tempo, pode_editar):
+    emissoes = sorted(documento.emissoes.all(), key=lambda item: (item.data_emissao, item.pk))
+    por_emissao = {}
+    for grupo in _grupos_reabertura(perfil, emissoes):
+        primeira = grupo["emissoes"][0]
+        motivo = primeira.motivo_reabertura or ""
+        dados = {
+            "serie": grupo["serie"],
+            "motivo": motivo,
+            "motivo_rotulo": _rotulo_motivo_reabertura(motivo),
+            "motivo_obs": primeira.motivo_reabertura_obs or "",
+            "emissao_motivo_id": primeira.pk,
+            "motivo_editavel": pode_editar and primeira.pk is not None,
+        }
+        for emissao in grupo["emissoes"]:
+            por_emissao[emissao.pk] = {
+                **dados,
+                "motivo_editavel": pode_editar and emissao.pk == primeira.pk,
+            }
+
+    for item in linha_tempo:
+        dados = por_emissao.get(item["emissao"].pk)
+        if dados:
+            item.update(dados)
+
+
+def _rotulo_motivo_reabertura(motivo):
+    return dict(Emissao.MotivoReabertura.choices).get(motivo, "Não informado")
 
 
 def _perfil_vigente(contrato, *, hoje=None):

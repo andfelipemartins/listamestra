@@ -94,6 +94,12 @@ class Emissao(models.Model):
         PROJETISTA = "projetista", "Projetista"
         CLIENTE = "cliente", "Cliente"
 
+    class MotivoReabertura(models.TextChoices):
+        CAMPO = "campo", "Problema de campo"
+        PROJETO = "projeto", "Erro de projeto"
+        CLIENTE = "cliente", "Pedido do cliente"
+        OUTRO = "outro", "Outro"
+
     documento = models.ForeignKey(
         Documento,
         verbose_name="documento",
@@ -106,6 +112,19 @@ class Emissao(models.Model):
     data_emissao = models.DateField("data de emissão")
     origem = models.CharField("origem", max_length=16, choices=Origem.choices)
     observacao = models.TextField("observação", blank=True)
+    motivo_reabertura = models.CharField(
+        "motivo da reabertura",
+        max_length=20,
+        choices=MotivoReabertura.choices,
+        blank=True,
+        default="",
+    )
+    motivo_reabertura_obs = models.CharField(
+        "observação do motivo da reabertura",
+        max_length=300,
+        blank=True,
+        default="",
+    )
     criado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         verbose_name="registrado por",
@@ -132,6 +151,26 @@ class Emissao(models.Model):
                 name="emissao_sem_versao_unica",
             ),
         ]
+
+    def clean(self):
+        super().clean()
+        motivo = (self.motivo_reabertura or "").strip()
+        observacao = (self.motivo_reabertura_obs or "").strip()
+        if not motivo and not observacao:
+            return
+
+        erros = {}
+        if observacao and motivo != self.MotivoReabertura.OUTRO:
+            erros["motivo_reabertura_obs"] = "A observação só pode ser informada para o motivo Outro."
+        if self.documento_id:
+            from .servicos import _emissao_eh_primeira_reabertura
+
+            if not _emissao_eh_primeira_reabertura(self):
+                erros["motivo_reabertura"] = "O motivo só pode ser informado na primeira emissão de uma reabertura."
+        else:
+            erros["motivo_reabertura"] = "O motivo exige uma emissão vinculada a uma reabertura."
+        if erros:
+            raise ValidationError(erros)
 
     def __str__(self):
         versao = f" v{self.versao}" if self.versao is not None else ""

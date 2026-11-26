@@ -19,6 +19,12 @@
   .pasta-emissao-topo { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; }
   .pasta-emissao h3 { margin: 0; font-size: 14px; }
   .pasta-emissao-meta { margin: 6px 0 0; color: var(--text-secondary); font-size: 12px; }
+  .pasta-motivo-reabertura { margin-top: 13px; padding: 11px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); }
+  .pasta-motivo-reabertura p { margin: 0; font-size: 12px; }
+  .pasta-motivo-reabertura form { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(180px, 2fr) auto; gap: 9px; align-items: end; margin-top: 11px; }
+  .pasta-motivo-reabertura label { display: grid; gap: 5px; color: var(--text-secondary); font-size: 11px; }
+  .pasta-motivo-reabertura input, .pasta-motivo-reabertura select { width: 100%; }
+  @media (max-width: 767px) { .pasta-motivo-reabertura form { grid-template-columns: 1fr; } }
   .pasta-analises { display: grid; gap: 8px; margin: 14px 0 0; padding: 0; list-style: none; }
   .pasta-analise { padding: 10px 12px; border-left: 3px solid var(--border); border-radius: 5px; background: var(--surface-raised); font-size: 12px; }
   .pasta-analise.aprovacao { border-left-color: var(--success-text); background: var(--success-surface); }
@@ -33,6 +39,9 @@
 </style>
 {% endblock %}
 {% block content %}
+{% if messages %}
+  {% for message in messages %}<p class="notice notice-{{ message.tags }}">{{ message }}</p>{% endfor %}
+{% endif %}
 {% if erro %}
   <section class="panel"><div class="notice notice-error">{{ erro }}</div><p><a href="{% url 'documentos_lista' %}">Voltar para Documentos</a></p></section>
 {% else %}
@@ -65,6 +74,26 @@
     {% for item in linha_tempo %}
     <li class="pasta-emissao">
       <div class="pasta-emissao-topo"><div><h3>{{ item.rotulo }}</h3><p class="pasta-emissao-meta">Rev {{ item.emissao.revisao }}{% if item.emissao.versao != None %} · Ver {{ item.emissao.versao }}{% endif %} · {{ item.emissao.get_fase_display }}</p></div><strong>{{ item.emissao.data_emissao|date:"d/m/Y" }}</strong></div>
+      {% if item.serie %}
+      <div class="pasta-motivo-reabertura">
+        <p><strong>Motivo da reabertura {{ item.serie }}:</strong> {{ item.motivo_rotulo }}{% if item.motivo_obs %} · {{ item.motivo_obs }}{% endif %}</p>
+        {% if item.motivo_editavel %}
+        <form method="post" action="">
+          {% csrf_token %}
+          <input type="hidden" name="emissao" value="{{ item.emissao_motivo_id }}">
+          <label for="motivo-reabertura-{{ item.emissao_motivo_id }}">Motivo
+            <select id="motivo-reabertura-{{ item.emissao_motivo_id }}" name="motivo_reabertura">
+              {% for valor, rotulo in motivos_reabertura %}<option value="{{ valor }}" {% if valor == item.motivo %}selected{% endif %}>{{ rotulo }}</option>{% endfor %}
+            </select>
+          </label>
+          <label for="motivo-reabertura-obs-{{ item.emissao_motivo_id }}">Observação (para Outro)
+            <input id="motivo-reabertura-obs-{{ item.emissao_motivo_id }}" name="motivo_reabertura_obs" maxlength="300" value="{{ item.motivo_obs }}">
+          </label>
+          <button class="button button-primary" type="submit">Salvar motivo</button>
+        </form>
+        {% endif %}
+      </div>
+      {% endif %}
       {% if item.analises %}
       <ul class="pasta-analises" aria-label="Análises desta emissão">
         {% for analise in item.analises %}

@@ -1,9 +1,12 @@
+from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.shortcuts import render
+from django.core.exceptions import PermissionDenied
+from django.shortcuts import redirect, render
 from django.views import View
 
 from .servicos import (
     DocumentosIndisponiveis,
+    atualizar_motivo_reabertura,
     carregar_lista_documentos,
     carregar_pasta_documento,
 )
@@ -49,3 +52,21 @@ class DocumentoPastaView(LoginRequiredMixin, View):
         except DocumentosIndisponiveis as erro:
             contexto = {"erro": str(erro), "contrato_id": contrato_id}
         return render(request, self.template_name, contexto)
+
+    def post(self, request, contrato_id, documento_id):
+        try:
+            atualizar_motivo_reabertura(
+                request.user,
+                contrato_id,
+                documento_id,
+                request.POST.get("emissao"),
+                request.POST.get("motivo_reabertura", ""),
+                request.POST.get("motivo_reabertura_obs", ""),
+            )
+        except PermissionDenied:
+            raise
+        except (TypeError, ValueError) as erro:
+            messages.error(request, str(erro))
+        else:
+            messages.success(request, "Motivo da reabertura atualizado.")
+        return redirect("documento_pasta", contrato_id=contrato_id, documento_id=documento_id)
