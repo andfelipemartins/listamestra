@@ -280,6 +280,8 @@ class PerfilContrato:
     painel: PainelPerfil = field(default_factory=_painel_minimo)
     prazos: PrazosPerfil | None = None
     cancelamento: CancelamentoPerfil = field(default_factory=_cancelamento_padrao)
+    comparar_id_cliente: bool = False
+    nome_id_cliente: str | None = None
 
 
 def perfil_de_dict(dados: Mapping[str, Any]) -> PerfilContrato:
@@ -297,6 +299,12 @@ def perfil_de_dict(dados: Mapping[str, Any]) -> PerfilContrato:
         painel = _painel_de_dict(dados.get("painel"), codigo, emissao)
         prazos = _prazos_de_dict(dados.get("prazos"))
         cancelamento = _cancelamento_de_dict(dados.get("cancelamento"))
+        comparar_id_cliente = dados.get("comparar_id_cliente", False)
+        if not isinstance(comparar_id_cliente, bool):
+            raise ErroPerfil("'comparar_id_cliente' precisa ser booleano.")
+        nome_id_cliente = dados.get("nome_id_cliente")
+        if nome_id_cliente is not None:
+            nome_id_cliente = _texto_obrigatorio(nome_id_cliente, "nome_id_cliente")
         return PerfilContrato(
             nome,
             versao,
@@ -307,6 +315,8 @@ def perfil_de_dict(dados: Mapping[str, Any]) -> PerfilContrato:
             painel,
             prazos,
             cancelamento,
+            comparar_id_cliente,
+            nome_id_cliente,
         )
     except ErroPerfil:
         raise

@@ -63,6 +63,9 @@ class AcaoView(LoginRequiredMixin, View):
         except (TypeError, ValueError) as erro:
             messages.error(request, str(erro))
         else:
+            if acao.acao == "pedir_correcao" and acao.tipo_pendencia == "falta_no_pw":
+                messages.success(request, "Pedido de inclusão registrado.")
+                return redirect(f"{reverse('acoes:pendencias')}?contrato={contrato_id}")
             if acao.acao == "pedir_correcao":
                 messages.success(request, "Pedido registrado. O texto do e-mail está pronto para copiar.")
                 return redirect(

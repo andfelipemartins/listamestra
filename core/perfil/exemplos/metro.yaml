@@ -1,6 +1,8 @@
 nome: Metrô SP — Linha 15
 versao: "MAN-10-201 rev. 04 + MAN-10-202 rev. 09"
 vigencia_inicio: 2026-11-18
+comparar_id_cliente: true
+nome_id_cliente: PW
 codigo:
   segmentos:
     - nome: tipo

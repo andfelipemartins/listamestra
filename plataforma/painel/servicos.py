@@ -97,21 +97,30 @@ def carregar_painel(contrato, por=None, filtros=None):
     )
     indices_por_id = {indice.pk: indice for indice in indices_vigentes}
     ids_vigentes = set(indices_por_id)
+    ids_nosso_id = {
+        indice.pk
+        for indice in indices_vigentes
+        if indice.fonte == IndiceDocumentos.Fonte.EXCEL_ID
+    }
+    if not ids_nosso_id:
+        ids_nosso_id = ids_vigentes
     fases_contaveis = {
         _valor_fase(indice.fase)
         for indice in indices_vigentes
-        if indice.conta_no_previsto
+        if indice.pk in ids_nosso_id and indice.conta_no_previsto
     }
     escopos_contaveis = {
         _valor_escopo(escopo.nome)
         for indice in indices_vigentes
-        if indice.conta_no_previsto
+        if indice.pk in ids_nosso_id and indice.conta_no_previsto
         for escopo in indice.escopos.all()
     }
     escopos_contaveis.update(
         _ESCOPO_SEM_ESCOPO
         for indice in indices_vigentes
-        if indice.conta_no_previsto and not indice.escopos.all()
+        if indice.pk in ids_nosso_id
+        and indice.conta_no_previsto
+        and not indice.escopos.all()
     )
     itens = (
         ItemPrevisto.objects.filter(indice_id__in=ids_vigentes, excluido=False)
@@ -122,12 +131,15 @@ def carregar_painel(contrato, por=None, filtros=None):
 
     previstos = {}
     documentos_em_ids = set()
+    documentos_id_cliente = set()
     fases_por_documento = {}
     escopos_por_documento = {}
     for item in itens:
         documentos_em_ids.add(item.documento_id)
         indice = indices_por_id[item.indice_id]
-        if not indice.conta_no_previsto:
+        if indice.fonte == IndiceDocumentos.Fonte.EXTRACAO_PW:
+            documentos_id_cliente.add(item.documento_id)
+        if indice.pk not in ids_nosso_id or not indice.conta_no_previsto:
             continue
         previstos.setdefault(item.documento_id, item.documento)
         fases_por_documento.setdefault(item.documento_id, set()).add(
@@ -237,6 +249,13 @@ def carregar_painel(contrato, por=None, filtros=None):
             documentos_em_conta.append(item)
 
     resumo = resumir(perfil, (item.situacao for item in documentos_em_conta))
+    quantidade_faltando_id_cliente = 0
+    if perfil.comparar_id_cliente:
+        quantidade_faltando_id_cliente = sum(
+            1
+            for documento in previstos.values()
+            if not documento.cancelado_em and documento.pk not in documentos_id_cliente
+        )
     documentos_fora_id = (
         Documento.objects.filter(contrato=contrato, emissoes__isnull=False)
         .exclude(pk__in=documentos_em_ids)
@@ -532,6 +551,8 @@ def carregar_painel(contrato, por=None, filtros=None):
             if quantidade
         ],
         "fora_do_id": fora_do_id,
+        "quantidade_faltando_id_cliente": quantidade_faltando_id_cliente,
+        "nome_id_cliente": perfil.nome_id_cliente or "ID do cliente",
         "ultima_situacao_pw": ultima_situacao.data_extracao if ultima_situacao else None,
         "ultima_importacao_id": timezone.localtime(ultima_importacao_id.importado_em).date()
         if ultima_importacao_id

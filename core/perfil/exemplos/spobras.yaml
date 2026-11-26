@@ -1,6 +1,7 @@
 nome: SPObras
 versao: MP-SQ-SP-00-9R-001 rev. L
 vigencia_inicio: 2024-01-08
+comparar_id_cliente: false
 codigo:
   segmentos:
     - nome: classificacao

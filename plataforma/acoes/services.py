@@ -18,6 +18,8 @@ from importacoes.models import (
     ImportacaoID,
     ImportacaoSituacao,
     InconsistenciaImportacao,
+    IndiceDocumentos,
+    ItemPrevisto,
     PrevisaoEmissao,
 )
 from painel.prazos import dias_ate_vencimento, emissoes_abertas_prazo, feriados_prazo
@@ -37,6 +39,9 @@ TIPOS_JANELA = {
 }
 _DIAS_PARA_VENCER = 3
 _DIAS_CRONOGRAMA = 7
+PENDENCIA_FALTA_NO_PW = "falta_no_pw"
+PENDENCIA_FALTA_NO_NOSSO_ID = "falta_no_nosso_id"
+_PENDENCIAS_ID = {PENDENCIA_FALTA_NO_PW, PENDENCIA_FALTA_NO_NOSSO_ID}
 _TEXTOS_RESUMO = {
     "erros": "documentos com erros a corrigir",
     PRAZO_ANALISE: "documentos aguardando análise do cliente",
@@ -90,13 +95,46 @@ def carregar_minha_mesa(usuario, contrato_id=None, *, hoje=None, limite=10, incl
 
     docs = _documentos_com_historico(contrato)
     erros = _erros_abertos(contrato, perfil, docs, incluir_ignorados=incluir_ignorados) if perfil else []
+    if perfil and perfil.comparar_id_cliente:
+        erros.extend(
+            _pendencias_ids(
+                contrato,
+                perfil,
+                incluir_ignorados=incluir_ignorados,
+            )
+        )
+        erros.sort(
+            key=lambda item: (
+                item["data_desde"] or date.min,
+                item["codigo"].casefold(),
+            )
+        )
     prazos_analise, prazos_devolucao = _janelas_prazo(perfil, docs, hoje) if perfil else ([], [])
     cronograma = _itens_cronograma(contrato, hoje)
     recusadas = _linhas_recusadas(contrato)
 
     janelas = []
     if perfil:
-        janelas.append(_janela("erros", "Erros a corrigir", erros, limite))
+        janela_erros = _janela("erros", "Erros a corrigir", erros, limite)
+        if perfil.comparar_id_cliente:
+            nome_id_cliente = perfil.nome_id_cliente or "ID do cliente"
+            janela_erros["contagens_pendencias_id"] = [
+                {
+                    "rotulo": f"Falta no {nome_id_cliente}",
+                    "quantidade": sum(
+                        item["tipo_pendencia"] == PENDENCIA_FALTA_NO_PW
+                        for item in erros
+                    ),
+                },
+                {
+                    "rotulo": "Falta no nosso ID",
+                    "quantidade": sum(
+                        item["tipo_pendencia"] == PENDENCIA_FALTA_NO_NOSSO_ID
+                        for item in erros
+                    ),
+                },
+            ]
+        janelas.append(janela_erros)
         if perfil.prazos is not None:
             regras_analise = [regra for regra in perfil.prazos.regras if regra.inicio == "emissao" and regra.fim == "analise"]
             regras_devolucao = [regra for regra in perfil.prazos.regras if regra.inicio == "analise" and regra.fim == "proxima_emissao"]
@@ -589,7 +627,10 @@ def registrar_acao(usuario, contrato_id, documento_id, tipo_pendencia, acao, mot
         raise ValueError("A pendência já não está aberta para ação.")
 
     texto_email = ""
-    if acao == AcaoPendencia.Acao.PEDIR_CORRECAO:
+    if (
+        acao == AcaoPendencia.Acao.PEDIR_CORRECAO
+        and tipo_pendencia not in _PENDENCIAS_ID
+    ):
         texto_email = _texto_email_correcao(pendencia)
     registro = AcaoPendencia(
         contrato=contrato,
@@ -651,14 +692,7 @@ def _erros_abertos(contrato, perfil, documentos, *, incluir_ignorados=False):
     }
     if not grupos_ocultos:
         return []
-    acoes = list(
-        AcaoPendencia.objects.filter(contrato=contrato)
-        .select_related("usuario")
-        .order_by("-criado_em", "-pk")
-    )
-    ultimas_acoes = {}
-    for acao in acoes:
-        ultimas_acoes.setdefault((acao.documento_id, acao.tipo_pendencia), acao)
+    ultimas_acoes = _ultimas_acoes_pendencias(contrato)
 
     itens = []
     for documento in documentos:
@@ -706,6 +740,105 @@ def _erros_abertos(contrato, perfil, documentos, *, incluir_ignorados=False):
             }
         )
     return sorted(itens, key=lambda item: (item["data_desde"], item["codigo"].casefold()))
+
+
+def _pendencias_ids(contrato, perfil, *, incluir_ignorados=False):
+    indices = list(IndiceDocumentos.objects.filter(contrato=contrato, vigente=True))
+    ids_nosso_id = {
+        indice.pk
+        for indice in indices
+        if indice.fonte == IndiceDocumentos.Fonte.EXCEL_ID
+    }
+    if not ids_nosso_id:
+        ids_nosso_id = {indice.pk for indice in indices}
+    indices_por_id = {indice.pk: indice for indice in indices}
+    ids_consultados = ids_nosso_id | {
+        indice.pk
+        for indice in indices
+        if indice.fonte == IndiceDocumentos.Fonte.EXTRACAO_PW
+    }
+    itens = ItemPrevisto.objects.filter(
+        indice_id__in=ids_consultados,
+        excluido=False,
+    ).select_related("indice", "documento")
+
+    documentos_nosso_id = {}
+    documentos_id_cliente = {}
+    for item in itens:
+        indice = indices_por_id[item.indice_id]
+        if (
+            item.indice_id in ids_nosso_id
+            and indice.conta_no_previsto
+        ):
+            documentos_nosso_id.setdefault(item.documento_id, item.documento)
+        if indice.fonte == IndiceDocumentos.Fonte.EXTRACAO_PW:
+            documentos_id_cliente.setdefault(item.documento_id, item.documento)
+
+    ultimas_acoes = _ultimas_acoes_pendencias(contrato)
+    nome_id_cliente = perfil.nome_id_cliente or "ID do cliente"
+    grupos = (
+        (
+            PENDENCIA_FALTA_NO_PW,
+            f"Falta no {nome_id_cliente}",
+            "Ausente no ID do cliente",
+            f"Pedir inclusão no {nome_id_cliente}",
+            documentos_nosso_id.keys() - documentos_id_cliente.keys(),
+        ),
+        (
+            PENDENCIA_FALTA_NO_NOSSO_ID,
+            "Falta no nosso ID",
+            "Ausente no nosso ID",
+            "",
+            documentos_id_cliente.keys() - documentos_nosso_id.keys(),
+        ),
+    )
+    itens_pendencia = []
+    for tipo, rotulo, situacao, rotulo_acao, ids_documentos in grupos:
+        for documento_id in ids_documentos:
+            documento = (
+                documentos_nosso_id.get(documento_id)
+                or documentos_id_cliente.get(documento_id)
+            )
+            if documento.cancelado_em:
+                continue
+            ultima_acao = ultimas_acoes.get((documento.pk, tipo))
+            if (
+                ultima_acao
+                and ultima_acao.acao == AcaoPendencia.Acao.IGNORAR
+                and ultima_acao.resolvida_em is None
+                and not incluir_ignorados
+            ):
+                continue
+            itens_pendencia.append(
+                {
+                    "documento": documento,
+                    "codigo": documento.identificador_base,
+                    "titulo": documento.titulo or "(sem título)",
+                    "situacao": situacao,
+                    "grupo": rotulo,
+                    "tipo_pendencia": tipo,
+                    "data_situacao": None,
+                    "data_desde": None,
+                    "emissao": None,
+                    "revisao": "—",
+                    "versao": None,
+                    "quem_lancou": "Sistema",
+                    "ultima_acao": ultima_acao,
+                    "ultima_acao_por": _nome_usuario(ultima_acao.usuario) if ultima_acao else "",
+                    "rotulo_acao": rotulo_acao,
+                }
+            )
+    return itens_pendencia
+
+
+def _ultimas_acoes_pendencias(contrato):
+    acoes = AcaoPendencia.objects.filter(contrato=contrato).select_related("usuario").order_by(
+        "-criado_em", "-pk"
+    )
+    ultimas_acoes = {}
+    for acao in acoes:
+        ultimas_acoes.setdefault((acao.documento_id, acao.tipo_pendencia), acao)
+    return ultimas_acoes
 
 
 def _situacao_e_analise_atual(documento):

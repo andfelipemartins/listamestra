@@ -58,7 +58,7 @@
     <div class="mesa-grade">
       {% for janela in janelas %}
         <section class="mesa-janela" id="janela-{{ janela.id }}" aria-labelledby="titulo-janela-{{ janela.id }}">
-          <div class="mesa-janela-topo"><div><h2 id="titulo-janela-{{ janela.id }}">{{ janela.titulo }}</h2><p>{{ janela.quantidade }} item{{ janela.quantidade|pluralize:",s" }}</p></div><span class="mesa-contagem">{{ janela.quantidade }}</span></div>
+          <div class="mesa-janela-topo"><div><h2 id="titulo-janela-{{ janela.id }}">{{ janela.titulo }}</h2><p>{{ janela.quantidade }} item{{ janela.quantidade|pluralize:",s" }}</p>{% if janela.contagens_pendencias_id %}<p>{% for contagem in janela.contagens_pendencias_id %}{{ contagem.rotulo }}: {{ contagem.quantidade }}{% if not forloop.last %} · {% endif %}{% endfor %}</p>{% endif %}</div><span class="mesa-contagem">{{ janela.quantidade }}</span></div>
           {% if janela.itens %}
             <div class="mesa-lista">
               {% for item in janela.itens %}

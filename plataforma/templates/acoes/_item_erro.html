@@ -1,8 +1,8 @@
 <article class="mesa-item">
-  <div class="mesa-item-meta"><span class="mesa-selo">{{ item.grupo }}</span><span>Desde {{ item.data_desde|date:"d/m/Y" }}</span></div>
+  <div class="mesa-item-meta"><span class="mesa-selo">{{ item.grupo }}</span>{% if item.data_desde %}<span>Desde {{ item.data_desde|date:"d/m/Y" }}</span>{% endif %}</div>
   <a href="{% url 'documento_pasta' contrato.pk item.documento.pk %}"><strong>{{ item.codigo }}</strong></a><p>{{ item.titulo }}</p>
   <div class="mesa-item-meta"><span>Situação: {{ item.situacao }}</span><span>Rev. {{ item.revisao }}{% if item.versao != None %} · Ver. {{ item.versao }}{% endif %}</span><span>Lançado por: {{ item.quem_lancou }}</span></div>
-  {% if item.ultima_acao %}<p>Última ação: {{ item.ultima_acao.get_acao_display }} · {{ item.ultima_acao_por }}{% if item.ultima_acao.motivo %} · {{ item.ultima_acao.motivo }}{% endif %}</p>{% endif %}
+  {% if item.ultima_acao %}<p>Última ação: {% if item.rotulo_acao and item.ultima_acao.acao == "pedir_correcao" %}{{ item.rotulo_acao }}{% else %}{{ item.ultima_acao.get_acao_display }}{% endif %} · {{ item.ultima_acao_por }} · {{ item.ultima_acao.criado_em|date:"d/m/Y H:i" }}{% if item.ultima_acao.motivo %} · {{ item.ultima_acao.motivo }}{% endif %}{% if item.ultima_acao.resolvida_em %} · Reativada em {{ item.ultima_acao.resolvida_em|date:"d/m/Y H:i" }}{% endif %}</p>{% endif %}
   {% if janela.id == "ignorados" %}
     <form method="post" action="{% url 'acoes:reativar' %}" class="mesa-acoes">
       {% csrf_token %}<input type="hidden" name="contrato" value="{{ contrato.pk }}"><input type="hidden" name="documento" value="{{ item.documento.pk }}"><input type="hidden" name="tipo_pendencia" value="{{ item.tipo_pendencia }}">
@@ -14,12 +14,12 @@
         {% csrf_token %}<input type="hidden" name="contrato" value="{{ contrato.pk }}"><input type="hidden" name="documento" value="{{ item.documento.pk }}"><input type="hidden" name="tipo_pendencia" value="{{ item.tipo_pendencia }}"><input type="hidden" name="acao" value="ignorar">
         <input type="text" name="motivo" aria-label="Motivo para ignorar {{ item.codigo }}" placeholder="Motivo obrigatório" required><button type="submit">Ignorar</button>
       </form>
-      <form method="post" action="{% url 'acoes:registrar_acao' %}">
-        {% csrf_token %}<input type="hidden" name="contrato" value="{{ contrato.pk }}"><input type="hidden" name="documento" value="{{ item.documento.pk }}"><input type="hidden" name="tipo_pendencia" value="{{ item.tipo_pendencia }}"><input type="hidden" name="acao" value="pedir_correcao"><button type="submit">Pedir correção ao cliente</button>
-      </form>
-      <form method="post" action="{% url 'acoes:registrar_acao' %}">
+      {% if item.tipo_pendencia != "falta_no_nosso_id" %}<form method="post" action="{% url 'acoes:registrar_acao' %}">
+        {% csrf_token %}<input type="hidden" name="contrato" value="{{ contrato.pk }}"><input type="hidden" name="documento" value="{{ item.documento.pk }}"><input type="hidden" name="tipo_pendencia" value="{{ item.tipo_pendencia }}"><input type="hidden" name="acao" value="pedir_correcao"><button type="submit">{% if item.rotulo_acao %}{{ item.rotulo_acao }}{% else %}Pedir correção ao cliente{% endif %}</button>
+      </form>{% endif %}
+      {% if item.tipo_pendencia != "falta_no_pw" and item.tipo_pendencia != "falta_no_nosso_id" %}<form method="post" action="{% url 'acoes:registrar_acao' %}">
         {% csrf_token %}<input type="hidden" name="contrato" value="{{ contrato.pk }}"><input type="hidden" name="documento" value="{{ item.documento.pk }}"><input type="hidden" name="tipo_pendencia" value="{{ item.tipo_pendencia }}"><input type="hidden" name="acao" value="ja_corrigi"><button type="submit">Já corrigi</button>
-      </form>
+      </form>{% endif %}
     </div>
   {% endif %}
   {% if item.ultima_acao and item.ultima_acao.texto_email %}

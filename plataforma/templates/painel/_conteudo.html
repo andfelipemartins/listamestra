@@ -19,6 +19,9 @@
 {% if linhas_recusadas %}
 <p class="notice painel-recusa-aviso">{{ linhas_recusadas }} linha{{ linhas_recusadas|pluralize }} recusada{{ linhas_recusadas|pluralize }} nas importações · <a href="{% url 'linhas_recusadas' contrato.pk %}">ver</a></p>
 {% endif %}
+{% if quantidade_faltando_id_cliente %}
+<p class="notice">{{ quantidade_faltando_id_cliente }} documento{{ quantidade_faltando_id_cliente|pluralize:"s" }} do nosso ID ainda {{ quantidade_faltando_id_cliente|pluralize:"está,estão" }} no {{ nome_id_cliente }}.</p>
+{% endif %}
 
 <details class="painel-filtros" {% if quantidade_filtros_ativos or manter_filtros_abertos %}open{% endif %}>
   <summary>Filtros{% if quantidade_filtros_ativos %} · {{ quantidade_filtros_ativos }} ativos{% endif %}</summary>
