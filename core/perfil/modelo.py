@@ -131,7 +131,7 @@ class PainelPerfil:
     grupos: tuple[Grupo, ...]
     ignorar: tuple[str, ...] = ()
     avanco: tuple[str, ...] = ()
-    indicadores: tuple[IndicadorAprovacao, ...] = ()
+    indicadores: tuple[IndicadorAprovacao | IndicadorReabertura, ...] = ()
     categorias: tuple[Categoria, ...] = ()
     pacote: PacotePainel | None = None
 
@@ -153,6 +153,14 @@ class IndicadorAprovacao:
     contar_estourados_sem_aprovacao: bool
     ciclos: str
     agrupar_a_partir: int = 5
+
+
+@dataclass(frozen=True)
+class IndicadorReabertura:
+    id: str
+    rotulo: str
+    max_reaberturas: int
+    max_revisoes_por_reabertura: int
 
 
 @dataclass(frozen=True)
@@ -254,7 +262,7 @@ def perfil_de_dict(dados: Mapping[str, Any]) -> PerfilContrato:
         emissao = regra_emissao_de_dict(dados.get("emissao") or {})
         _validar_series(emissao)
         analise = ciclo_analise_de_dict(dados.get("analise") or {})
-        painel = _painel_de_dict(dados.get("painel"), codigo)
+        painel = _painel_de_dict(dados.get("painel"), codigo, emissao)
         prazos = _prazos_de_dict(dados.get("prazos"))
         return PerfilContrato(nome, versao, vigencia, codigo, emissao, analise, painel, prazos)
     except ErroPerfil:
@@ -282,7 +290,7 @@ def carregar_yaml(caminho: str | Path) -> PerfilContrato:
     return perfil_de_dict(dados)
 
 
-def _painel_de_dict(dados: Any, codigo: EstruturaCodigo) -> PainelPerfil:
+def _painel_de_dict(dados: Any, codigo: EstruturaCodigo, emissao: RegraEmissao) -> PainelPerfil:
     if dados is None:
         return _painel_minimo()
     if not isinstance(dados, Mapping):
@@ -397,6 +405,13 @@ def _painel_de_dict(dados: Any, codigo: EstruturaCodigo) -> PainelPerfil:
         ids_avanco.add(chave_id)
 
     indicadores = _indicadores_de_dict(dados.get("indicadores", ()))
+    if (
+        any(isinstance(item, IndicadorReabertura) for item in indicadores)
+        and emissao.revisao.reabertura is None
+    ):
+        raise ErroPerfil(
+            "O indicador 'reabertura_resolvida' exige a série 'emissao.revisao.reabertura'."
+        )
     categorias = _categorias_de_dict(dados.get("categorias"), codigo)
     pacote = _pacote_de_dict(dados.get("pacote"), codigo)
     return PainelPerfil(
@@ -506,21 +521,24 @@ def _categorias_de_dict(dados: Any, codigo: EstruturaCodigo) -> tuple[Categoria,
     return tuple(categorias)
 
 
-def _indicadores_de_dict(dados: Any) -> tuple[IndicadorAprovacao, ...]:
+def _indicadores_de_dict(
+    dados: Any,
+) -> tuple[IndicadorAprovacao | IndicadorReabertura, ...]:
     if not isinstance(dados, (list, tuple)):
         raise ErroPerfil("'painel.indicadores' precisa ser uma lista.")
 
-    indicadores: list[IndicadorAprovacao] = []
+    indicadores: list[IndicadorAprovacao | IndicadorReabertura] = []
     ids: set[str] = set()
     for posicao, item in enumerate(dados, start=1):
         campo = f"painel.indicadores[{posicao}]"
         if not isinstance(item, Mapping):
             raise ErroPerfil(f"{campo} precisa ser um objeto.")
         tipo = item.get("tipo")
-        if tipo != "aprovacao_em_ate_n_revisoes":
+        if tipo not in {"aprovacao_em_ate_n_revisoes", "reabertura_resolvida"}:
             raise ErroPerfil(
                 f"Tipo de indicador inválido em {campo}: '{tipo}'. "
-                "O tipo suportado é 'aprovacao_em_ate_n_revisoes'."
+                "Os tipos suportados são 'aprovacao_em_ate_n_revisoes' e "
+                "'reabertura_resolvida'."
             )
 
         identificador = _texto_obrigatorio(item.get("id"), f"id em {campo}")
@@ -528,6 +546,42 @@ def _indicadores_de_dict(dados: Any) -> tuple[IndicadorAprovacao, ...]:
         if chave_id in ids:
             raise ErroPerfil(f"Id de indicador repetido em 'painel.indicadores': '{identificador}'.")
         ids.add(chave_id)
+
+        if tipo == "reabertura_resolvida":
+            if "meta_percentual" in item or "rotulo_meta" in item:
+                raise ErroPerfil(
+                    f"O indicador '{identificador}' não aceita campos de meta."
+                )
+            max_reaberturas = item.get("max_reaberturas")
+            if (
+                isinstance(max_reaberturas, bool)
+                or not isinstance(max_reaberturas, int)
+                or max_reaberturas < 0
+            ):
+                raise ErroPerfil(
+                    f"'max_reaberturas' de '{identificador}' precisa ser inteiro maior ou igual a 0."
+                )
+            max_revisoes = item.get("max_revisoes_por_reabertura")
+            if (
+                isinstance(max_revisoes, bool)
+                or not isinstance(max_revisoes, int)
+                or max_revisoes < 1
+            ):
+                raise ErroPerfil(
+                    f"'max_revisoes_por_reabertura' de '{identificador}' precisa ser inteiro maior ou igual a 1."
+                )
+            indicadores.append(
+                IndicadorReabertura(
+                    id=identificador,
+                    rotulo=_texto_obrigatorio(
+                        item.get("rotulo", "Reaberturas"),
+                        f"rótulo do indicador '{identificador}'",
+                    ),
+                    max_reaberturas=max_reaberturas,
+                    max_revisoes_por_reabertura=max_revisoes,
+                )
+            )
+            continue
 
         limite = item.get("limite_revisoes")
         if isinstance(limite, bool) or not isinstance(limite, int) or limite < 1:

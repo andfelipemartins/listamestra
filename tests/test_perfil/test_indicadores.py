@@ -12,6 +12,7 @@ from core.perfil import (
     carregar_yaml,
     perfil_de_dict,
 )
+from core.perfil.indicadores import calcular_indicador_reabertura
 
 
 ROOT = Path(__file__).parents[2]
@@ -325,3 +326,177 @@ def test_rotulo_declarado_no_perfil_prevalece_sobre_o_rotulo_gerado():
     perfil = perfil_de_dict(dados)
 
     assert perfil.painel.indicadores[0].rotulo == "Qualidade da primeira aprovação"
+
+
+def _indicador_reabertura(metro):
+    return next(
+        indicador
+        for indicador in metro.painel.indicadores
+        if indicador.id == "reabertura_resolvida"
+    )
+
+
+def _historico_reabertura(reaberturas):
+    emissoes = [EmissaoIndicador("original", "0", "Aprovado")]
+    for indice, (revisoes, situacao_final, motivo) in enumerate(reaberturas):
+        letra = chr(ord("A") + indice)
+        emissoes.extend(
+            EmissaoIndicador(
+                "preliminar",
+                f"{letra}{numero}",
+                "Não Aprovado",
+                motivo_reabertura=motivo if numero == 1 else None,
+            )
+            for numero in range(1, revisoes + 1)
+        )
+        if situacao_final is not None:
+            emissoes.append(
+                EmissaoIndicador("original", letra, situacao_final)
+            )
+    return tuple(emissoes)
+
+
+def test_reabertura_a1_aprovada_em_a_fica_dentro_do_padrao(metro):
+    documento = _documento(
+        "aprovado",
+        _historico_reabertura(((1, "Aprovado", "campo"),)),
+        "Aprovado",
+    )
+
+    resultado = calcular_indicador_reabertura(
+        metro, _indicador_reabertura(metro), [documento]
+    )
+
+    assert resultado.total_reaberturas == 1
+    assert resultado.resolvidas_no_padrao == 1
+    assert resultado.resolvidas_fora_padrao == 0
+    assert resultado.percentual_no_padrao == 100
+    assert resultado.por_motivo["campo"] == 1
+
+
+def test_reabertura_a1_a2_aprovada_em_a_fica_fora_com_limite_um(metro):
+    documento = _documento(
+        "aprovado",
+        _historico_reabertura(((2, "Aprovado", "projeto"),)),
+        "Aprovado",
+    )
+
+    resultado = calcular_indicador_reabertura(
+        metro, _indicador_reabertura(metro), [documento]
+    )
+
+    assert resultado.total_reaberturas == 1
+    assert resultado.resolvidas_no_padrao == 0
+    assert resultado.resolvidas_fora_padrao == 1
+    assert resultado.em_aberto == 0
+
+
+def test_reabertura_sem_retorno_a_aprovado_fica_em_aberto(metro):
+    documento = _documento(
+        "nao_aprovado",
+        _historico_reabertura(((1, None, "cliente"),)),
+        "Não Aprovado",
+    )
+
+    resultado = calcular_indicador_reabertura(
+        metro, _indicador_reabertura(metro), [documento]
+    )
+
+    assert resultado.total_reaberturas == 1
+    assert resultado.resolvidas_no_padrao == 0
+    assert resultado.resolvidas_fora_padrao == 0
+    assert resultado.em_aberto == 1
+    assert resultado.percentual_no_padrao == 0
+
+
+def test_terceira_reabertura_ultrapassa_limite_de_duas(metro):
+    documento = _documento(
+        "nao_aprovado",
+        _historico_reabertura(
+            ((1, "Aprovado", "campo"), (1, "Aprovado", "outro"), (1, None, None))
+        ),
+        "Não Aprovado",
+    )
+
+    resultado = calcular_indicador_reabertura(
+        metro, _indicador_reabertura(metro), [documento]
+    )
+
+    assert resultado.total_reaberturas == 3
+    assert resultado.resolvidas_no_padrao == 2
+    assert resultado.em_aberto == 1
+    assert resultado.documentos_acima_limite == 1
+
+
+def test_indicador_reabertura_divide_motivos_incluindo_sem_motivo(metro):
+    motivos = ("campo", "projeto", "cliente", "outro", None)
+    documentos = [
+        _documento(
+            "nao_aprovado",
+            _historico_reabertura(((1, None, motivo),)),
+            "Não Aprovado",
+            recorte=str(indice),
+        )
+        for indice, motivo in enumerate(motivos)
+    ]
+
+    resultado = calcular_indicador_reabertura(
+        metro, _indicador_reabertura(metro), documentos
+    )
+
+    assert resultado.por_motivo == {
+        "campo": 1,
+        "projeto": 1,
+        "cliente": 1,
+        "outro": 1,
+        "sem_motivo": 1,
+    }
+
+
+@pytest.mark.parametrize(
+    ("alterar", "mensagem"),
+    [
+        (lambda i: i.update(max_reaberturas=-1), "max_reaberturas"),
+        (lambda i: i.update(max_reaberturas=True), "max_reaberturas"),
+        (
+            lambda i: i.update(max_revisoes_por_reabertura=0),
+            "max_revisoes_por_reabertura",
+        ),
+        (
+            lambda i: i.update(meta_percentual=80),
+            "não aceita campos de meta",
+        ),
+    ],
+)
+def test_validacao_dos_parametros_do_indicador_reabertura(alterar, mensagem):
+    with (ROOT / "core" / "perfil" / "exemplos" / "metro.yaml").open(encoding="utf-8") as arquivo:
+        dados = yaml.safe_load(arquivo)
+    dados["painel"]["indicadores"] = [
+        {
+            "tipo": "reabertura_resolvida",
+            "id": "reabertura",
+            "max_reaberturas": 2,
+            "max_revisoes_por_reabertura": 1,
+        }
+    ]
+    alterar(dados["painel"]["indicadores"][0])
+
+    with pytest.raises(ErroPerfil, match=mensagem):
+        perfil_de_dict(dados)
+
+
+def test_indicador_reabertura_exige_serie_configurada_no_perfil():
+    with (ROOT / "core" / "perfil" / "exemplos" / "metro.yaml").open(encoding="utf-8") as arquivo:
+        dados = yaml.safe_load(arquivo)
+    dados["painel"]["indicadores"] = [
+        {
+            "tipo": "reabertura_resolvida",
+            "id": "reabertura",
+            "max_reaberturas": 2,
+            "max_revisoes_por_reabertura": 1,
+        }
+    ]
+    dados["emissao"]["revisao"].pop("reabertura")
+
+    with pytest.raises(ErroPerfil, match="série 'emissao.revisao.reabertura'"):
+        perfil_de_dict(dados)

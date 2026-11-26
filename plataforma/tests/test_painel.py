@@ -772,6 +772,108 @@ def test_indicador_sem_recortes_com_base_mostra_sem_dados_no_grafico(
 
 
 @pytest.mark.django_db
+def test_indicador_reaberturas_mostra_resultados_e_divisao_por_motivo(
+    contrato, perfil_modelo, client, django_user_model
+):
+    usuario = django_user_model.objects.create_user(
+        username="chefia-reaberturas", password="senha"
+    )
+    Participacao.objects.create(usuario=usuario, contrato=contrato, papel="chefia")
+    indice = _indice(contrato, "ID-REABERTURAS")
+
+    dentro = _documento(contrato, indice, 5801, classe="A1")
+    _emissao_com_status(dentro, "0", "Aprovado", fase=Emissao.Fase.ORIGINAL)
+    campo = _emissao_com_status(dentro, "A1", "Não Aprovado")
+    campo.motivo_reabertura = Emissao.MotivoReabertura.CAMPO
+    campo.save(update_fields=("motivo_reabertura",))
+    _emissao_com_status(dentro, "A", "Aprovado", fase=Emissao.Fase.ORIGINAL)
+
+    varias = _documento(contrato, indice, 5802, classe="A1")
+    _emissao_com_status(varias, "0", "Aprovado", fase=Emissao.Fase.ORIGINAL)
+    projeto = _emissao_com_status(varias, "B1", "Não Aprovado")
+    projeto.motivo_reabertura = Emissao.MotivoReabertura.PROJETO
+    projeto.save(update_fields=("motivo_reabertura",))
+    _emissao_com_status(varias, "B2", "Não Aprovado")
+    _emissao_com_status(varias, "B", "Aprovado", fase=Emissao.Fase.ORIGINAL)
+    cliente = _emissao_com_status(varias, "C1", "Não Aprovado")
+    cliente.motivo_reabertura = Emissao.MotivoReabertura.CLIENTE
+    cliente.save(update_fields=("motivo_reabertura",))
+    _emissao_com_status(varias, "C", "Aprovado", fase=Emissao.Fase.ORIGINAL)
+    outro = _emissao_com_status(varias, "D1", "Não Aprovado")
+    outro.motivo_reabertura = Emissao.MotivoReabertura.OUTRO
+    outro.save(update_fields=("motivo_reabertura",))
+    _emissao_com_status(varias, "D", "Aprovado", fase=Emissao.Fase.ORIGINAL)
+    _emissao_com_status(varias, "E1", "Não Aprovado")
+    client.force_login(usuario)
+
+    dados = carregar_painel(contrato)
+    indicador = dados["indicadores_reabertura"][0]
+    html = client.get(reverse("painel", args=(contrato.pk,))).content.decode()
+    artigo = re.search(
+        r'<article class="painel-indicador" aria-labelledby="painel-reabertura-titulo-1">(.*?)</article>',
+        html,
+        re.S,
+    ).group(1)
+
+    assert indicador["total"] == 5
+    assert indicador["resolvidas_no_padrao"] == 3
+    assert indicador["resolvidas_fora_padrao"] == 1
+    assert indicador["em_aberto"] == 1
+    assert indicador["documentos_acima_limite"] == 1
+    assert indicador["percentual_no_padrao"] == 60
+    assert {item["rotulo"]: item["quantidade"] for item in indicador["motivos"]} == {
+        "Problema de campo": 1,
+        "Erro de projeto": 1,
+        "Pedido do cliente": 1,
+        "Outro": 1,
+        "Sem motivo": 1,
+    }
+    assert "3 de 5" in artigo
+    assert "Fora do padrão: 1" in artigo
+    assert "Em aberto: 1" in artigo
+    assert "Documentos acima do limite de 2: 1" in artigo
+    assert "Problema de campo: 1" in artigo
+    assert "Sem motivo: 1" in artigo
+    assert "Meta" not in artigo
+
+
+@pytest.mark.django_db
+def test_indicador_reaberturas_respeita_filtros_de_fase_escopo_e_categoria(
+    contrato, perfil_modelo
+):
+    civil = _indice(
+        contrato, "ID-REABERTURAS-CIVIL", fase="Executivo", escopos=("Civil",)
+    )
+    sistemas = _indice(
+        contrato, "ID-REABERTURAS-SISTEMAS", fase="Básico", escopos=("Sistemas",)
+    )
+    documento_civil = _documento(contrato, civil, 5901, classe="A1")
+    _emissao_com_status(
+        documento_civil, "0", "Aprovado", fase=Emissao.Fase.ORIGINAL
+    )
+    _emissao_com_status(documento_civil, "A1", "Não Aprovado")
+    _emissao_com_status(
+        documento_civil, "A", "Aprovado", fase=Emissao.Fase.ORIGINAL
+    )
+    documento_sistemas = _documento(contrato, sistemas, 5902, classe="P7")
+    _emissao_com_status(
+        documento_sistemas, "0", "Aprovado", fase=Emissao.Fase.ORIGINAL
+    )
+    _emissao_com_status(documento_sistemas, "B1", "Não Aprovado")
+
+    geral = carregar_painel(contrato)["indicadores_reabertura"][0]
+    filtrado = carregar_painel(
+        contrato,
+        filtros={"fase": "Executivo", "escopo": "Civil", "categoria": "civil"},
+    )["indicadores_reabertura"][0]
+
+    assert geral["total"] == 2
+    assert filtrado["total"] == 1
+    assert filtrado["resolvidas_no_padrao"] == 1
+    assert filtrado["em_aberto"] == 0
+
+
+@pytest.mark.django_db
 def test_perfil_sem_indicador_nao_mostra_bloco_no_painel(
     contrato, perfil_modelo, client, django_user_model
 ):

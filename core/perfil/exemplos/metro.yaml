@@ -368,6 +368,12 @@ painel:
       agrupar_a_partir: 5
       contar_estourados_sem_aprovacao: false
       ciclos: primeira_aprovacao
+    # D-071: parâmetros provisórios até a pergunta AG1; indicador informativo, sem meta.
+    - tipo: reabertura_resolvida
+      id: reabertura_resolvida
+      rotulo: Reaberturas
+      max_reaberturas: 2
+      max_revisoes_por_reabertura: 1
 prazos:
   # D-064: o acervo usa a região configurada para o contrato.
   feriados: {nacionais: true, regiao: {uf: SP, municipio: São Paulo}, extras: []}

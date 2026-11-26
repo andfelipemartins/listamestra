@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Iterable
 
 from .ciclo import _normalizar_situacao
-from .modelo import IndicadorAprovacao, PerfilContrato
+from .modelo import IndicadorAprovacao, IndicadorReabertura, PerfilContrato
 from .painel import classificar, resolver_situacao_oculta
 from .series import criar_serie
 
@@ -19,6 +19,7 @@ class EmissaoIndicador:
     situacao: str | None
     versao: int | str | None = None
     situacoes_mais_recentes: tuple[str | None, ...] = ()
+    motivo_reabertura: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "situacoes_mais_recentes", tuple(self.situacoes_mais_recentes))
@@ -61,6 +62,108 @@ class ResultadoContagemIndicador:
 class ResultadoIndicadorAprovacao:
     geral: ResultadoContagemIndicador
     por_recorte: Mapping[str, ResultadoContagemIndicador]
+
+
+@dataclass(frozen=True)
+class ResultadoIndicadorReabertura:
+    total_reaberturas: int
+    resolvidas_no_padrao: int
+    resolvidas_fora_padrao: int
+    em_aberto: int
+    documentos_acima_limite: int
+    por_motivo: Mapping[str, int]
+
+    @property
+    def percentual_no_padrao(self) -> float | None:
+        if not self.total_reaberturas:
+            return None
+        return 100 * self.resolvidas_no_padrao / self.total_reaberturas
+
+
+_MOTIVOS_REABERTURA = ("campo", "projeto", "cliente", "outro", "sem_motivo")
+
+
+def calcular_indicador_reabertura(
+    perfil: PerfilContrato,
+    indicador: IndicadorReabertura,
+    documentos: Iterable[DocumentoIndicador],
+) -> ResultadoIndicadorReabertura:
+    """Conta reaberturas pelo ciclo e pelas séries declaradas no perfil."""
+    eixo = perfil.emissao.revisao
+    if eixo.reabertura is None:
+        raise ValueError("O indicador de reabertura exige a série reabertura do perfil.")
+    serie_reabertura = criar_serie(
+        eixo.reabertura.nome,
+        inicio=eixo.reabertura.inicio,
+        proibidas=eixo.reabertura.proibidas,
+    )
+    serie_original = criar_serie(
+        eixo.original.nome,
+        inicio=eixo.original.inicio,
+        proibidas=eixo.original.proibidas,
+    )
+    ids_avanco = {identificador.casefold() for identificador in perfil.painel.avanco}
+    total = dentro = fora = abertos = acima_limite = 0
+    por_motivo = {motivo: 0 for motivo in _MOTIVOS_REABERTURA}
+
+    for documento in documentos:
+        teve_aprovacao = False
+        ativa = None
+        quantidade_documento = 0
+
+        for emissao in documento.emissoes:
+            fase = emissao.fase.casefold()
+            revisao = str(emissao.revisao)
+            grupo = classificar(perfil, emissao.situacao) if emissao.situacao else None
+            if grupo and grupo.oculto_no_painel:
+                situacao = resolver_situacao_oculta(
+                    perfil,
+                    emissao.situacoes_mais_recentes or (emissao.situacao,),
+                )
+                grupo = classificar(perfil, situacao)
+            aprovada = bool(grupo and grupo.id.casefold() in ids_avanco)
+
+            if fase == "original" and serie_original.valida(revisao) and aprovada:
+                if ativa is not None:
+                    total += 1
+                    quantidade_documento += 1
+                    por_motivo[ativa["motivo"]] += 1
+                    if ativa["emissoes"] <= indicador.max_revisoes_por_reabertura:
+                        dentro += 1
+                    else:
+                        fora += 1
+                    ativa = None
+                teve_aprovacao = True
+                continue
+
+            if (
+                teve_aprovacao
+                and fase == "preliminar"
+                and serie_reabertura.valida(revisao)
+            ):
+                if ativa is None:
+                    motivo = (emissao.motivo_reabertura or "").strip().casefold()
+                    if motivo not in _MOTIVOS_REABERTURA[:-1]:
+                        motivo = "sem_motivo"
+                    ativa = {"emissoes": 0, "motivo": motivo}
+                ativa["emissoes"] += 1
+
+        if ativa is not None:
+            total += 1
+            quantidade_documento += 1
+            por_motivo[ativa["motivo"]] += 1
+            abertos += 1
+        if quantidade_documento > indicador.max_reaberturas:
+            acima_limite += 1
+
+    return ResultadoIndicadorReabertura(
+        total_reaberturas=total,
+        resolvidas_no_padrao=dentro,
+        resolvidas_fora_padrao=fora,
+        em_aberto=abertos,
+        documentos_acima_limite=acima_limite,
+        por_motivo=por_motivo,
+    )
 
 
 def calcular_indicador_aprovacao(

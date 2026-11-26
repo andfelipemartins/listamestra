@@ -6,11 +6,16 @@ from math import ceil
 from django.db.models import F, Prefetch
 from django.utils import timezone
 
-from core.perfil import ErroPerfil, perfil_de_dict
+from core.perfil import (
+    ErroPerfil,
+    perfil_de_dict,
+)
+from core.perfil.modelo import IndicadorReabertura
 from core.perfil.indicadores import (
     DocumentoIndicador,
     EmissaoIndicador,
     calcular_indicador_aprovacao,
+    calcular_indicador_reabertura,
 )
 from core.perfil.painel import (
     classificar,
@@ -42,6 +47,13 @@ _FASE_SEM_FASE = "__sem_fase__"
 _FILTRO_FASE = "fase"
 _ESCOPO_SEM_ESCOPO = "__sem_escopo__"
 _FILTRO_ESCOPO = "escopo"
+_ROTULOS_MOTIVOS_REABERTURA = (
+    ("campo", "Problema de campo"),
+    ("projeto", "Erro de projeto"),
+    ("cliente", "Pedido do cliente"),
+    ("outro", "Outro"),
+    ("sem_motivo", "Sem motivo"),
+)
 
 
 @dataclass(frozen=True)
@@ -340,29 +352,61 @@ def carregar_painel(contrato, por=None, filtros=None):
             ]
 
     indicadores_aprovacao = []
+    indicadores_reabertura = []
+    documentos_indicador = [
+        DocumentoIndicador(
+            grupo_id=classificar(perfil, item.situacao_vigente).id,
+            situacao=item.situacao_vigente,
+            emissoes=tuple(
+                EmissaoIndicador(
+                    fase=emissao.fase,
+                    revisao=emissao.revisao,
+                    situacao=_situacao_emissao(emissao),
+                    versao=emissao.versao,
+                    situacoes_mais_recentes=tuple(
+                        analise.situacao for analise in emissao.analises.all()
+                    ),
+                    motivo_reabertura=emissao.motivo_reabertura,
+                )
+                for emissao in item.documento.emissoes.all()
+            ),
+            recorte=valor_recorte(perfil, item.documento, caixa_selecionada)
+            or "(sem informação)",
+            situacoes_mais_recentes=item.situacoes_mais_recentes,
+        )
+        for item in documentos_filtrados
+    ]
     for indicador in perfil.painel.indicadores:
-        documentos_indicador = [
-            DocumentoIndicador(
-                grupo_id=classificar(perfil, item.situacao_vigente).id,
-                situacao=item.situacao_vigente,
-                emissoes=tuple(
-                    EmissaoIndicador(
-                        fase=emissao.fase,
-                        revisao=emissao.revisao,
-                        situacao=_situacao_emissao(emissao),
-                        versao=emissao.versao,
-                        situacoes_mais_recentes=tuple(
-                            analise.situacao for analise in emissao.analises.all()
-                        ),
-                    )
-                    for emissao in item.documento.emissoes.all()
-                ),
-                recorte=valor_recorte(perfil, item.documento, caixa_selecionada)
-                or "(sem informação)",
-                situacoes_mais_recentes=item.situacoes_mais_recentes,
+        if isinstance(indicador, IndicadorReabertura):
+            resultado_reabertura = calcular_indicador_reabertura(
+                perfil, indicador, documentos_indicador
             )
-            for item in documentos_filtrados
-        ]
+            motivos = [
+                {
+                    "valor": chave,
+                    "rotulo": rotulo,
+                    "quantidade": resultado_reabertura.por_motivo[chave],
+                }
+                for chave, rotulo in _ROTULOS_MOTIVOS_REABERTURA
+            ]
+            indicadores_reabertura.append(
+                {
+                    "configuracao": indicador,
+                    "total": resultado_reabertura.total_reaberturas,
+                    "resolvidas_no_padrao": resultado_reabertura.resolvidas_no_padrao,
+                    "resolvidas_fora_padrao": resultado_reabertura.resolvidas_fora_padrao,
+                    "em_aberto": resultado_reabertura.em_aberto,
+                    "percentual_no_padrao": resultado_reabertura.percentual_no_padrao,
+                    "documentos_acima_limite": resultado_reabertura.documentos_acima_limite,
+                    "tem_motivos_preenchidos": any(
+                        resultado_reabertura.por_motivo[chave]
+                        for chave in ("campo", "projeto", "cliente", "outro")
+                    ),
+                    "motivos": motivos,
+                }
+            )
+            continue
+
         resultado = calcular_indicador_aprovacao(perfil, indicador, documentos_indicador)
         recortes_indicador = []
         if caixa_selecionada in dimensoes_id:
@@ -501,6 +545,7 @@ def carregar_painel(contrato, por=None, filtros=None):
         "recortes": recortes,
         "grupos_recorte": grupos_recorte,
         "indicadores_aprovacao": indicadores_aprovacao,
+        "indicadores_reabertura": indicadores_reabertura,
         "indicadores_prazo": indicadores_prazo,
         "indicador_cronograma": indicador_cronograma,
         "meta_prazo_percentual": (

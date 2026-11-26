@@ -1,3 +1,4 @@
+{% load l10n %}
 {% if recortes %}
 <p class="painel-recorte-caption">{{ rotulo_caixa }}</p>
 <div class="painel-barras-wrap" style="--linhas: {{ recortes|length }}"><canvas id="grafico-recortes" aria-label="Barras empilhadas de avanço por {{ rotulo_caixa }}"></canvas></div>
@@ -69,6 +70,37 @@
       </tbody>
     </table></div>
   </details>
+  {% endif %}
+</article>
+{% endfor %}
+
+{% for indicador in indicadores_reabertura %}
+<article class="painel-indicador" aria-labelledby="painel-reabertura-titulo-{{ forloop.counter }}">
+  <div class="painel-indicador-topo">
+    <div>
+      <h3 id="painel-reabertura-titulo-{{ forloop.counter }}">{{ indicador.configuracao.rotulo }}</h3>
+      <p class="painel-indicador-geral">
+        {% if indicador.total %}
+          <strong>{{ indicador.resolvidas_no_padrao }} de {{ indicador.total }}</strong> reaberturas resolvidas no padrão ({{ indicador.percentual_no_padrao|floatformat:1 }}% do total)
+        {% else %}
+          <strong>Sem reaberturas registradas</strong>
+        {% endif %}
+      </p>
+    </div>
+    <p class="painel-indicador-legenda">
+      Total: {{ indicador.total }} · Fora do padrão: {{ indicador.resolvidas_fora_padrao }} · Em aberto: {{ indicador.em_aberto }} · Documentos acima do limite de {{ indicador.configuracao.max_reaberturas }}: {{ indicador.documentos_acima_limite }}
+    </p>
+  </div>
+  <div class="painel-progresso" role="progressbar" aria-label="Reaberturas resolvidas no padrão" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{% if indicador.percentual_no_padrao != None %}{{ indicador.percentual_no_padrao|floatformat:0 }}{% else %}0{% endif %}" style="margin-top:14px">
+    <span style="width:{% if indicador.percentual_no_padrao != None %}{{ indicador.percentual_no_padrao|unlocalize }}{% else %}0{% endif %}%; background:var(--chart-green)"></span>
+  </div>
+  {% if indicador.tem_motivos_preenchidos %}
+  <div style="margin-top:14px">
+    <p class="painel-indicador-geral" style="text-align:left"><strong style="font-size:inherit">Divisão por motivo</strong></p>
+    <p class="painel-indicador-legenda" style="text-align:left">
+      {% for motivo in indicador.motivos %}{{ motivo.rotulo }}: {{ motivo.quantidade }}{% if not forloop.last %} · {% endif %}{% endfor %}
+    </p>
+  </div>
   {% endif %}
 </article>
 {% endfor %}
