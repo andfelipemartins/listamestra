@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Contratos{% endblock %}
+{% block extra_head %}
+<style>
+  .contratos-tabela { font-size: 12px; }
+  .contratos-tabela th, .contratos-tabela td { padding: 9px 10px; }
+  .contrato-inativo { color: var(--text-secondary); background: var(--surface-raised); }
+  .contrato-selo { display: inline-block; margin-left: 5px; padding: 2px 7px; border: 1px solid var(--border); border-radius: 10px; color: var(--text-secondary); font-size: 10px; font-weight: 600; }
+  .contrato-papeis { min-width: 220px; }
+  .contrato-acoes { min-width: 200px; white-space: nowrap; }
+  .contrato-acoes a + a { margin-left: 8px; }
+</style>
+{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <div><span class="eyebrow">ADMINISTRAÇÃO</span><h1>Contratos</h1><p>Contratos cadastrados, perfis vigentes, equipe e documentos não cancelados em conta.</p></div>
+</section>
+
+{% if contratos %}
+<section class="panel" aria-label="Contratos cadastrados">
+  <div class="table-wrap contratos-tabela">
+    <table>
+      <thead><tr><th>Código</th><th>Contrato</th><th>Cliente</th><th>Situação</th><th>Perfil vigente</th><th>Participações ativas por papel</th><th>Documentos em conta</th><th>Ações</th></tr></thead>
+      <tbody>
+        {% for item in contratos %}
+        <tr class="contrato-linha{% if not item.ativo %} contrato-inativo{% endif %}">
+          <td>{{ item.codigo_interno }}</td>
+          <td><a href="{% url 'contrato_detalhe' item.contrato.pk %}"><strong>{{ item.nome }}</strong></a>{% if not item.ativo %}<span class="contrato-selo">Inativo</span>{% endif %}</td>
+          <td>{{ item.cliente }}</td>
+          <td>{% if item.ativo %}Ativo{% else %}Inativo{% endif %}</td>
+          <td>{{ item.nome_perfil|default:"—" }}</td>
+          <td class="contrato-papeis">{% for papel in item.participacoes_por_papel %}{% if not forloop.first %}<br>{% endif %}{{ papel.rotulo }}: {{ papel.quantidade }}{% endfor %}</td>
+          <td>{{ item.total_documentos_em_conta }}</td>
+          <td class="contrato-acoes"><a href="{% url 'painel' item.contrato.pk %}">Painel</a><a href="{% url 'lista_mestra' %}?contrato={{ item.contrato.pk }}">Lista Mestra</a><a href="{% url 'admin:contratos_contrato_change' item.contrato.pk %}">Editar no admin</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% else %}
+<section class="panel"><p class="painel-sem-dados">Nenhum contrato cadastrado.</p></section>
+{% endif %}
+{% endblock %}

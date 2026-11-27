@@ -37,6 +37,7 @@
       {% for contrato_painel in contratos_painel %}<a class="nav-item {% if request.resolver_match.kwargs.contrato_id == contrato_painel.pk|stringformat:'s' %}active{% endif %}" href="{% url 'painel' contrato_painel.pk %}"><span class="nav-icon">◉</span>Painel · {{ contrato_painel.codigo_interno }}</a>{% endfor %}
       <a class="nav-item {% if request.resolver_match.url_name == 'documentos_lista' or request.resolver_match.url_name == 'documento_pasta' %}active{% endif %}" href="{% url 'documentos_lista' %}"><span class="nav-icon">▤</span>Documentos</a>
       <a class="nav-item {% if request.resolver_match.url_name == 'lista_mestra' %}active{% endif %}" href="{% url 'lista_mestra' %}"><span class="nav-icon">▤</span>Lista Mestra</a>
+      {% if user.is_staff %}<a class="nav-item {% if request.resolver_match.url_name == 'contratos_lista' or request.resolver_match.url_name == 'contrato_detalhe' %}active{% endif %}" href="{% url 'contratos_lista' %}"><span class="nav-icon">▣</span>Contratos</a>{% endif %}
       {% if user.is_staff %}<a class="nav-item" href="{% url 'importar_id' %}"><span class="nav-icon">⇧</span>Importar ID</a>{% endif %}
       {% if user.is_staff %}<a class="nav-item" href="{% url 'importar_situacao_pw' %}"><span class="nav-icon">⇧</span>Importar situação PW</a>{% endif %}
       {% if user.is_staff %}

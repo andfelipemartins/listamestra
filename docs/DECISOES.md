@@ -1342,3 +1342,14 @@ Aprovado, Não Conforme, Inconsistente, Erro de Assinatura, Cancelado, Revisão 
   cancelados, atrasados por lado). Uma foto por contrato e por dia: guardar de novo no mesmo dia substitui.
 - Página **"Fotos do contrato"** com a lista das fotos e a diferença de cada uma para a anterior. Sem gravação
   automática mensal e sem gráfico nesta fatia. Tabela nova (justificada: histórico não existe em outro lugar).
+
+## D-120 · Marco 18 começa por uma tela "Contratos" só de leitura (escolha do Claude, a confirmar)
+
+*Origem: esteira contínua (D-100) · 2026-11-27 · confirmação na avaliação do block-072*
+
+- Com os Marcos 12, 16 e 17 esperando avaliação (AP1, AQ1, AR1) e Pendências e Lista Mestra esperando respostas, a
+  esteira abre o Marco 18 (Gestão de Contratos) pela menor fatia: página **"Contratos"** no menu, só para staff,
+  com uma linha por contrato (código, nome, cliente, ativo, perfil, quantas pessoas participam por papel, quantos
+  documentos em conta) e links para o Painel, a Lista Mestra do contrato e a edição no admin.
+- Ao abrir um contrato na tela: quem participa (nome, papel, ativo). Criar, editar, ativar e desativar continuam no
+  admin nesta fatia. Sem tabela nova.

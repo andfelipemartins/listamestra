@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}{{ resumo.nome }} · Contratos{% endblock %}
+{% block extra_head %}
+<style>
+  .contrato-detalhe-inativo { color: var(--text-secondary); }
+  .contrato-selo { display: inline-block; margin-left: 5px; padding: 2px 7px; border: 1px solid var(--border); border-radius: 10px; color: var(--text-secondary); font-size: 10px; font-weight: 600; }
+  .contrato-participantes td, .contrato-participantes th { padding: 9px 10px; }
+</style>
+{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <div><span class="eyebrow">CONTRATOS</span><h1>{{ resumo.codigo_interno }} · {{ resumo.nome }}{% if not resumo.ativo %}<span class="contrato-selo">Inativo</span>{% endif %}</h1><p>{{ resumo.cliente }} · Perfil vigente: {{ resumo.nome_perfil|default:"—" }} · {{ resumo.total_documentos_em_conta }} documentos em conta</p></div>
+</section>
+
+<section class="panel">
+  <div class="panel-heading"><div><h2>Participantes</h2><p>Participações ativas aparecem primeiro.</p></div></div>
+  <div class="table-wrap contrato-participantes">
+    <table>
+      <thead><tr><th>Nome</th><th>Usuário</th><th>Papel</th><th>Situação</th></tr></thead>
+      <tbody>
+        {% for participante in resumo.participantes %}
+        <tr{% if not participante.ativo %} class="contrato-detalhe-inativo"{% endif %}>
+          <td>{{ participante.nome }}</td><td>{{ participante.usuario }}</td><td>{{ participante.papel }}</td><td>{% if participante.ativo %}Ativo{% else %}Inativo{% endif %}</td>
+        </tr>
+        {% empty %}<tr><td colspan="4" class="painel-sem-dados">Nenhuma participação cadastrada.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p><a href="{% url 'contratos_lista' %}">Voltar para Contratos</a> · <a href="{% url 'admin:contratos_contrato_change' resumo.contrato.pk %}">Editar no admin</a></p>
+</section>
+{% endblock %}

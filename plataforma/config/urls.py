@@ -32,6 +32,7 @@ urlpatterns = [
     path("importacoes/cronograma/", ImportarCronogramaView.as_view(), name="importar_cronograma"),
     path("importacoes/recusadas/<int:contrato_id>/", LinhasRecusadasView.as_view(), name="linhas_recusadas"),
     path("painel/", include("painel.urls")),
+    path("contratos/", include("contratos.urls")),
     path("atividade/", include("registro.urls")),
     path("acoes/", include("acoes.urls")),
     path("documentos/", include("documentos.urls")),
