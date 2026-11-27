@@ -12,9 +12,11 @@ from .servicos import (
     cancelar_documentos,
     carregar_confirmacao_cancelamento,
     carregar_confirmacao_reativacao,
+    carregar_edicao_titulo,
     carregar_lista_documentos,
     carregar_lista_mestra,
     carregar_pasta_documento,
+    editar_titulo_documento,
     reativar_documentos,
 )
 
@@ -239,6 +241,43 @@ class DocumentoPastaView(LoginRequiredMixin, View):
         else:
             messages.success(request, "Motivo da reabertura atualizado.")
         return redirect("documento_pasta", contrato_id=contrato_id, documento_id=documento_id)
+
+
+class EditarTituloDocumentoView(LoginRequiredMixin, View):
+    template_name = "documentos/editar_titulo.html"
+
+    def get(self, request, contrato_id, documento_id):
+        contexto = carregar_edicao_titulo(request.user, contrato_id, documento_id)
+        return render(request, self.template_name, contexto)
+
+    def post(self, request, contrato_id, documento_id):
+        try:
+            editar_titulo_documento(
+                request.user,
+                contrato_id,
+                documento_id,
+                request.POST.get("titulo", ""),
+                request.POST.get("motivo", ""),
+            )
+        except PermissionDenied:
+            raise
+        except ValueError as erro:
+            contexto = carregar_edicao_titulo(request.user, contrato_id, documento_id)
+            contexto.update(
+                {
+                    "titulo_informado": request.POST.get("titulo", ""),
+                    "motivo_informado": request.POST.get("motivo", ""),
+                    "erro": str(erro),
+                }
+            )
+            return render(request, self.template_name, contexto, status=400)
+
+        messages.success(request, "Título atualizado.")
+        return redirect(
+            "documento_pasta",
+            contrato_id=contrato_id,
+            documento_id=documento_id,
+        )
 
 
 def _url_lista(contrato_id, consulta):

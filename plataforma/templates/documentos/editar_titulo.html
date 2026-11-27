@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Editar título · {{ contrato.codigo_interno }}{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <div>
+    <span class="eyebrow">{{ contrato.codigo_interno }} · PASTA DO DOCUMENTO</span>
+    <h1>Editar título</h1>
+    <p>{{ documento.identificador_base }}</p>
+  </div>
+</section>
+
+<section class="panel">
+  {% if erro %}<div class="notice notice-error">{{ erro }}</div>{% endif %}
+  <form method="post">
+    {% csrf_token %}
+    <div class="painel-filtros-grade">
+      <div class="atividade-filtro">
+        <label for="titulo-documento">Título</label>
+        <input id="titulo-documento" name="titulo" type="text" maxlength="500" required value="{{ titulo_informado }}">
+      </div>
+      <div class="atividade-filtro">
+        <label for="motivo-alteracao-titulo">Motivo (obrigatório)</label>
+        <input id="motivo-alteracao-titulo" name="motivo" type="text" maxlength="100" required value="{{ motivo_informado }}">
+      </div>
+    </div>
+    <div class="painel-filtros-acoes">
+      <button class="button button-primary" type="submit">Salvar título</button>
+      <a class="button button-quiet" href="{% url 'documento_pasta' contrato.pk documento.pk %}">Cancelar</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

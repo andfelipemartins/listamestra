@@ -238,7 +238,6 @@ def aplicar_previa(
                 "trecho": linha.segmentos.get("trecho", ""),
                 "disciplina": linha.segmentos.get("disciplina", ""),
                 "atributos": dict(linha.segmentos),
-                "titulo": linha.titulo,
                 "fora_do_id": False,
             }
             campos_alterados = [

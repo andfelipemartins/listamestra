@@ -60,6 +60,7 @@
     </div>
   </div>
   <div>
+    {% if pode_cancelar_documentos %}<a class="button button-primary" href="{% url 'documento_editar_titulo' contrato.pk documento.pk %}">Editar título</a>{% endif %}
     {% if pode_cancelar_documentos and not cancelamento and situacao_grupo.id != "cancelado" %}<a class="button button-primary" href="{% url 'documentos_cancelar' contrato.pk %}?documento={{ documento.pk }}&amp;lista_query=contrato%3D{{ contrato.pk }}">Cancelar documento</a>{% endif %}
     {% if pode_reativar_documentos %}<a class="button button-primary" href="{% url 'documentos_reativar' contrato.pk %}?documento={{ documento.pk }}&amp;lista_query=contrato%3D{{ contrato.pk }}">Reativar documento</a>{% endif %}
     <a class="button button-quiet" href="{{ url_lista }}">Voltar à lista</a>

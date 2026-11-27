@@ -4,6 +4,7 @@ from .views import (
     CancelarDocumentosView,
     DocumentoPastaView,
     DocumentosListaView,
+    EditarTituloDocumentoView,
     ListaMestraView,
     ReativarDocumentosView,
 )
@@ -21,6 +22,11 @@ urlpatterns = [
         "reativar/<int:contrato_id>/",
         ReativarDocumentosView.as_view(),
         name="documentos_reativar",
+    ),
+    path(
+        "editar-titulo/<int:contrato_id>/<int:documento_id>/",
+        EditarTituloDocumentoView.as_view(),
+        name="documento_editar_titulo",
     ),
     path(
         "<int:contrato_id>/<int:documento_id>/",

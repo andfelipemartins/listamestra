@@ -453,12 +453,34 @@ def _evento_historico(registro, modelo, *, entidade, contrato, codigo, documento
     nome = _nome_usuario(ator)
     descricao = _descricao_historico(registro, entidade, acao, codigo, detalhes)
     resumo = f"{nome} {descricao}"
+    alterou_titulo = (
+        modelo is Documento
+        and acao == "alterou"
+        and any(item["campo"] == "título" for item in detalhes)
+        and bool(registro.history_change_reason)
+    )
+    acao_rotulo = dict(ACOES).get(acao, acao.title())
+    if alterou_titulo:
+        detalhe_titulo = next(item for item in detalhes if item["campo"] == "título")
+        detalhe_titulo["campo"] = "Título"
+        detalhes.append(
+            {
+                "campo": "Motivo",
+                "antes": "",
+                "depois": registro.history_change_reason,
+            }
+        )
+        acao_rotulo = "Título alterado"
+        resumo = (
+            f"{nome} · Título alterado em {codigo}: "
+            f"{detalhe_titulo['antes']} → {detalhe_titulo['depois']}"
+        )
     resumo_antes_codigo, separador, resumo_depois_codigo = resumo.partition(codigo) if codigo else ("", "", "")
     return {
         "chave": f"historico-{modelo._meta.model_name}-{registro.history_id}",
         "data_hora": _localizar(registro.history_date),
         "acao": acao,
-        "acao_rotulo": dict(ACOES).get(acao, acao.title()),
+        "acao_rotulo": acao_rotulo,
         "entidade": entidade,
         "tipo_importacao": "",
         "codigo": codigo or "",

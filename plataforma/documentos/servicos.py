@@ -647,6 +647,63 @@ def carregar_pasta_documento(usuario, contrato_id, documento_id, *, hoje=None):
     }
 
 
+def carregar_edicao_titulo(usuario, contrato_id, documento_id):
+    contrato, documento = _documento_para_edicao_titulo(
+        usuario,
+        contrato_id,
+        documento_id,
+    )
+    return {
+        "contrato": contrato,
+        "documento": documento,
+        "titulo_informado": documento.titulo,
+        "motivo_informado": "",
+    }
+
+
+def editar_titulo_documento(usuario, contrato_id, documento_id, titulo, motivo):
+    titulo = (titulo or "").strip()
+    motivo = (motivo or "").strip()
+    with transaction.atomic():
+        contrato, documento = _documento_para_edicao_titulo(
+            usuario,
+            contrato_id,
+            documento_id,
+            bloquear=True,
+        )
+        if not titulo:
+            raise ValueError("Informe um título.")
+        if len(titulo) > Documento._meta.get_field("titulo").max_length:
+            raise ValueError("O título deve ter no máximo 500 caracteres.")
+        if not motivo:
+            raise ValueError("Informe o motivo da alteração.")
+        if len(motivo) > 100:
+            raise ValueError("O motivo deve ter no máximo 100 caracteres.")
+        if documento.titulo == titulo:
+            raise ValueError("O novo título deve ser diferente do título atual.")
+        documento.titulo = titulo
+        documento._history_user = usuario
+        documento._change_reason = motivo
+        documento.save(update_fields=("titulo",))
+    return documento
+
+
+def _documento_para_edicao_titulo(usuario, contrato_id, documento_id, *, bloquear=False):
+    contrato = resolver_contrato(usuario, contrato_id)
+    if contrato is None:
+        raise PermissionDenied("Você não participa deste contrato.")
+    if not pode_cancelar_documentos(usuario, contrato):
+        raise PermissionDenied("Somente staff ou o administrador do contrato pode editar títulos.")
+
+    documentos = Documento.objects.filter(contrato=contrato, pk=documento_id)
+    if bloquear:
+        documentos = documentos.select_for_update()
+    documento = documentos.first()
+    if documento is None:
+        raise Http404
+    return contrato, documento
+
+
 def atualizar_motivo_reabertura(
     usuario,
     contrato_id,

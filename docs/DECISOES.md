@@ -1311,3 +1311,13 @@ Aprovado, Não Conforme, Inconsistente, Erro de Assinatura, Cancelado, Revisão 
 *Origem: AM7 · 2026-11-27*
 
 - O admin define no perfil do contrato quantos dias antes o alerta de prazo vencendo aparece; padrão de 3 dias.
+
+## D-117 · Marco 12 começa por editar o título do documento na pasta (escolha do Claude, a confirmar)
+
+*Origem: esteira contínua (D-100) · 2026-11-27 · confirmação na avaliação do block-069*
+
+- Com as frentes de Pendências e Lista Mestra aguardando avaliação/respostas (AN1–AN8), a esteira abre o Marco 12
+  (edição e correção de documento) pela menor fatia: **editar o título** na pasta do documento, só staff/admin do
+  contrato, com **motivo obrigatório** e registro na Atividade (D-050).
+- A reimportação do ID **não** sobrescreve o título editado (comportamento atual: diferença vira "Título divergente").
+- Classe, disciplina e demais campos ficam para depois da avaliação.
