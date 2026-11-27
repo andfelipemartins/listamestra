@@ -5,6 +5,7 @@ from .modelo import (
     CancelamentoPerfil,
     EstruturaCodigo,
     ExcecaoPrazo,
+    EscopoClasse,
     FeriadosPerfil,
     Grupo,
     IndicadorAprovacao,
@@ -19,6 +20,8 @@ from .modelo import (
     Separador,
     carregar_perfil,
     carregar_yaml,
+    escopo_da_classe,
+    escopo_do_documento,
     perfil_de_dict,
 )
 from .feriados import (
@@ -49,6 +52,7 @@ __all__ = [
     "CancelamentoPerfil",
     "EstruturaCodigo",
     "ExcecaoPrazo",
+    "EscopoClasse",
     "FeriadosPerfil",
     "Grupo",
     "IndicadorAprovacao",
@@ -72,6 +76,8 @@ __all__ = [
     "ResultadoLeituraFeriados",
     "carregar_perfil",
     "carregar_yaml",
+    "escopo_da_classe",
+    "escopo_do_documento",
     "calcular_indicador_aprovacao",
     "avaliar",
     "feriados_nacionais",

@@ -1,4 +1,11 @@
-{% if janela.id == "erros" or janela.id == "ignorados" %}
+{% if janela.id == "classes-sem-escopo" %}
+  <article class="mesa-item">
+    <div class="mesa-item-meta"><span class="mesa-selo">{{ item.quantidade }} documento{{ item.quantidade|pluralize:",s" }}</span></div>
+    <strong>Classe {{ item.classe }}</strong>
+    <p>Associe esta classe a um escopo no perfil do contrato.</p>
+    <ul>{% for documento in item.documentos %}<li><a href="{% url 'documento_pasta' contrato.pk documento.pk %}">{{ documento.identificador_base }}</a>{% if documento.titulo %} — {{ documento.titulo }}{% endif %}</li>{% endfor %}</ul>
+  </article>
+{% elif janela.id == "erros" or janela.id == "ignorados" %}
   {% include "acoes/_item_erro.html" %}
 {% elif janela.id == "analise-cliente" or janela.id == "devolucao" %}
   <article class="mesa-item">

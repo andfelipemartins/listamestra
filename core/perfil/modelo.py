@@ -46,6 +46,18 @@ class Separador:
     texto: str
 
 
+@dataclass(frozen=True)
+class EscopoClasse:
+    nome: str
+    classes: tuple[str, ...]
+    tipos: tuple[str, ...] | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "classes", tuple(str(classe) for classe in self.classes))
+        if self.tipos is not None:
+            object.__setattr__(self, "tipos", tuple(str(tipo) for tipo in self.tipos))
+
+
 ParteCodigo = Segmento | Separador
 
 
@@ -282,6 +294,10 @@ class PerfilContrato:
     cancelamento: CancelamentoPerfil = field(default_factory=_cancelamento_padrao)
     comparar_id_cliente: bool = False
     nome_id_cliente: str | None = None
+    escopos: tuple[EscopoClasse, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "escopos", tuple(self.escopos))
 
 
 def perfil_de_dict(dados: Mapping[str, Any]) -> PerfilContrato:
@@ -293,6 +309,7 @@ def perfil_de_dict(dados: Mapping[str, Any]) -> PerfilContrato:
         versao = _texto_obrigatorio(dados.get("versao"), "versão")
         vigencia = _data(dados.get("vigencia_inicio"))
         codigo = _estrutura_de_dict(dados.get("codigo"))
+        escopos = _escopos_de_dict(dados.get("escopos"), codigo)
         emissao = regra_emissao_de_dict(dados.get("emissao") or {})
         _validar_series(emissao)
         analise = ciclo_analise_de_dict(dados.get("analise") or {})
@@ -317,6 +334,7 @@ def perfil_de_dict(dados: Mapping[str, Any]) -> PerfilContrato:
             cancelamento,
             comparar_id_cliente,
             nome_id_cliente,
+            escopos,
         )
     except ErroPerfil:
         raise
@@ -328,6 +346,136 @@ def perfil_de_dict(dados: Mapping[str, Any]) -> PerfilContrato:
 def carregar_perfil(dados: Mapping[str, Any]) -> PerfilContrato:
     """Alias explícito para carregamento a partir de dict."""
     return perfil_de_dict(dados)
+
+
+def escopo_da_classe(perfil: PerfilContrato, classe: str | None) -> str | None:
+    """Retorna o escopo padrão da classe, sem uma regra específica por tipo."""
+    if not classe:
+        return None
+    chave = str(classe).strip().casefold()
+    if not chave:
+        return None
+    for escopo in perfil.escopos:
+        if escopo.tipos is None and any(valor.casefold() == chave for valor in escopo.classes):
+            return escopo.nome
+    return None
+
+
+def escopo_do_documento(
+    perfil: PerfilContrato, classe: str | None, tipo: str | None
+) -> str | None:
+    """Resolve escopo específico por classe e tipo, depois o padrão da classe."""
+    chave_classe = str(classe or "").strip().casefold()
+    if not chave_classe:
+        return None
+    chave_tipo = str(tipo or "").strip().casefold()
+    escopo_padrao = None
+    for escopo in perfil.escopos:
+        if not any(valor.strip().casefold() == chave_classe for valor in escopo.classes):
+            continue
+        if escopo.tipos is None:
+            escopo_padrao = escopo.nome
+        elif chave_tipo and any(valor.strip().casefold() == chave_tipo for valor in escopo.tipos):
+            return escopo.nome
+    return escopo_padrao
+
+
+def _escopos_de_dict(dados: Any, codigo: EstruturaCodigo) -> tuple[EscopoClasse, ...]:
+    if dados is None:
+        return ()
+    if not isinstance(dados, (list, tuple)):
+        raise ErroPerfil("'escopos' precisa ser uma lista.")
+    if not dados:
+        return ()
+
+    segmento_classe = next(
+        (campo for campo in codigo.campos if campo.nome.casefold() == "classe"),
+        None,
+    )
+    if segmento_classe is None:
+        raise ErroPerfil("'escopos' exige um segmento 'classe' no código.")
+    classes_validas = (
+        {str(classe).casefold(): str(classe) for classe in segmento_classe.valores}
+        if segmento_classe.valores
+        else None
+    )
+    segmento_tipo = next(
+        (campo for campo in codigo.campos if campo.nome.casefold() == "tipo"),
+        None,
+    )
+    tipos_validos = (
+        {str(tipo).casefold(): str(tipo) for tipo in segmento_tipo.valores}
+        if segmento_tipo is not None and segmento_tipo.valores
+        else None
+    )
+    classes_sem_tipo: set[str] = set()
+    pares_usados: set[tuple[str, str]] = set()
+    escopos: list[EscopoClasse] = []
+    for posicao, item in enumerate(dados, start=1):
+        campo = f"escopos[{posicao}]"
+        if not isinstance(item, Mapping):
+            raise ErroPerfil(f"{campo} precisa ser um objeto.")
+        nome = _texto_obrigatorio(item.get("nome"), f"nome em {campo}")
+
+        classes_brutas = item.get("classes")
+        if not isinstance(classes_brutas, (list, tuple)) or not classes_brutas:
+            raise ErroPerfil(f"'classes' em {campo} precisa ser uma lista não vazia.")
+        classes: list[str] = []
+        for valor in classes_brutas:
+            classe = _texto_obrigatorio(valor, f"classe em {campo}")
+            chave_classe = classe.casefold()
+            classe_canonica = (
+                classes_validas.get(chave_classe) if classes_validas is not None else classe
+            )
+            if classes_validas is not None and classe_canonica is None:
+                raise ErroPerfil(
+                    f"A classe '{classe}' em {campo} não existe na caixa de classes do código."
+                )
+            classes.append(classe_canonica)
+
+        tipos = None
+        if "tipos" in item:
+            if segmento_tipo is None:
+                raise ErroPerfil(f"'tipos' em {campo} exige um segmento 'tipo' no código.")
+            tipos_brutos = item["tipos"]
+            if not isinstance(tipos_brutos, (list, tuple)) or not tipos_brutos:
+                raise ErroPerfil(f"'tipos' em {campo} precisa ser uma lista não vazia.")
+            tipos = []
+            for valor in tipos_brutos:
+                tipo = _texto_obrigatorio(valor, f"tipo em {campo}")
+                chave_tipo = tipo.casefold()
+                tipo_canonico = tipos_validos.get(chave_tipo) if tipos_validos is not None else tipo
+                if tipos_validos is not None and tipo_canonico is None:
+                    raise ErroPerfil(
+                        f"O tipo '{tipo}' em {campo} não existe na caixa de tipos do código."
+                    )
+                tipos.append(tipo_canonico)
+
+        for classe_canonica in classes:
+            chave_classe = classe_canonica.casefold()
+            if tipos is None:
+                if chave_classe in classes_sem_tipo:
+                    raise ErroPerfil(
+                        f"A classe '{classe_canonica}' aparece em mais de um escopo sem 'tipos'."
+                    )
+                classes_sem_tipo.add(chave_classe)
+                continue
+            for tipo_canonico in tipos:
+                par = (chave_classe, tipo_canonico.casefold())
+                if par in pares_usados:
+                    raise ErroPerfil(
+                        f"A classe '{classe_canonica}' e o tipo '{tipo_canonico}' "
+                        "aparecem em mais de um escopo."
+                    )
+                pares_usados.add(par)
+        escopos.append(
+            EscopoClasse(
+                nome=nome,
+                classes=tuple(classes),
+                tipos=tuple(tipos) if tipos is not None else None,
+            )
+        )
+    return tuple(escopos)
 
 
 def _cancelamento_de_dict(dados: Any) -> CancelamentoPerfil:

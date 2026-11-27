@@ -33,7 +33,6 @@ CABECALHOS = {
 CAMPOS_SEM_DESTINO = {
     "grd": "GRD",
     "data_envio": "Data de envio",
-    "data_retorno": "Data de retorno",
 }
 
 
@@ -59,6 +58,7 @@ class LinhaSituacaoPadrao:
     situacao_depois: str = ""
     categoria: str = ""
     mensagem: str = ""
+    aviso: str = ""
     campos_ignorados: tuple[CampoIgnorado, ...] = ()
 
     @property
@@ -113,8 +113,8 @@ def gerar_modelo_situacao_padrao() -> bytes:
     instrucoes = workbook.create_sheet("Instruções")
     instrucoes.append(["Planilha padrão de situação"])
     instrucoes.append(["Preencha o código do documento. As demais colunas são opcionais."])
-    instrucoes.append(["Revisão vazia usa a última revisão; data vazia usa a data da importação."])
-    instrucoes.append(["Colunas GRD, Data de envio e Data de retorno são aceitas, mas ignoradas nesta versão."])
+    instrucoes.append(["Revisão vazia usa a última revisão; Data vazia usa a data de retorno, se preenchida, ou a data da importação."])
+    instrucoes.append(["Se Data e Data de retorno forem diferentes, vale Data e a prévia avisa. GRD e Data de envio são aceitas, mas ignoradas."])
     conteudo = BytesIO()
     workbook.save(conteudo)
     workbook.close()
@@ -145,6 +145,7 @@ def gerar_previa_situacao_padrao(
         revisao_informada = _texto(_valor_coluna(valores, cabecalho, "revisao")).upper()
         situacao_bruta = _texto(_valor_coluna(valores, cabecalho, "situacao"))
         data_bruta = _valor_coluna(valores, cabecalho, "data")
+        data_retorno_bruta = _valor_coluna(valores, cabecalho, "data_retorno")
         observacao_bruta = _valor_coluna(valores, cabecalho, "observacao")
         dados_ignorados = tuple(
             CampoIgnorado(CABECALHOS[chave], _texto(_valor_coluna(valores, cabecalho, chave)))
@@ -221,9 +222,23 @@ def gerar_previa_situacao_padrao(
                 )
                 continue
 
-        data_informada = not _vazio(data_bruta)
+        data_informada = not _vazio(data_bruta) or not _vazio(data_retorno_bruta)
+        aviso = ""
         try:
-            data_analise = _data(data_bruta) if data_informada else data_importacao
+            if not _vazio(data_bruta):
+                data_analise = _data(data_bruta)
+                if not _vazio(data_retorno_bruta):
+                    try:
+                        data_retorno = _data(data_retorno_bruta)
+                    except ValueError:
+                        aviso = "Data de retorno inválida; foi considerada a coluna Data."
+                    else:
+                        if data_retorno != data_analise:
+                            aviso = "Data e Data de retorno são diferentes; foi considerada a coluna Data."
+            elif not _vazio(data_retorno_bruta):
+                data_analise = _data(data_retorno_bruta)
+            else:
+                data_analise = data_importacao
         except ValueError as erro:
             linhas.append(
                 LinhaSituacaoPadrao(
@@ -271,6 +286,7 @@ def gerar_previa_situacao_padrao(
                     "data_informada": data_informada,
                     "situacao_antes": antes,
                     "situacao_depois": depois,
+                    "aviso": aviso,
                 }
             )
         )

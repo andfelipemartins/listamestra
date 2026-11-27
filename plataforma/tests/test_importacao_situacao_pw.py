@@ -348,6 +348,11 @@ def test_reprocessa_recusa_situacao_com_perfil_vigente_e_resolve(contrato, perfi
         if campo.get("nome") == "classe"
     )
     classe["valores"].pop("A7")
+    definicao_antiga["escopos"] = [
+        {**escopo, "classes": [valor for valor in escopo["classes"] if valor != "A7"]}
+        for escopo in definicao_antiga.get("escopos", [])
+        if any(valor != "A7" for valor in escopo["classes"])
+    ]
     sequencial = next(
         campo for campo in definicao_antiga["codigo"]["segmentos"]
         if campo.get("nome") == "sequencial"

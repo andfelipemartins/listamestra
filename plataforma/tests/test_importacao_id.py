@@ -65,6 +65,11 @@ def remover_a7_do_perfil(perfil):
         if campo.get("nome") == "classe"
     )
     campo_classe["valores"].pop("A7")
+    definicao["escopos"] = [
+        {**escopo, "classes": [classe for classe in escopo["classes"] if classe != "A7"]}
+        for escopo in definicao.get("escopos", [])
+        if any(classe != "A7" for classe in escopo["classes"])
+    ]
     perfil.definicao = definicao
     perfil.save(update_fields=["definicao"])
 

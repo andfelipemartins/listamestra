@@ -1255,3 +1255,59 @@ Aprovado, Não Conforme, Inconsistente, Erro de Assinatura, Cancelado, Revisão 
 - O card "Pendências abertas" abre Pendências › Abertas, com um resumo por tipo; cada tipo abre a sua lista (nossa
   devolução, cronograma, linhas recusadas...).
 - Quem quer a página de Pendências normal clica em **Pendências** no menu.
+
+## D-110 · Coluna GRD da planilha padrão: só para histórico antigo
+
+*Origem: AM1 · 2026-11-27 · ajusta a D-105*
+
+- Resposta: **só para histórico antigo**. A coluna GRD fica na planilha padrão para trazer GRDs **de antes do sistema**:
+  o número é gravado como texto ("GRD anterior ao sistema"), **sem pendência**, só para registrar que existe e está
+  regularizada. As GRDs futuras nascem pela tela de GRD do sistema.
+- Ideia do dono para depois (frente nova, sem desenho): trazer GRDs antigas (normalmente físicas, em PDF) para dentro do
+  sistema por extração assistida — o PDF vira texto (com ajuda de IA), num formato padrão que o sistema lê e usa para
+  preencher a GRD daquele documento. Alternativa simples que ele também aceita: só gravar o número pela coluna.
+
+## D-111 · O modelo pronto de colunas leva o nome do sistema de origem
+
+*Origem: AM2 · 2026-11-27 · confirma a D-107*
+
+- Confirmado: o admin escolhe "Extração do PW", "Extração do <outro GED>" ou "Planilha padrão" e pode ajustar as colunas.
+  Contrato sem GED usa a planilha padrão do próprio sistema.
+
+## D-112 · Atividades da equipe começam por tarefas livres, que podem se ligar a documentos
+
+*Origem: AM3 · 2026-11-27 · detalha a D-104*
+
+- Primeira fatia: **tarefas com responsável e prazo**, que não precisam estar ligadas a documento, mas **podem** estar
+  (um mix de tarefas livres e tarefas ligadas ao que existe no sistema).
+
+## D-113 · Toda classe tem escopo; o escopo pode depender também do tipo de documento
+
+*Origem: AM4 · 2026-11-27 · substitui a "escolha do Claude" da D-102*
+
+- Para o dono, **toda classe precisa ter escopo**, definido já na configuração do contrato, assim como um arquivo que deve
+  ficar na pasta A precisa estar na pasta A. Classe sem escopo ligado: **"Sem escopo" + pendência** para o admin ligar.
+  O documento **não** herda o escopo do ID.
+- O escopo de uma classe **pode mudar conforme o tipo de documento**. Exemplo do Metrô: MQ em A9 é escopo de Qualidade;
+  outros A9 são documentos complementares ou ATOs. O perfil precisa permitir separar o escopo por classe **e** tipo.
+
+## D-114 · Lista Mestra definitiva começa pela tela da lista
+
+*Origem: AM5 · 2026-11-27 · detalha a D-100 / m06*
+
+- Primeira fatia: **uma tela com uma linha por revisão e as colunas da planilha, com filtro e busca**. Exportar em Excel
+  vem depois.
+
+## D-115 · Card "Minhas tarefas": cada pessoa vê o que é dela; o gestor vê a equipe
+
+*Origem: AM6 · 2026-11-27 · corrige o entendimento da D-104*
+
+- O dono **não** quis dizer abas configuradas por papel. A personalização é: cada pessoa tem, logo de cara, um card com
+  **as tarefas direcionadas a ela**; todos continuam vendo os outros cards de pendência. O gestor vê as tarefas de quem
+  ele gere, e quem está acima do gestor também. Pode ser o admin quem atribui.
+
+## D-116 · Antecedência do alerta de prazo vencendo fica no perfil (padrão 3 dias)
+
+*Origem: AM7 · 2026-11-27*
+
+- O admin define no perfil do contrato quantos dias antes o alerta de prazo vencendo aparece; padrão de 3 dias.

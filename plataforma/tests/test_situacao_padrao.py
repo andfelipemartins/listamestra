@@ -131,7 +131,9 @@ def test_modelo_tem_cabecalhos_e_aba_de_instrucoes():
     workbook = load_workbook(BytesIO(gerar_modelo_situacao_padrao()), read_only=True)
     assert workbook.sheetnames == ["Situação", "Instruções"]
     assert list(workbook["Situação"].values)[0] == tuple(CABECALHOS)
-    assert list(workbook["Instruções"].values)
+    instrucoes = " ".join(str(celula) for linha in workbook["Instruções"].values for celula in linha)
+    assert "Data de retorno" in instrucoes
+    assert "Data de envio são aceitas, mas ignoradas" in instrucoes
     workbook.close()
 
 
@@ -253,8 +255,8 @@ def test_campos_sem_destino_sao_mostrados_como_ignorados(contrato):
     assert {campo.nome for campo in resultado.linhas[0].campos_ignorados} == {
         "GRD",
         "Data de envio",
-        "Data de retorno",
     }
+    assert resultado.linhas[0].data_analise == date(2026, 11, 25)
 
 
 @pytest.mark.django_db

@@ -3,10 +3,12 @@ import csv
 from pathlib import Path
 
 import pytest
+import yaml
 
 from core.perfil.codigo import CodigoInterpretado, ErroCodigo, interpretar, montar
 from core.perfil.ciclo import ErroCiclo, EstadoEmissao, aplicar, iniciar, rotulo_cronologico
 from core.perfil.modelo import ErroPerfil, carregar_yaml, perfil_de_dict
+from core.perfil import escopo_da_classe, escopo_do_documento
 from core.perfil.series import (
     SerieLetras,
     SerieLetraMaisNumero,
@@ -206,6 +208,76 @@ def test_validacao_do_perfil_reporta_regex_e_segmentos_repetidos(metro):
     ]
     with pytest.raises(ErroPerfil, match="repetidos"):
         perfil_de_dict(dados)
+
+
+def _dados_metro():
+    caminho = ROOT / "core" / "perfil" / "exemplos" / "metro.yaml"
+    return yaml.safe_load(caminho.read_text(encoding="utf-8"))
+
+
+def test_escopos_do_perfil_ligam_classes_existentes():
+    perfil = perfil_de_dict(_dados_metro())
+
+    assert escopo_da_classe(perfil, "P7") == "Sistemas"
+    assert escopo_da_classe(perfil, "B1") == "Arquitetura e Civil"
+    assert escopo_da_classe(perfil, "A7") == "Qualidade"
+
+
+def test_escopo_pode_ser_especifico_por_classe_e_tipo():
+    perfil = perfil_de_dict(_dados_metro())
+
+    assert escopo_do_documento(perfil, "A9", "MQ") == "Qualidade"
+    assert escopo_do_documento(perfil, "A9", "DE") == "Arquitetura e Civil"
+    assert escopo_do_documento(perfil, "A7", "DE") == "Qualidade"
+
+
+def test_escopos_rejeitam_repeticao_do_mesmo_par_classe_tipo():
+    dados = _dados_metro()
+    dados["escopos"].append({"nome": "Sistemas", "classes": ["A9"], "tipos": ["MQ"]})
+
+    with pytest.raises(ErroPerfil, match="classe 'A9'.*tipo 'MQ'.*mais de um escopo"):
+        perfil_de_dict(dados)
+
+
+def test_escopos_aceitam_classe_sem_caixa_de_valores_fechada():
+    dados = _dados_metro()
+    segmento_classe = next(
+        segmento for segmento in dados["codigo"]["segmentos"]
+        if segmento.get("nome") == "classe"
+    )
+    segmento_classe.pop("valores")
+
+    perfil = perfil_de_dict(dados)
+
+    assert escopo_da_classe(perfil, "P7") == "Sistemas"
+
+    segmento_classe["valores"] = {}
+    perfil_sem_caixa_vazia = perfil_de_dict(dados)
+    assert escopo_da_classe(perfil_sem_caixa_vazia, "P7") == "Sistemas"
+
+
+def test_escopos_rejeitam_classe_que_nao_existe_na_caixa():
+    dados = _dados_metro()
+    dados["escopos"] = [{"nome": "Sistemas", "classes": ["ZZ"]}]
+
+    with pytest.raises(ErroPerfil, match="não existe na caixa de classes"):
+        perfil_de_dict(dados)
+
+
+def test_escopos_rejeitam_classe_repetida():
+    dados = _dados_metro()
+    dados["escopos"] = [
+        {"nome": "Sistemas", "classes": ["P7"]},
+        {"nome": "Outro", "classes": ["P7"]},
+    ]
+
+    with pytest.raises(ErroPerfil, match="mais de um escopo"):
+        perfil_de_dict(dados)
+
+
+def test_perfil_sem_secao_de_escopos_continua_valido(spobras):
+    assert spobras.escopos == ()
+    assert escopo_da_classe(spobras, "E") is None
 
 
 def test_perfil_e_estruturas_sao_imutaveis(metro):

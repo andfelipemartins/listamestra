@@ -297,12 +297,12 @@ def test_sem_fases_configuradas_preserva_o_previsto_padrao(contrato, perfil_mode
 
 
 @pytest.mark.django_db
-def test_escopo_filtra_previsto_e_documento_compartilhado_entra_nos_dois(contrato, perfil_modelo):
+def test_escopo_vem_da_classe_e_tipo_sem_herdar_do_id(contrato, perfil_modelo):
     civil = _indice(
         contrato,
         "ID-CIVIL",
         fase="Fase 1",
-        escopos=("Arquitetura", "Civil"),
+        escopos=("Arquitetura e Civil",),
     )
     sistemas = _indice(contrato, "ID-SISTEMAS", fase="Fase 1", escopos=("Sistemas",))
     qualidade = _indice(contrato, "ID-QUALIDADE", fase="Fase 2", escopos=("Qualidade",))
@@ -313,10 +313,12 @@ def test_escopo_filtra_previsto_e_documento_compartilhado_entra_nos_dois(contrat
         documento=compartilhado,
         titulo=compartilhado.titulo,
     )
-    _documento(contrato, civil, 9402, situacao="Em Análise")
+    _documento(contrato, civil, 9402, classe="B1", situacao="Em Análise")
     _documento(contrato, sistemas, 9403, situacao="Em Análise")
-    _documento(contrato, qualidade, 9404, situacao="Em Análise")
-    _documento(contrato, sem_escopo, 9405, situacao="Em Análise")
+    _documento(contrato, qualidade, 9404, classe="A7", situacao="Em Análise")
+    _documento(contrato, sem_escopo, 9405, classe="ZZ", situacao="Em Análise")
+    _documento(contrato, civil, 9406, classe="A9", tipo="MQ", situacao="Em Análise")
+    _documento(contrato, civil, 9407, classe="A9", tipo="DE", situacao="Em Análise")
 
     geral = carregar_painel(contrato)
     por_escopo = carregar_painel(contrato, por="escopo")
@@ -332,53 +334,52 @@ def test_escopo_filtra_previsto_e_documento_compartilhado_entra_nos_dois(contrat
     )
     opcoes_escopo = next(filtro for filtro in geral["filtros"] if filtro["nome"] == "escopo")["opcoes"]
 
-    assert geral["total_documentos_previstos"] == 5
+    assert geral["total_documentos_previstos"] == 7
     assert recortes == {
-        "Arquitetura": 2,
-        "Civil": 2,
-        "Qualidade": 1,
+        "Arquitetura e Civil": 2,
+        "Qualidade": 2,
         "Sem escopo": 1,
         "Sistemas": 2,
     }
     assert filtrado["total_documentos_previstos"] == 2
     assert filtrado["filtros_ativos"] == [
-        {"rotulo": "Escopo do ID", "valores": ["Sistemas"]}
+        {"rotulo": "Escopo", "valores": ["Sistemas"]}
     ]
     assert combinado["total_documentos_previstos"] == 2
     assert sem_escopo_filtrado["total_documentos_previstos"] == 1
-    assert carregar_painel(contrato, filtros={"escopo": "Arquitetura"})[
+    assert carregar_painel(contrato, filtros={"escopo": "Arquitetura e Civil"})[
         "total_documentos_previstos"
     ] == 2
     assert any(opcao["rotulo"] == "Sem escopo" for opcao in opcoes_escopo)
-    assert any(caixa.nome == "escopo" and caixa.rotulo == "Escopo do ID" for caixa in por_escopo["caixas"])
+    assert any(caixa.nome == "escopo" and caixa.rotulo == "Escopo" for caixa in por_escopo["caixas"])
 
 
 @pytest.mark.django_db
 def test_painel_filtra_escopo_e_classe_ao_mesmo_tempo(contrato, perfil_modelo):
-    civil = _indice(contrato, "ID-CIVIL-CLASSES", escopos=("Civil",))
+    civil = _indice(contrato, "ID-CIVIL-CLASSES", escopos=("Arquitetura e Civil",))
     sistemas = _indice(contrato, "ID-SISTEMAS-CLASSES", escopos=("Sistemas",))
     _documento(contrato, civil, 9601, classe="A1")
-    _documento(contrato, civil, 9602, classe="P7")
-    _documento(contrato, sistemas, 9603, classe="A1")
+    _documento(contrato, civil, 9602, classe="A7")
+    _documento(contrato, sistemas, 9603, classe="P7")
 
     dados = carregar_painel(
         contrato,
-        filtros={"escopo": "Civil", "classe": "A1"},
+        filtros={"escopo": "Arquitetura e Civil", "classe": "A1"},
     )
 
     assert dados["total_documentos_previstos"] == 1
     assert {filtro["nome"] for filtro in dados["filtros"]} >= {"escopo", "classe"}
     assert {filtro["rotulo"] for filtro in dados["filtros_ativos"]} >= {
-        "Escopo do ID",
+        "Escopo",
         "classe e subclasse",
     }
 
 
 @pytest.mark.django_db
 def test_um_escopo_unico_nao_mostra_filtro_e_painel_abre_no_total(contrato, perfil_modelo):
-    indice = _indice(contrato, "ID-ESCOPO-UNICO", fase="Fase 1", escopos=("Civil",))
-    _documento(contrato, indice, 9501)
-    _documento(contrato, indice, 9502)
+    indice = _indice(contrato, "ID-ESCOPO-UNICO", fase="Fase 1", escopos=("Arquitetura e Civil",))
+    _documento(contrato, indice, 9501, classe="B1")
+    _documento(contrato, indice, 9502, classe="B2")
 
     dados = carregar_painel(contrato)
 
@@ -875,7 +876,7 @@ def test_indicador_reaberturas_respeita_filtros_de_fase_escopo_e_categoria(
     contrato, perfil_modelo
 ):
     civil = _indice(
-        contrato, "ID-REABERTURAS-CIVIL", fase="Executivo", escopos=("Civil",)
+        contrato, "ID-REABERTURAS-CIVIL", fase="Executivo", escopos=("Arquitetura e Civil",)
     )
     sistemas = _indice(
         contrato, "ID-REABERTURAS-SISTEMAS", fase="Básico", escopos=("Sistemas",)
@@ -897,7 +898,7 @@ def test_indicador_reaberturas_respeita_filtros_de_fase_escopo_e_categoria(
     geral = carregar_painel(contrato)["indicadores_reabertura"][0]
     filtrado = carregar_painel(
         contrato,
-        filtros={"fase": "Executivo", "escopo": "Civil", "categoria": "civil"},
+        filtros={"fase": "Executivo", "escopo": "Arquitetura e Civil", "categoria": "civil"},
     )["indicadores_reabertura"][0]
 
     assert geral["total"] == 2

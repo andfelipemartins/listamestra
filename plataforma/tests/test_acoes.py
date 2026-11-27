@@ -113,6 +113,44 @@ def test_janela_erros_usa_grupo_oculto_e_mostra_quem_lancou(contrato, perfil_mod
 
 
 @pytest.mark.django_db
+def test_pendencia_classe_sem_escopo_agrupa_documentos_e_so_aparece_para_admin(
+    contrato, perfil_modelo, usuario, django_user_model, client
+):
+    for identificador in ("DOC-CLASSE-A5-1001", "DOC-CLASSE-A5-1002"):
+        Documento.objects.create(
+            contrato=contrato,
+            identificador_base=identificador,
+            tipo="DE",
+            disciplina="A5",
+            atributos={"tipo": "DE", "classe": "A5"},
+        )
+    administrador = django_user_model.objects.create_user(
+        username="admin-classe-sem-escopo", password="senha-segura"
+    )
+    Participacao.objects.create(
+        usuario=administrador,
+        contrato=contrato,
+        papel=Usuario.Perfil.ADMIN,
+        ativo=True,
+    )
+
+    dados_equipe = carregar_minha_mesa(usuario, contrato.pk, hoje=HOJE)
+    dados_admin = carregar_minha_mesa(administrador, contrato.pk, hoje=HOJE)
+    janela = _janela(dados_admin, "classes-sem-escopo")
+
+    assert all(item["id"] != "classes-sem-escopo" for item in dados_equipe["janelas"])
+    assert janela["quantidade"] == 2
+    assert [(item["classe"], item["quantidade"]) for item in janela["itens"]] == [("A5", 2)]
+
+    client.force_login(administrador)
+    resposta = client.get(reverse("acoes:pendencias"), {"contrato": contrato.pk})
+
+    assert resposta.status_code == 200
+    assert "Classe A5" in resposta.content.decode()
+    assert "DOC-CLASSE-A5-1001" in resposta.content.decode()
+
+
+@pytest.mark.django_db
 def test_codigo_da_mesa_e_do_ver_todos_abre_a_pasta_do_documento(
     contrato, perfil_modelo, usuario, client
 ):

@@ -8,6 +8,7 @@ from django.utils import timezone
 
 from core.perfil import (
     ErroPerfil,
+    escopo_do_documento,
     perfil_de_dict,
 )
 from core.perfil.modelo import IndicadorReabertura
@@ -109,19 +110,7 @@ def carregar_painel(contrato, por=None, filtros=None):
         for indice in indices_vigentes
         if indice.pk in ids_nosso_id and indice.conta_no_previsto
     }
-    escopos_contaveis = {
-        _valor_escopo(escopo.nome)
-        for indice in indices_vigentes
-        if indice.pk in ids_nosso_id and indice.conta_no_previsto
-        for escopo in indice.escopos.all()
-    }
-    escopos_contaveis.update(
-        _ESCOPO_SEM_ESCOPO
-        for indice in indices_vigentes
-        if indice.pk in ids_nosso_id
-        and indice.conta_no_previsto
-        and not indice.escopos.all()
-    )
+    escopos_contaveis = set()
     itens = (
         ItemPrevisto.objects.filter(indice_id__in=ids_vigentes, excluido=False)
         .select_related("documento")
@@ -145,10 +134,14 @@ def carregar_painel(contrato, por=None, filtros=None):
         fases_por_documento.setdefault(item.documento_id, set()).add(
             _valor_fase(indice.fase)
         )
-        escopos = {
-            _valor_escopo(escopo.nome) for escopo in indice.escopos.all()
-        } or {_ESCOPO_SEM_ESCOPO}
+        escopo_documento = escopo_do_documento(
+            perfil,
+            _valor_caixa(item.documento, "classe"),
+            _valor_caixa(item.documento, "tipo"),
+        )
+        escopos = {_valor_escopo(escopo_documento)}
         escopos_por_documento.setdefault(item.documento_id, set()).update(escopos)
+        escopos_contaveis.update(escopos)
     todos_documentos = []
     for documento in previstos.values():
         situacao_vigente, incluir_no_painel = _situacao_atual(documento, perfil)
@@ -198,16 +191,16 @@ def carregar_painel(contrato, por=None, filtros=None):
         )
     caixa_escopo = None
     escopos_ordenados = sorted(escopos_contaveis, key=_chave_ordenacao_escopo)
-    if len(escopos_contaveis) > 1:
+    if len(escopos_contaveis) > 1 or _ESCOPO_SEM_ESCOPO in escopos_contaveis:
         caixa_escopo = CaixaPainel(
             nome=_FILTRO_ESCOPO,
-            rotulo="Escopo do ID",
+            rotulo="Escopo",
             valores={escopo: _rotulo_escopo(escopo) for escopo in escopos_ordenados},
         )
         filtros_disponiveis.append(
             {
                 "nome": _FILTRO_ESCOPO,
-                "rotulo": "Escopo do ID",
+                "rotulo": "Escopo",
                 "opcoes": [
                     {"valor": escopo, "rotulo": _rotulo_escopo(escopo)}
                     for escopo in escopos_ordenados
@@ -678,7 +671,15 @@ def _corresponde_filtros(documento, filtros, perfil=None, fases=(), escopos=()):
             if not set(fases).intersection(valores):
                 return False
         elif nome == _FILTRO_ESCOPO:
-            if not set(escopos).intersection(valores):
+            escopos_efetivos = escopos
+            if not escopos_efetivos and perfil is not None:
+                escopo_documento = escopo_do_documento(
+                    perfil,
+                    _valor_caixa(documento, "classe"),
+                    _valor_caixa(documento, "tipo"),
+                )
+                escopos_efetivos = (_valor_escopo(escopo_documento),)
+            if not set(escopos_efetivos).intersection(valores):
                 return False
         elif nome == "categoria" and perfil is not None and perfil.painel.categorias:
             if _id_categoria(perfil, documento) not in valores:

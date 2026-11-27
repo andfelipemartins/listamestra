@@ -7,7 +7,7 @@ from django.db.models import Count, F, Prefetch
 from django.urls import reverse
 from django.utils import timezone
 
-from core.perfil import ErroPerfil, perfil_de_dict
+from core.perfil import ErroPerfil, escopo_do_documento, perfil_de_dict
 from core.perfil.codigo import ErroCodigo, interpretar
 from core.perfil.painel import classificar, classificar_categoria
 from contas.models import Usuario
@@ -30,12 +30,14 @@ from .models import AcaoPendencia
 
 PRAZO_ANALISE = "analise-cliente"
 PRAZO_DEVOLUCAO = "devolucao"
+CLASSES_SEM_ESCOPO = "classes-sem-escopo"
 TIPOS_JANELA = {
     "erros": "Erros a corrigir",
     PRAZO_ANALISE: "Análise do cliente",
     PRAZO_DEVOLUCAO: "Nossa devolução",
     "cronograma": "Cronograma",
     "recusadas": "Linhas recusadas abertas",
+    CLASSES_SEM_ESCOPO: "Classe sem escopo",
 }
 _DIAS_PARA_VENCER = 3
 _DIAS_CRONOGRAMA = 7
@@ -48,6 +50,7 @@ _TEXTOS_RESUMO = {
     PRAZO_DEVOLUCAO: "documentos aguardando nossa devolução",
     "cronograma": "emissões vencidas ou próximas",
     "recusadas": "linhas recusadas nas importações",
+    CLASSES_SEM_ESCOPO: "documentos agrupados por classe sem escopo ligado no perfil",
 }
 
 
@@ -73,6 +76,15 @@ def resolver_contrato(usuario, contrato_id=None):
     if contrato is None:
         raise PermissionDenied("Você não participa deste contrato.")
     return contrato
+
+
+def _pode_editar_perfil(usuario, contrato):
+    return usuario.is_staff or Participacao.objects.filter(
+        usuario=usuario,
+        contrato=contrato,
+        ativo=True,
+        papel=Usuario.Perfil.ADMIN,
+    ).exists()
 
 
 def carregar_minha_mesa(usuario, contrato_id=None, *, hoje=None, limite=10, incluir_ignorados=False):
@@ -142,6 +154,8 @@ def carregar_minha_mesa(usuario, contrato_id=None, *, hoje=None, limite=10, incl
                 janelas.append(_janela(PRAZO_ANALISE, _rotulo_regras_regras(regras_analise), prazos_analise, limite))
             if regras_devolucao:
                 janelas.append(_janela(PRAZO_DEVOLUCAO, _rotulo_regras_regras(regras_devolucao), prazos_devolucao, limite))
+        if _pode_editar_perfil(usuario, contrato):
+            janelas.append(_janela_classes_sem_escopo(contrato, perfil))
     janelas.extend(
         (
             _janela("cronograma", TIPOS_JANELA["cronograma"], cronograma, limite),
@@ -1102,6 +1116,38 @@ def _janela(identificador, rotulo, itens, limite):
         "quantidade": len(todos),
         "itens": todos if limite is None else todos[:limite],
         "todos": todos,
+    }
+
+
+def _janela_classes_sem_escopo(contrato, perfil):
+    grupos = {}
+    documentos = Documento.objects.filter(contrato=contrato).order_by("identificador_base")
+    for documento in documentos:
+        atributos = documento.atributos if isinstance(documento.atributos, dict) else {}
+        classe = str(atributos.get("classe") or documento.disciplina or "").strip()
+        if not classe:
+            continue
+        tipo = str(atributos.get("tipo") or documento.tipo or "").strip()
+        if escopo_do_documento(perfil, classe, tipo) is not None:
+            continue
+        grupo = grupos.setdefault(classe.casefold(), {"classe": classe, "documentos": []})
+        grupo["documentos"].append(documento)
+
+    itens = [
+        {
+            "classe": grupo["classe"],
+            "quantidade": len(grupo["documentos"]),
+            "documentos": grupo["documentos"],
+        }
+        for grupo in sorted(grupos.values(), key=lambda item: item["classe"].casefold())
+    ]
+    quantidade = sum(item["quantidade"] for item in itens)
+    return {
+        "id": CLASSES_SEM_ESCOPO,
+        "titulo": TIPOS_JANELA[CLASSES_SEM_ESCOPO],
+        "quantidade": quantidade,
+        "itens": itens,
+        "todos": itens,
     }
 
 
