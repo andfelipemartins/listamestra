@@ -203,6 +203,40 @@ def carregar_resumo_inicio(usuario, contrato_id=None, *, hoje=None):
     }
 
 
+def carregar_abertas(usuario, contrato_id=None, *, hoje=None):
+    mesa = carregar_minha_mesa(usuario, contrato_id, hoje=hoje, limite=None)
+    janelas = {janela["id"]: janela for janela in mesa["janelas"]}
+    cartoes = []
+    contrato = mesa.get("contrato")
+    for identificador, texto, quantidade in _resumo_janelas(mesa):
+        janela = janelas[identificador]
+        cartoes.append(
+            {
+                "id": identificador,
+                "titulo": janela["titulo"],
+                "quantidade": quantidade,
+                "ajuda": texto,
+                "url": (
+                    f"{reverse('acoes:janela', args=(identificador,))}?"
+                    f"{urlencode({'contrato': contrato.pk})}"
+                    if contrato is not None else "#"
+                ),
+            }
+        )
+    return {**mesa, "cartoes_abertas": cartoes}
+
+
+def _resumo_janelas(mesa):
+    for janela in mesa["janelas"]:
+        quantidade = (
+            sum(item["quantidade"] for item in janela["todos"])
+            if janela["id"] == "recusadas"
+            else janela["quantidade"]
+        )
+        if quantidade:
+            yield janela["id"], _TEXTOS_RESUMO[janela["id"]], quantidade
+
+
 def _urls_inicio(contrato, perfil=None):
     if contrato is None:
         return {}
@@ -220,6 +254,7 @@ def _urls_inicio(contrato, perfil=None):
     ) if grupo_aprovado else query
     return {
         "pendencias": f"{reverse('acoes:pendencias')}?{query}",
+        "abertas": f"{reverse('acoes:abertas')}?{query}",
         "analise_cliente": f"{reverse('acoes:janela', args=(PRAZO_ANALISE,))}?{query}",
         "atrasados": f"{reverse('acoes:atrasados')}?{query}",
         "documentos": f"{reverse('documentos_lista')}?{query}",
@@ -268,7 +303,7 @@ def _indicadores_inicio(usuario, mesa, cards_janelas, resumo_atrasos, hoje, urls
             "quantidade": sum(card["quantidade"] for card in cards_janelas),
             "descricao": "Itens com ação pendente",
             "ajuda": "Pendências abertas em todas as janelas",
-            "url": urls.get("pendencias", "#"),
+            "url": urls.get("abertas", "#"),
         },
         {
             "id": "analise-cliente",
@@ -283,10 +318,10 @@ def _indicadores_inicio(usuario, mesa, cards_janelas, resumo_atrasos, hoje, urls
             "titulo": "Atrasados",
             "quantidade": resumo_atrasos["quantidade"],
             "descricao": (
-                f"{len(atrasos_por_lado[PRAZO_ANALISE])} do cliente · "
-                f"{len(atrasos_por_lado[PRAZO_DEVOLUCAO])} nossos"
+                f"{_rotulo_quantidade(len(atrasos_por_lado[PRAZO_ANALISE]), 'análise atrasada', 'análises atrasadas')} · "
+                f"{_rotulo_quantidade(len(atrasos_por_lado[PRAZO_DEVOLUCAO]), 'revisão atrasada', 'revisões atrasadas')}"
             ),
-            "ajuda": "Análise do cliente ou devolução nossa com prazo vencido",
+            "ajuda": "Análise atrasada é do cliente; revisões atrasadas são da contratada",
             "url": urls.get("atrasados", "#"),
         },
         {
@@ -584,6 +619,10 @@ def _itens_atrasados_por_lado(mesa):
     return itens_por_lado
 
 
+def _rotulo_quantidade(quantidade, singular, plural):
+    return f"{quantidade} {singular if quantidade == 1 else plural}"
+
+
 def carregar_atrasados(usuario, contrato_id=None, *, hoje=None):
     mesa = carregar_minha_mesa(usuario, contrato_id, hoje=hoje, limite=None)
     itens_por_lado = _itens_atrasados_por_lado(mesa)
@@ -592,6 +631,24 @@ def carregar_atrasados(usuario, contrato_id=None, *, hoje=None):
         "atrasos_cliente": itens_por_lado[PRAZO_ANALISE],
         "atrasos_nossos": itens_por_lado[PRAZO_DEVOLUCAO],
         "quantidade_atrasados": sum(len(itens) for itens in itens_por_lado.values()),
+    }
+
+
+def carregar_atrasados_lado(usuario, contrato_id, lado, *, hoje=None):
+    lados = {
+        "analise": (PRAZO_ANALISE, "Análise atrasada", "atrasos_cliente"),
+        "revisoes": (PRAZO_DEVOLUCAO, "Revisões atrasadas", "atrasos_nossos"),
+    }
+    if lado not in lados:
+        raise ValueError("Lado de atraso desconhecido.")
+    identificador, titulo, chave_itens = lados[lado]
+    contexto = carregar_atrasados(usuario, contrato_id, hoje=hoje)
+    return {
+        **contexto,
+        "lado": lado,
+        "janela_id": identificador,
+        "titulo_lado": titulo,
+        "itens_atrasados": contexto[chave_itens],
     }
 
 

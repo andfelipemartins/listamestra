@@ -1186,3 +1186,72 @@ Aprovado, Não Conforme, Inconsistente, Erro de Assinatura, Cancelado, Revisão 
   Pendências. Hoje só "Em análise do cliente" faz isso; "Atrasados" abre Pendências inteira.
 - Escolha do Claude, a confirmar (pergunta AL1): "Atrasados" passa a separar **do cliente** (análise do cliente vencida)
   e **nossos** (devolução nossa vencida), e o clique abre uma lista só dos atrasados, com essa separação.
+
+## D-102 · O escopo de cada documento vem da classe, ligada no perfil
+
+*Origem: AJ5 · 2026-11-27 · completa a D-089 e a D-095*
+
+- Com o 2001 juntando arquitetura/civil e sistemas num arquivo só, o escopo não pode mais vir só do ID.
+- O admin liga **cada classe a um escopo** no perfil do contrato (ex.: classes de sistemas → Sistemas). Vale para todo
+  contrato. O filtro por escopo (D-089) passa a usar essa ligação; documento de classe sem escopo ligado continua usando
+  o escopo do ID de onde veio (escolha do Claude, a confirmar).
+
+## D-103 · Os dois códigos -1501 nunca foram emitidos
+
+*Origem: AK1 · 2026-11-27 · fecha a dúvida da D-095*
+
+- O MC-15.25.00.00-6I5-1501 e o RT-15.25.00.00-6C3-1501 **nunca foram emitidos**: só saem do previsto, sem ligar histórico
+  ao -2001. Nada a fazer no sistema além do que o block-060 já faz.
+
+## D-104 · Alertas da Minha mesa: todos veem tudo; abas por perfil e atividades da equipe vêm depois
+
+*Origem: AK2 · 2026-11-27 · completa a D-094*
+
+- Os alertas do sistema no card "Mensagens / Integrações" aparecem **para todos** do contrato, na mesma lista.
+- Ideia nova do dono: haverá **abas personalizadas por perfil**, que ele mesmo vai configurar, incluindo um **dashboard
+  de atividades da equipe** (um gerenciador de engenharia tem funcionários, e com eles atividades e pendências). Fica
+  registrada como frente nova do roadmap, ainda sem desenho.
+
+## D-105 · GRD se faz no sistema; GRD da planilha que não existe no sistema grava e avisa
+
+*Origem: AK3 · 2026-11-27 · completa a D-096*
+
+- Resposta: **grava e avisa** (o número fica como texto na revisão e nasce a pendência "GRD sem remessa no sistema").
+- Visão do dono: as GRDs devem ser feitas **dentro do sistema**, que concentra tudo num lugar só. Uma GRD "offline" é
+  estranha, e ele pede para **analisar se a coluna GRD na planilha padrão precisa existir**. Fica em pergunta (AM3) antes
+  de implementar a pendência; por ora a coluna continua aceita e ignorada.
+
+## D-106 · Data de retorno é a data da análise do cliente
+
+*Origem: AK4 · 2026-11-27 · completa a D-090/D-096*
+
+- "Data de retorno" é a data em que o cliente entregou a análise, ou seja, **a mesma data da situação**. Na planilha
+  padrão, se a coluna "Data" vier vazia e "Data de retorno" vier preenchida, usa-se a data de retorno.
+
+## D-107 · Colunas da planilha montadas no perfil do contrato; o preset tem o nome do sistema de origem
+
+*Origem: AK5 · 2026-11-27 · completa a D-096*
+
+- O admin monta as colunas **no perfil do contrato**, junto com o resto da pré-configuração.
+- O dono perguntou: "preset PW? e se for outro GED, ou nenhum?". Entendimento do Claude, a confirmar (AM4): o preset é só um
+  modelo pronto com o nome do sistema de onde vem a extração (PW hoje, outro GED amanhã); contrato sem GED usa a planilha
+  padrão do próprio sistema, sem preset.
+
+## D-108 · Card de atraso: "Análise atrasada" (cliente) e "Revisões atrasadas" (contratada)
+
+*Origem: AL1 · 2026-11-27 · ajusta a D-101 e o block-065*
+
+- O dono quer os nomes **"Análise atrasada"** e **"Revisões atrasadas"**: assim fica claro que análise é do cliente e que
+  revisão atrasada é da contratada. Substituem "do cliente" e "nossos" no card e na lista dos atrasados.
+
+## D-109 · Clicar num card do Início abre uma seção mais específica dentro de Pendências
+
+*Origem: AL2 · 2026-11-27 · detalha a D-101*
+
+- O clique num card do Início **não** volta à página de Pendências inteira: leva a uma **seção específica dentro de
+  Pendências** ("subpasta"), com mais informação e espaço para mais funções e layout próprio. Ex.: Início → Atrasados abre
+  Pendências › Atrasados, com a lista (documento, título, revisão, há quantos dias); clicar num grupo dali desce mais um
+  nível (Pendências › Atrasados › Revisões atrasadas).
+- O card "Pendências abertas" abre Pendências › Abertas, com um resumo por tipo; cada tipo abre a sua lista (nossa
+  devolução, cronograma, linhas recusadas...).
+- Quem quer a página de Pendências normal clica em **Pendências** no menu.

@@ -7,7 +7,9 @@ from django.views import View
 
 from .services import (
     carregar_ignorados,
+    carregar_abertas,
     carregar_atrasados,
+    carregar_atrasados_lado,
     carregar_janela,
     carregar_minha_mesa,
     reativar_ignorado,
@@ -30,6 +32,38 @@ class AtrasadosView(LoginRequiredMixin, View):
     def get(self, request):
         contexto = carregar_atrasados(request.user, request.GET.get("contrato"))
         return render(request, self.template_name, contexto)
+
+
+class AbertasView(LoginRequiredMixin, View):
+    template_name = "acoes/abertas.html"
+
+    def get(self, request):
+        contexto = carregar_abertas(request.user, request.GET.get("contrato"))
+        return render(request, self.template_name, contexto)
+
+
+class AtrasadosLadoView(LoginRequiredMixin, View):
+    template_name = "acoes/atrasados_lado.html"
+
+    def get(self, request, lado):
+        try:
+            contexto = carregar_atrasados_lado(
+                request.user, request.GET.get("contrato"), lado
+            )
+        except ValueError as erro:
+            from django.http import Http404
+
+            raise Http404 from erro
+        return render(request, self.template_name, contexto)
+
+
+class AtrasadosLegadoView(LoginRequiredMixin, View):
+    def get(self, request):
+        contrato_id = request.GET.get("contrato")
+        destino = reverse("acoes:atrasados")
+        if contrato_id:
+            destino = f"{destino}?contrato={contrato_id}"
+        return redirect(destino)
 
 
 class JanelaView(LoginRequiredMixin, View):

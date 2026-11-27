@@ -123,7 +123,7 @@ def test_card_atrasados_mostra_divisao_e_abre_sua_lista(
         if indicador["id"] == "atrasados"
     )
 
-    assert card["descricao"] == "2 do cliente · 1 nossos"
+    assert card["descricao"] == "2 análises atrasadas · 1 revisão atrasada"
     assert card["url"] == f"{reverse('acoes:atrasados')}?contrato={contrato.pk}"
     for indicador in resposta.context["indicadores_inicio"]:
         assert indicador["ajuda"]
@@ -141,8 +141,8 @@ def test_visao_atrasados_separa_janelas_exclui_em_dia_e_ordena(
 
     resposta = client.get(reverse("acoes:atrasados"), {"contrato": contrato.pk})
     html = resposta.content.decode("utf-8")
-    cliente_index = html.index("Atraso do cliente")
-    nosso_index = html.index("Atraso nosso")
+    cliente_index = html.index("Análise atrasada")
+    nosso_index = html.index("Revisões atrasadas")
 
     assert resposta.status_code == 200
     assert cliente_index < html.index(cliente_mais_atrasado.identificador_base) < html.index(cliente_atrasado.identificador_base)

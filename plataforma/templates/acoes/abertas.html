@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Pendências abertas{% endblock %}
+{% block extra_head %}
+<style>
+  .abertas-cabecalho { display:flex; align-items:flex-end; justify-content:space-between; gap:18px; margin-bottom:24px; }
+  .abertas-seletor { display:flex; align-items:flex-end; gap:9px; }
+  .abertas-seletor label { display:grid; gap:6px; color:var(--text-secondary); font-size:12px; }
+  .abertas-seletor select { min-width:min(280px,54vw); min-height:40px; padding:7px 10px; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--text-primary); }
+  .abertas-lista { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; }
+  .abertas-cartao { display:grid; align-content:start; gap:10px; min-height:135px; padding:18px; border:1px solid var(--border); border-radius:12px; background:var(--surface); color:var(--text-primary); text-decoration:none; box-shadow:0 2px 8px #1b2b3d12; }
+  .abertas-cartao:hover { border-color:var(--accent); }
+  .abertas-cartao strong { font-size:18px; }
+  .abertas-cartao small { color:var(--text-secondary); line-height:1.5; }
+  .abertas-vazio { padding:18px; color:var(--text-secondary); }
+  @media(max-width:560px) { .abertas-cabecalho { align-items:stretch; flex-direction:column; } .abertas-seletor { align-items:stretch; flex-direction:column; } .abertas-seletor select { width:100%; } }
+</style>
+{% endblock %}
+{% block content %}
+  {% if not contrato %}
+    <section class="welcome-panel"><div class="welcome-symbol">LM</div><div><h2>Nenhum contrato disponível</h2><p>Peça à administração para incluir sua participação em um contrato ativo.</p></div></section>
+  {% else %}
+  <nav aria-label="Trilha de navegação" class="breadcrumbs">
+    <a href="{% url 'acoes:pendencias' %}?contrato={{ contrato.pk }}">Pendências</a>
+    <span aria-hidden="true">›</span>
+    <a href="{% url 'acoes:abertas' %}?contrato={{ contrato.pk }}">Abertas</a>
+  </nav>
+  <header class="abertas-cabecalho">
+    <div><span class="eyebrow">{{ contrato.codigo_interno }}</span><h1>Pendências abertas</h1><p>Resumo das janelas que têm itens pendentes.</p></div>
+    {% if contratos %}<form class="abertas-seletor" method="get"><label for="abertas-contrato">Contrato<select id="abertas-contrato" name="contrato" onchange="this.form.submit()">{% for opcao in contratos %}<option value="{{ opcao.pk }}" {% if contrato.pk == opcao.pk %}selected{% endif %}>{{ opcao.codigo_interno }} · {{ opcao.nome }}</option>{% endfor %}</select></label><noscript><button class="button button-quiet" type="submit">Abrir</button></noscript></form>{% endif %}
+  </header>
+  {% if perfil_erro %}<div class="notice" style="margin-bottom:16px">{{ perfil_erro }}</div>{% endif %}
+  {% if cartoes_abertas %}
+    <div class="abertas-lista">
+      {% for cartao in cartoes_abertas %}
+        <a class="abertas-cartao" href="{{ cartao.url }}" title="{{ cartao.ajuda }}">
+          <span>{{ cartao.titulo }}</span><strong>{{ cartao.quantidade }} item{{ cartao.quantidade|pluralize:",s" }}</strong><small>{{ cartao.ajuda }}</small>
+        </a>
+      {% endfor %}
+    </div>
+  {% else %}<section class="welcome-panel"><div class="welcome-symbol">✓</div><div><h2>Nenhuma pendência aberta</h2><p>Não há itens em nenhuma janela no momento.</p></div></section>{% endif %}
+  {% endif %}
+{% endblock %}

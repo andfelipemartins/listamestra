@@ -27,6 +27,13 @@
   {% if not contrato %}
     <section class="welcome-panel"><div class="welcome-symbol">LM</div><div><h2>Nenhum contrato disponível</h2><p>Peça à administração para incluir sua participação em um contrato ativo.</p></div></section>
   {% else %}
+  <nav aria-label="Trilha de navegação" class="breadcrumbs">
+    <a href="{% url 'acoes:pendencias' %}?contrato={{ contrato.pk }}">Pendências</a>
+    <span aria-hidden="true">›</span>
+    <a href="{% url 'acoes:abertas' %}?contrato={{ contrato.pk }}">Abertas</a>
+    <span aria-hidden="true">›</span>
+    <a href="{% url 'acoes:janela' janela.id %}?contrato={{ contrato.pk }}">{{ janela.titulo }}</a>
+  </nav>
   <div class="mesa-cabecalho">
     <div><span class="eyebrow">{{ contrato.codigo_interno }}</span><h1>{{ janela.titulo }}</h1><p>{{ janela.quantidade }} item{{ janela.quantidade|pluralize:",s" }}</p></div>
     {% if contratos %}<form class="mesa-seletor" method="get"><label for="janela-contrato">Contrato<select id="janela-contrato" name="contrato" onchange="this.form.submit()">{% for opcao in contratos %}<option value="{{ opcao.pk }}" {% if contrato.pk == opcao.pk %}selected{% endif %}>{{ opcao.codigo_interno }} · {{ opcao.nome }}</option>{% endfor %}</select></label><noscript><button class="button button-quiet" type="submit">Abrir</button></noscript></form>{% endif %}
