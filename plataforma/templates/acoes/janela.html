@@ -38,6 +38,7 @@
     <div><span class="eyebrow">{{ contrato.codigo_interno }}</span><h1>{{ janela.titulo }}</h1><p>{{ janela.quantidade }} item{{ janela.quantidade|pluralize:",s" }}</p></div>
     {% if contratos %}<form class="mesa-seletor" method="get"><label for="janela-contrato">Contrato<select id="janela-contrato" name="contrato" onchange="this.form.submit()">{% for opcao in contratos %}<option value="{{ opcao.pk }}" {% if contrato.pk == opcao.pk %}selected{% endif %}>{{ opcao.codigo_interno }} · {{ opcao.nome }}</option>{% endfor %}</select></label><noscript><button class="button button-quiet" type="submit">Abrir</button></noscript></form>{% endif %}
   </div>
+  {% if messages %}{% for message in messages %}<p class="notice notice-{{ message.tags }}">{{ message }}</p>{% endfor %}{% endif %}
   {% if perfil_erro %}<div class="notice" style="margin-bottom:16px">{{ perfil_erro }}</div>{% endif %}
   {% if janela.id == "erros" %}<p><a href="{% url 'acoes:ignorados' %}?contrato={{ contrato.pk }}">Ver todos › ignorados</a></p>{% endif %}
   {% if janela.itens %}

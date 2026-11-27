@@ -1,0 +1,24 @@
+<article class="mesa-item">
+  <div class="mesa-item-meta"><span class="mesa-selo">Título diferente do ID</span></div>
+  <a href="{% url 'documento_pasta' contrato.pk item.documento.pk %}"><strong>{{ item.codigo }}</strong></a>
+  <p>Título atual: {{ item.titulo_atual|default:"(sem título)" }}</p>
+  <p>Título do ID: {{ item.titulo_id }}</p>
+  <div class="mesa-item-meta"><span>ID: {{ item.codigo_id }}</span><span>Nome do ID: {{ item.nome_id }}</span></div>
+  {% if item.ultima_acao %}<p>Última ação: {{ item.ultima_acao.get_acao_display }} · {{ item.ultima_acao_por }} · {{ item.ultima_acao.criado_em|date:"d/m/Y H:i" }}{% if item.ultima_acao.motivo %} · {{ item.ultima_acao.motivo }}{% endif %}{% if item.ultima_acao.resolvida_em %} · Reativada em {{ item.ultima_acao.resolvida_em|date:"d/m/Y H:i" }}{% endif %}</p>{% endif %}
+  {% if janela.id == "ignorados" %}
+    <form method="post" action="{% url 'acoes:reativar' %}" class="mesa-acoes">
+      {% csrf_token %}<input type="hidden" name="contrato" value="{{ contrato.pk }}"><input type="hidden" name="documento" value="{{ item.documento.pk }}"><input type="hidden" name="tipo_pendencia" value="{{ item.tipo_pendencia }}">
+      <button type="submit">Reativar pendência</button>
+    </form>
+  {% elif actions_enabled|default:True %}
+    <div class="mesa-acoes">
+      <form method="post" action="{% url 'acoes:registrar_acao' %}">
+        {% csrf_token %}<input type="hidden" name="contrato" value="{{ contrato.pk }}"><input type="hidden" name="documento" value="{{ item.documento.pk }}"><input type="hidden" name="tipo_pendencia" value="{{ item.tipo_pendencia }}"><input type="hidden" name="acao" value="ignorar">
+        <input type="text" name="motivo" aria-label="Motivo para manter o título atual de {{ item.codigo }}" placeholder="Motivo obrigatório" required><button type="submit">Manter o atual</button>
+      </form>
+      {% if item.pode_editar_titulo %}<form method="post" action="{% url 'acoes:usar_titulo_id' %}">
+        {% csrf_token %}<input type="hidden" name="contrato" value="{{ contrato.pk }}"><input type="hidden" name="documento" value="{{ item.documento.pk }}"><button type="submit">Usar o título do ID</button>
+      </form>{% endif %}
+    </div>
+  {% endif %}
+</article>

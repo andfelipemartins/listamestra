@@ -5,6 +5,8 @@
     <p>Associe esta classe a um escopo no perfil do contrato.</p>
     <ul>{% for documento in item.documentos %}<li><a href="{% url 'documento_pasta' contrato.pk documento.pk %}">{{ documento.identificador_base }}</a>{% if documento.titulo %} — {{ documento.titulo }}{% endif %}</li>{% endfor %}</ul>
   </article>
+{% elif item.tipo_pendencia == "titulo_diferente_id" %}
+  {% include "acoes/_item_titulo_id.html" %}
 {% elif janela.id == "erros" or janela.id == "ignorados" %}
   {% include "acoes/_item_erro.html" %}
 {% elif janela.id == "analise-cliente" or janela.id == "devolucao" %}

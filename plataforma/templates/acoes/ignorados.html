@@ -18,7 +18,7 @@
   {% else %}
   <div><span class="eyebrow">{{ contrato.codigo_interno }}</span><h1>{{ janela.titulo }}</h1><p>{{ janela.quantidade }} item{{ janela.quantidade|pluralize:",s" }}</p></div>
   {% if perfil_erro %}<div class="notice" style="margin-top:16px">{{ perfil_erro }}</div>{% endif %}
-  {% if janela.itens %}<div class="mesa-lista-completa">{% for item in janela.itens %}{% include "acoes/_item_erro.html" with janela=janela %}{% endfor %}</div>
+  {% if janela.itens %}<div class="mesa-lista-completa">{% for item in janela.itens %}{% include "acoes/_item_janela.html" with janela=janela %}{% endfor %}</div>
   {% else %}<section class="welcome-panel"><div class="welcome-symbol">✓</div><div><h2>Nenhuma pendência ignorada</h2><p>Os itens que você ignorar aparecerão aqui e poderão ser reativados.</p></div></section>{% endif %}
   <p style="margin-top:20px"><a href="{% url 'inicio' %}?contrato={{ contrato.pk }}">Voltar para Minha mesa</a></p>
   {% endif %}

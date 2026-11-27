@@ -31,6 +31,7 @@ from .models import AcaoPendencia
 PRAZO_ANALISE = "analise-cliente"
 PRAZO_DEVOLUCAO = "devolucao"
 CLASSES_SEM_ESCOPO = "classes-sem-escopo"
+JANELA_TITULO_DIFERENTE_ID = "titulo-diferente-id"
 TIPOS_JANELA = {
     "erros": "Erros a corrigir",
     PRAZO_ANALISE: "Análise do cliente",
@@ -38,11 +39,13 @@ TIPOS_JANELA = {
     "cronograma": "Cronograma",
     "recusadas": "Linhas recusadas abertas",
     CLASSES_SEM_ESCOPO: "Classe sem escopo",
+    JANELA_TITULO_DIFERENTE_ID: "Título diferente do ID",
 }
 _DIAS_PARA_VENCER = 3
 _DIAS_CRONOGRAMA = 7
 PENDENCIA_FALTA_NO_PW = "falta_no_pw"
 PENDENCIA_FALTA_NO_NOSSO_ID = "falta_no_nosso_id"
+PENDENCIA_TITULO_DIFERENTE_ID = "titulo_diferente_id"
 _PENDENCIAS_ID = {PENDENCIA_FALTA_NO_PW, PENDENCIA_FALTA_NO_NOSSO_ID}
 _TEXTOS_RESUMO = {
     "erros": "documentos com erros a corrigir",
@@ -51,6 +54,7 @@ _TEXTOS_RESUMO = {
     "cronograma": "emissões vencidas ou próximas",
     "recusadas": "linhas recusadas nas importações",
     CLASSES_SEM_ESCOPO: "documentos agrupados por classe sem escopo ligado no perfil",
+    JANELA_TITULO_DIFERENTE_ID: "documentos com título diferente do ID",
 }
 
 
@@ -160,6 +164,18 @@ def carregar_minha_mesa(usuario, contrato_id=None, *, hoje=None, limite=10, incl
         (
             _janela("cronograma", TIPOS_JANELA["cronograma"], cronograma, limite),
             _janela("recusadas", TIPOS_JANELA["recusadas"], recusadas, limite),
+        )
+    )
+    janelas.append(
+        _janela(
+            JANELA_TITULO_DIFERENTE_ID,
+            TIPOS_JANELA[JANELA_TITULO_DIFERENTE_ID],
+            _pendencias_titulo_id(
+                contrato,
+                usuario,
+                incluir_ignorados=incluir_ignorados,
+            ),
+            limite,
         )
     )
     return {
@@ -691,9 +707,12 @@ def carregar_janela(usuario, contrato_id, tipo, *, hoje=None):
 
 def carregar_ignorados(usuario, contrato_id, *, hoje=None):
     mesa = carregar_minha_mesa(usuario, contrato_id, hoje=hoje, limite=None, incluir_ignorados=True)
-    janela_erros = next((item for item in mesa["janelas"] if item["id"] == "erros"), None)
+    janelas = [
+        item for item in mesa["janelas"]
+        if item["id"] in {"erros", JANELA_TITULO_DIFERENTE_ID}
+    ]
     itens = [
-        item for item in (janela_erros["todos"] if janela_erros else [])
+        item for janela in janelas for item in janela["todos"]
         if item["ultima_acao"]
         and item["ultima_acao"].acao == AcaoPendencia.Acao.IGNORAR
         and item["ultima_acao"].resolvida_em is None
@@ -715,10 +734,9 @@ def registrar_acao(usuario, contrato_id, documento_id, tipo_pendencia, acao, mot
         raise ValueError("Informe o motivo para ignorar a pendência.")
 
     dados = carregar_minha_mesa(usuario, contrato.pk, limite=None)
-    erros = next((item for item in dados["janelas"] if item["id"] == "erros"), None)
     pendencia = next(
         (
-            item for item in (erros["todos"] if erros else [])
+            item for janela in dados["janelas"] for item in janela["todos"]
             if item["documento"].pk == int(documento_id)
             and item["tipo_pendencia"] == tipo_pendencia
         ),
@@ -843,8 +861,18 @@ def _erros_abertos(contrato, perfil, documentos, *, incluir_ignorados=False):
     return sorted(itens, key=lambda item: (item["data_desde"], item["codigo"].casefold()))
 
 
+def _indices_vigentes_do_contrato(contrato):
+    return list(
+        IndiceDocumentos.objects.filter(
+            contrato=contrato,
+            vigente=True,
+            substituido_por__isnull=True,
+        ).order_by("-importado_em", "-pk")
+    )
+
+
 def _pendencias_ids(contrato, perfil, *, incluir_ignorados=False):
-    indices = list(IndiceDocumentos.objects.filter(contrato=contrato, vigente=True))
+    indices = _indices_vigentes_do_contrato(contrato)
     ids_nosso_id = {
         indice.pk
         for indice in indices
@@ -930,6 +958,69 @@ def _pendencias_ids(contrato, perfil, *, incluir_ignorados=False):
                 }
             )
     return itens_pendencia
+
+
+def _pendencias_titulo_id(contrato, usuario, *, incluir_ignorados=False):
+    indices = _indices_vigentes_do_contrato(contrato)
+    itens_id = (
+        ItemPrevisto.objects.filter(
+            indice_id__in=[indice.pk for indice in indices],
+            indice__vigente=True,
+            indice__substituido_por__isnull=True,
+            documento__contrato=contrato,
+            excluido=False,
+        )
+        .select_related("indice", "documento")
+        .order_by("-indice__importado_em", "-indice_id", "-pk")
+    )
+    por_documento = {}
+    for item in itens_id:
+        titulo_id = (item.titulo or "").strip()
+        if titulo_id and item.documento_id not in por_documento:
+            por_documento[item.documento_id] = (item, titulo_id)
+
+    ultimas_acoes = _ultimas_acoes_pendencias(contrato)
+    pode_editar_titulo = _pode_editar_perfil(usuario, contrato)
+    pendencias = []
+    for documento_id, (item, titulo_id) in por_documento.items():
+        documento = item.documento
+        titulo_atual = documento.titulo or ""
+        if titulo_atual.strip().casefold() == titulo_id.casefold():
+            continue
+        ultima_acao = ultimas_acoes.get(
+            (documento.pk, PENDENCIA_TITULO_DIFERENTE_ID)
+        )
+        if (
+            ultima_acao
+            and ultima_acao.acao == AcaoPendencia.Acao.IGNORAR
+            and ultima_acao.resolvida_em is None
+            and not incluir_ignorados
+        ):
+            continue
+        pendencias.append(
+            {
+                "documento": documento,
+                "codigo": documento.identificador_base,
+                "titulo": titulo_atual or "(sem título)",
+                "titulo_atual": titulo_atual,
+                "titulo_id": titulo_id,
+                "codigo_id": item.indice.codigo,
+                "nome_id": item.indice.arquivo_nome,
+                "situacao": "Título diferente do ID",
+                "grupo": "Título diferente do ID",
+                "tipo_pendencia": PENDENCIA_TITULO_DIFERENTE_ID,
+                "data_situacao": None,
+                "data_desde": None,
+                "emissao": None,
+                "revisao": "—",
+                "versao": None,
+                "quem_lancou": "Sistema",
+                "ultima_acao": ultima_acao,
+                "ultima_acao_por": _nome_usuario(ultima_acao.usuario) if ultima_acao else "",
+                "pode_editar_titulo": pode_editar_titulo,
+            }
+        )
+    return sorted(pendencias, key=lambda item: item["codigo"].casefold())
 
 
 def _ultimas_acoes_pendencias(contrato):

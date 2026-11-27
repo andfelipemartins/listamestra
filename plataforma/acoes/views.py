@@ -6,6 +6,8 @@ from django.urls import reverse
 from django.views import View
 
 from .services import (
+    JANELA_TITULO_DIFERENTE_ID,
+    PENDENCIA_TITULO_DIFERENTE_ID,
     carregar_ignorados,
     carregar_abertas,
     carregar_atrasados,
@@ -90,14 +92,19 @@ class IgnoradosView(LoginRequiredMixin, View):
 
 class AcaoView(LoginRequiredMixin, View):
     def post(self, request):
-        tipo_janela = "erros"
         contrato_id = request.POST.get("contrato")
+        tipo_pendencia = request.POST.get("tipo_pendencia", "")
+        tipo_janela = (
+            JANELA_TITULO_DIFERENTE_ID
+            if tipo_pendencia == PENDENCIA_TITULO_DIFERENTE_ID
+            else "erros"
+        )
         try:
             acao = registrar_acao(
                 request.user,
                 contrato_id,
                 request.POST.get("documento"),
-                request.POST.get("tipo_pendencia", ""),
+                tipo_pendencia,
                 request.POST.get("acao", ""),
                 request.POST.get("motivo", ""),
             )
@@ -119,6 +126,48 @@ class AcaoView(LoginRequiredMixin, View):
             else:
                 messages.success(request, "Correção registrada. O item continuará aqui até outra situação chegar por importação.")
         return redirect(f"{reverse('acoes:janela', args=(tipo_janela,))}?contrato={contrato_id}")
+
+
+class UsarTituloIDView(LoginRequiredMixin, View):
+    def post(self, request):
+        contrato_id = request.POST.get("contrato")
+        try:
+            contexto = carregar_janela(
+                request.user,
+                contrato_id,
+                JANELA_TITULO_DIFERENTE_ID,
+            )
+            documento_id = int(request.POST.get("documento"))
+            pendencia = next(
+                (
+                    item for item in contexto["janela"]["todos"]
+                    if item["documento"].pk == documento_id
+                    and item["tipo_pendencia"] == PENDENCIA_TITULO_DIFERENTE_ID
+                ),
+                None,
+            )
+            if pendencia is None:
+                raise ValueError("A pendência já não está aberta para ação.")
+
+            from documentos.servicos import editar_titulo_documento
+
+            editar_titulo_documento(
+                request.user,
+                contrato_id,
+                documento_id,
+                pendencia["titulo_id"],
+                f"Conciliação com o ID {pendencia['codigo_id']}",
+            )
+        except PermissionDenied:
+            raise
+        except (TypeError, ValueError) as erro:
+            messages.error(request, str(erro))
+        else:
+            messages.success(request, "Título atualizado conforme o ID.")
+        return redirect(
+            f"{reverse('acoes:janela', args=(JANELA_TITULO_DIFERENTE_ID,))}"
+            f"?contrato={contrato_id}"
+        )
 
 
 class ReativarView(LoginRequiredMixin, View):

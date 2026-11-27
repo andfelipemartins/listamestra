@@ -1375,3 +1375,18 @@ Aprovado, Não Conforme, Inconsistente, Erro de Assinatura, Cancelado, Revisão 
   última emissão), listar as GRDs, abrir o detalhe imprimível e ver na pasta do documento em que GRD cada revisão saiu.
 - Fora desta fatia: cópias por formato (A0–A4/Digital), distribuição por setor (AN2), recebimento por token, GRD
   antiga como histórico (D-110/AN6) e editar/cancelar GRD.
+
+## D-123 · Marco 13 (Conciliação Assistida) começa pelos títulos diferentes do ID (escolha do Claude, a confirmar)
+
+*Origem: esteira contínua (D-100) · 2026-11-27 · confirmação na pergunta AU2 e na avaliação do block-075*
+
+- Com GRDs (block-074) em avaliação, Lista Mestra esperando AO1/AN2 e Tela de ação esperando AN3/AN4/AN6/AN7/AN8, a
+  esteira abre a primeira fatia do Marco 13 na Plataforma Django. Desde o block-069 a reimportação do ID não
+  sobrescreve o título do documento, então título do ID vigente e título do documento podem ficar diferentes sem
+  ninguém ver.
+- Fatia: uma seção nova em Pendências, "Título diferente do ID", com os documentos cujo título no ID vigente (item
+  não excluído do índice não substituído) difere do título do documento (comparação sem diferença de maiúsculas e
+  espaços nas pontas). Cada linha mostra os dois títulos e duas ações: "Usar o título do ID" (troca o título pelo
+  mesmo caminho do block-069, com motivo automático citando o ID, e registra na Atividade) e "Manter o atual"
+  (o "Ignorar" já existente das Pendências, com motivo).
+- Fora desta fatia: outras divergências (atributos, situação), ações em lote e "enviar para revisão posterior".

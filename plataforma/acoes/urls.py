@@ -10,6 +10,7 @@ from .views import (
     JanelaView,
     PendenciasView,
     ReativarView,
+    UsarTituloIDView,
 )
 
 app_name = "acoes"
@@ -22,6 +23,7 @@ urlpatterns = [
     path("atrasados/", AtrasadosLegadoView.as_view(), name="atrasados_legado"),
     path("ignorados/", IgnoradosView.as_view(), name="ignorados"),
     path("acao/", AcaoView.as_view(), name="registrar_acao"),
+    path("titulo-id/usar/", UsarTituloIDView.as_view(), name="usar_titulo_id"),
     path("reativar/", ReativarView.as_view(), name="reativar"),
     path("<slug:tipo>/", JanelaView.as_view(), name="janela"),
 ]

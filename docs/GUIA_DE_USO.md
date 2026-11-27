@@ -38,6 +38,8 @@ Este guia descreve as telas presentes na Plataforma. O acesso depende do login, 
 **O que dá para fazer:** abrir os detalhes de cada grupo e do documento relacionado. Para itens que oferecem ação, registrar `Ignorar`, `Pedir correção ao cliente` ou `Já corrigi`; uma pendência ignorada pode ser reativada. Algumas opções dependem do tipo de item e do acesso.  
 **Como chegar:** menu lateral `Pendências`, ou pelos atalhos e cartões na `Minha mesa`.
 
+O grupo `Título diferente do ID` mostra o título atual do documento e o título do índice vigente. Quem pode editar títulos pode usar o título do ID; `Manter o atual` registra um motivo e oculta a pendência até que ela seja reativada.
+
 ### Pendências abertas
 
 **Título:** `Pendências abertas`.  
