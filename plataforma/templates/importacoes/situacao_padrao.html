@@ -40,7 +40,7 @@
   <h2>Planilhas aplicadas recentemente</h2>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Contrato</th><th>Data</th><th>Arquivo</th><th>Documentos</th><th>Linhas inválidas</th><th>Importado por</th></tr></thead>
+      <thead><tr><th>Contrato</th><th>Data</th><th>Arquivo</th><th>Documentos</th><th>Linhas inválidas</th><th>Importado por</th><th></th></tr></thead>
       <tbody>
         {% for importacao in importacoes %}
         <tr>
@@ -50,6 +50,7 @@
           <td>{{ importacao.documentos }}</td>
           <td>{{ importacao.linhas_invalidas }}</td>
           <td>{{ importacao.importado_por|default:"—" }}</td>
+          <td><a href="{% url 'historico_importacoes' importacao.contrato_id %}">Histórico de importações</a></td>
         </tr>
         {% endfor %}
       </tbody>

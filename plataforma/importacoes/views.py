@@ -72,6 +72,111 @@ CHAVE_SESSAO_SITUACAO_PADRAO = "previa_importacao_situacao_padrao"
 PREFIXO_ARQUIVO_SITUACAO_PADRAO = "[Planilha padrão] "
 
 
+class HistoricoImportacoesView(LoginRequiredMixin, View):
+    template_name = "importacoes/historico.html"
+    http_method_names = ["get"]
+
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return self.handle_no_permission()
+        contrato = get_object_or_404(Contrato, pk=kwargs["contrato_id"])
+        if not request.user.is_staff and not Participacao.objects.filter(
+            usuario=request.user,
+            contrato=contrato,
+            ativo=True,
+        ).exists():
+            raise PermissionDenied
+        self.contrato = contrato
+        return super().dispatch(request, *args, **kwargs)
+
+    def get(self, request, contrato_id):
+        importacoes = []
+        for importacao in ImportacaoID.objects.filter(contrato=self.contrato).select_related(
+            "importado_por"
+        ):
+            importacoes.append(
+                _linha_historico_importacao(
+                    importacao,
+                    tipo="ID",
+                    resumo=(
+                        f"{importacao.linhas_validas} válidas · "
+                        f"{importacao.linhas_invalidas} recusadas"
+                    ),
+                    linhas_recusadas=importacao.linhas_invalidas,
+                )
+            )
+
+        situacoes = ImportacaoSituacao.objects.filter(contrato=self.contrato).select_related(
+            "importado_por"
+        )
+        for importacao in situacoes:
+            planilha_padrao = importacao.arquivo_nome.startswith(
+                PREFIXO_ARQUIVO_SITUACAO_PADRAO
+            )
+            tipo = "Situação por planilha" if planilha_padrao else "Situação do PW"
+            arquivo_nome = importacao.arquivo_nome
+            if planilha_padrao:
+                arquivo_nome = arquivo_nome[len(PREFIXO_ARQUIVO_SITUACAO_PADRAO) :]
+            resumo = (
+                f"{importacao.documentos} documentos · "
+                f"{importacao.emissoes} emissões · "
+                f"{importacao.fora_do_id} fora do ID · "
+                f"{importacao.linhas_invalidas} inválidas · "
+                f"extração {importacao.data_extracao:%d/%m/%Y}"
+            )
+            importacoes.append(
+                _linha_historico_importacao(
+                    importacao,
+                    tipo=tipo,
+                    resumo=resumo,
+                    arquivo_nome=arquivo_nome,
+                    linhas_recusadas=importacao.linhas_invalidas,
+                )
+            )
+
+        for importacao in ImportacaoCronograma.objects.filter(
+            contrato=self.contrato
+        ).select_related("importado_por"):
+            importacoes.append(
+                _linha_historico_importacao(
+                    importacao,
+                    tipo="Cronograma",
+                    resumo=(
+                        f"{importacao.linhas_validas} válidas · "
+                        f"{importacao.linhas_recusadas} recusadas"
+                    ),
+                    linhas_recusadas=importacao.linhas_recusadas,
+                )
+            )
+
+        importacoes.sort(key=lambda item: (item["importado_em"], item["id"]), reverse=True)
+        return render(
+            request,
+            self.template_name,
+            {"contrato": self.contrato, "importacoes": importacoes},
+        )
+
+
+def _linha_historico_importacao(
+    importacao,
+    *,
+    tipo,
+    resumo,
+    linhas_recusadas,
+    arquivo_nome=None,
+):
+    return {
+        "id": importacao.pk,
+        "tipo": tipo,
+        "importado_em": importacao.importado_em,
+        "data_hora": timezone.localtime(importacao.importado_em).strftime("%d/%m/%Y %H:%M"),
+        "arquivo": arquivo_nome or importacao.arquivo_nome,
+        "importado_por": str(importacao.importado_por) if importacao.importado_por else "",
+        "resumo": resumo,
+        "tem_recusadas": linhas_recusadas > 0,
+    }
+
+
 class LinhasRecusadasView(LoginRequiredMixin, View):
     template_name = "importacoes/recusadas.html"
 

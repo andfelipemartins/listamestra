@@ -156,6 +156,11 @@ O grupo `Título diferente do ID` mostra o título atual do documento e o títul
 **O que dá para fazer:** consultar código e motivo; gerar uma prévia de reprocessamento pelo perfil vigente; confirmar; e conferir quais linhas foram aceitas ou continuam recusadas.  
 **Como chegar:** pelo aviso no `Painel`, pelo link na tela de importação de ID ou por um evento em `Atividade`.
 
+### Histórico de importações
+
+**Para que serve:** consultar os lotes de ID, situação do PW ou por planilha padrão e cronograma já aplicados ao contrato, com data, responsável, arquivo e resumo.
+**Quem vê:** staff e qualquer participante ativo do contrato; a tela é somente para consulta. Acesse pelo link nas telas de importação ou em `Linhas recusadas`.
+
 ## Atividade
 
 **Menu e título:** `Atividade` · `Atividade`.  

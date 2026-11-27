@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}Histórico de importações · {{ contrato.codigo_interno }}{% endblock %}
+
+{% block content %}
+<section class="page-heading">
+  <div>
+    <span class="eyebrow">Importações · {{ contrato.codigo_interno }}</span>
+    <h1>Histórico de importações</h1>
+    <p>{{ contrato.nome }}</p>
+  </div>
+</section>
+
+{% if importacoes %}
+<section class="panel">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Data e hora</th><th>Tipo</th><th>Arquivo</th><th>Quem importou</th><th>Resumo</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for importacao in importacoes %}
+        <tr>
+          <td>{{ importacao.data_hora }}</td>
+          <td>{{ importacao.tipo }}</td>
+          <td>{{ importacao.arquivo }}</td>
+          <td>{{ importacao.importado_por }}</td>
+          <td>{{ importacao.resumo }}</td>
+          <td>{% if importacao.tem_recusadas %}<a href="{% url 'linhas_recusadas' contrato.pk %}">Ver recusadas</a>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% else %}
+<section class="panel"><p class="painel-sem-dados">Nenhuma importação neste contrato ainda.</p></section>
+{% endif %}
+{% endblock %}

@@ -35,7 +35,7 @@
   <h2>Importações recentes</h2>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Contrato</th><th>Arquivo</th><th>Importado em</th><th>Válidas</th><th>Recusadas</th></tr></thead>
+      <thead><tr><th>Contrato</th><th>Arquivo</th><th>Importado em</th><th>Válidas</th><th>Recusadas</th><th></th></tr></thead>
       <tbody>
         {% for importacao in importacoes %}
         <tr>
@@ -44,6 +44,7 @@
           <td>{{ importacao.importado_em|date:"d/m/Y H:i" }}</td>
           <td>{{ importacao.linhas_validas }}</td>
           <td>{{ importacao.linhas_recusadas }}</td>
+          <td><a href="{% url 'historico_importacoes' importacao.contrato_id %}">Histórico de importações</a></td>
         </tr>
         {% endfor %}
       </tbody>

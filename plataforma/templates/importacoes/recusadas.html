@@ -8,6 +8,7 @@
     <span class="eyebrow">Importações · {{ contrato.codigo_interno }}</span>
     <h1>Linhas recusadas</h1>
     <p>{{ total_recusadas }} linha{{ total_recusadas|pluralize }} aguardando correção ou reprocessamento.</p>
+    <p><a href="{% url 'historico_importacoes' contrato.pk %}">Histórico de importações</a></p>
     {% if user.is_staff %}<p><a href="{% url 'importar_id' %}">Importar outro ID</a></p>{% endif %}
   </div>
 </section>

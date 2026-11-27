@@ -11,6 +11,7 @@ from importacoes.views import (
     ImportarSituacaoPWView,
     BaixarModeloSituacaoPadraoView,
     LinhasRecusadasView,
+    HistoricoImportacoesView,
 )
 
 urlpatterns = [
@@ -31,6 +32,7 @@ urlpatterns = [
     path("importacoes/situacao-padrao/modelo/", BaixarModeloSituacaoPadraoView.as_view(), name="modelo_situacao_padrao"),
     path("importacoes/cronograma/", ImportarCronogramaView.as_view(), name="importar_cronograma"),
     path("importacoes/recusadas/<int:contrato_id>/", LinhasRecusadasView.as_view(), name="linhas_recusadas"),
+    path("importacoes/historico/<int:contrato_id>/", HistoricoImportacoesView.as_view(), name="historico_importacoes"),
     path("painel/", include("painel.urls")),
     path("contratos/", include("contratos.urls")),
     path("atividade/", include("registro.urls")),

@@ -1401,3 +1401,14 @@ Aprovado, Não Conforme, Inconsistente, Erro de Assinatura, Cancelado, Revisão 
 - Fatia: na Atividade, "Baixar planilha (CSV)" com exatamente os eventos filtrados na tela (todos, sem paginação),
   em UTF-8 com `;`, para abrir direto no Excel. Mesma permissão da tela.
 - Fora desta fatia: Excel formatado (.xlsx), PDF, registro de quem viu/baixou e trilha de leitura.
+
+## D-125 · Marco 15 (GED/PW) segue pelo histórico de importações do contrato (escolha do Claude, a confirmar)
+
+*Origem: esteira contínua (D-100) · 2026-11-27 · confirmação na pergunta AW1 e na avaliação do block-078*
+
+- Os importadores do Marco 15 já existem (situação do PW no block-019, situação por planilha padrão no block-062),
+  com prévia antes de aplicar e a tela de linhas recusadas. Falta ver, depois, o que foi importado em cada contrato.
+- Fatia: tela "Histórico de importações" do contrato, só leitura, com uma linha por importação (ID, situação e
+  cronograma), a mais recente primeiro: data, tipo, arquivo, quem importou e os contadores, com link para as recusadas.
+  Mesma permissão da tela de recusadas. Sem mudança no banco.
+- Fora desta fatia: desfazer uma importação (rollback por lote), comparar dois lotes e baixar o histórico em planilha.
