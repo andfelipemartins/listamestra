@@ -1,145 +1,36 @@
 # Roadmap do SCLME
 
-Data: 2026-05-16
+Data: 2026-11-27
 
-## Objetivo
+Este arquivo é a fonte única do roadmap no repositório; o status muda primeiro no painel do dono (Control Room). O Streamlit (main.py, pages/) é legado; a Plataforma Django (plataforma/) é o produto (D-020, D-121).
 
-Este roadmap registra a sequencia de marcos do SCLME e explicita a insercao do Marco 10.6 antes da retomada de novas funcionalidades.
+## Marcos
 
-## Marcos Concluidos e Em Consolidacao
-
-| Marco | Nome | Objetivo | Status |
+| Marco | Objetivo | Status | Blocks · hash |
 | --- | --- | --- | --- |
-| 0 | Estrutura e base do projeto | Criar base do projeto, organizacao inicial e ambiente | Concluido |
-| 1 | Parser de codigo documental | Interpretar codigos documentais da Linha 15 | Concluido |
-| 2 | Importador da Lista de Documentos | Importar documentos e revisoes da Lista | Concluido |
-| 3 | Importador do ID/Indice | Importar documentos previstos | Concluido |
-| 4 | Banco SQLite | Estrutura base de persistencia | Concluido |
-| 5 | Dashboard inicial | Exibir indicadores principais | Concluido |
-| 6 | Comparacao ID x Lista | Identificar ausentes, extras e divergencias | Concluido |
-| 7 | Leitor de arquivos | Ler nomes de arquivos locais/SharePoint | Concluido |
-| 8 | Cadastro manual | Permitir cadastro manual de documentos e revisoes | Concluido |
-| 9 | Motor de status | Calcular status, alertas e aprovacao historica | Concluido |
-| 10 | Exportacao de relatorios | Gerar arquivos Excel de apoio | Concluido |
-| 10.6 | Consolidacao Arquitetural Pre-Produto | Reduzir acoplamento e preparar crescimento | Concluido |
-| 10.7 | Revisao do Cadastro Manual e Fluxo de Entrada | Transformar o Cadastro Manual em fluxo seguro e controlado | Em andamento |
+| m00 · Base do produto (Marcos 0–10.6) | Entregar a base documental: parser, importações, banco, painéis, cadastro, status, relatórios e camadas de serviço. | Concluído | — |
+| m01 · Revisão do Cadastro Manual (10.7) | Cadastrar documentos colando códigos e revisar a experiência do fluxo. | Pausado | 10.7.1–10.7.4; 10.7.5; 10.7.6 |
+| m02 · Central de Pendências (11) | Reunir o que exige ação para resolver ou ignorar pendências do contrato (J1). | Concluído | 009; 011; 013 |
+| m03 · GRDs (14) | Criar e consultar GRDs na Plataforma Django (D-105, D-110, D-122). | Em andamento | 001; 002; 003; 007; 008; 074:8578d59 |
+| m04 · Infraestrutura e governança | Manter operáveis a infraestrutura e a esteira de trabalho do projeto. | Concluído | 004; 005; 006; 010; 012 |
+| m05 · Reavaliar com a nova visão (12–20) | Reavaliar e ampliar as primeiras fatias de edição, conciliação, GED/PW, relatórios, snapshots, contratos, auditoria e apresentação. | Em andamento | 069:50cf166; 070:3002707; 071:3e94684; 072:7bb35dd; 073:b956b73; 075:3726e0f; 076:f4ba360 |
+| m06 · Lista Mestra definitiva | Substituir de vez a planilha com macro pela tela da Lista Mestra (D-010). | Em andamento | 068:c618840 |
+| m07 · Fundação Django | Estabelecer login, perfis, modelos e configuração documental por contrato. | Concluído | 014:122786d; 015:c0ab378; 016:8224d08; 017:7298eae; 016c:0d09f55 |
+| m08 · Dados reais e painel da chefia | Importar dados reais do ID e do PW e apresentar o acompanhamento da chefia. | Em avaliação | 018:56572ec; 020a:2c75bef; 016d:168d2a0; 019:a2d9051; 020b:40c205b; 020c:3f65c00; 021:891e6b6; 022:5ac5a49; 023:046d799; 024:bbafe78; 025:9d1cc91; 026:3864ef7; t30 |
+| m09 · Tela de ação e pendências | Dar controle por login e contrato (D-042) para prazos, pendências e ações. | Em andamento | 047:7136dee; 048:5cbacac; 049:0059ee8; 057:7f83f4a; 058:5708b33; 059:621571f; 060:e785c28; 061:7f89a28; 062:2a58e6f; 063:039ad93; 064:e0210cc; 065:5bbe677; 066:ea106a1; 067/067b:b6f5de1 |
 
-## Marco 10.6 - Consolidacao Arquitetural Pre-Produto
+## O que falta e do que depende
 
-### Objetivo
+- **m03 · GRDs:** a primeira fatia (block-074) aguarda avaliação (AU1, AT2). Depois: cópias por formato; distribuição por setor (AN2); GRD antiga como histórico (AN6).
+- **m05 · Reavaliar com a nova visão:** próximo passo é reavaliar os Marcos 12–20. O arquivo associa as fatias entregues a Marco 12 (D-117, AP1), 13 (D-123, AU2, AV1), 16 (D-118, AQ1), 17 (D-119, AR1), 18 (D-120, AS1), 19 (D-124, AV2) e 20 (D-121). Marco 15 já está coberto em boa parte pelos blocks 019 e 062.
+- **m06 · Lista Mestra:** aguarda avaliação da primeira fatia (AO1) e a escolha da segunda fatia (AN2).
+- **m08 · Dados reais e painel:** pronto para sua aprovação (Y1).
+- **m09 · Tela de ação:** faltam GRD antiga como histórico (D-110, AN6), alerta de prazo no perfil (D-116, AN7), tarefas da equipe e card Minhas tarefas (D-112/D-115, AN3/AN4/AN8).
 
-Documentar e preparar a arquitetura para crescimento sem migrar imediatamente para Django.
+## Marcos antigos (era Streamlit)
 
-### Motivacao
-
-O MVP ja prova valor operacional, mas a analise arquitetural identificou riscos:
-
-- SQL direto em paginas;
-- paginas acumulando responsabilidades;
-- dependencia forte de Streamlit;
-- dependencia de SQLite dentro de `core`;
-- ausencia de services/repositories;
-- riscos para multiusuario, autenticacao e deploy corporativo.
-
-### Resultado Entregue
-
-O Marco 10.6 entregou:
-
-- documentacao de arquitetura atual (`docs/ARCHITECTURE.md`);
-- visao de produto (`docs/PRODUCT_VISION.md`);
-- ADRs sobre stack atual, Django futuro e services/repositories (`docs/adr/`);
-- camada completa de repositories implementada e testada:
-  - `ContractRepository`;
-  - `ImportacaoRepository`;
-  - `DocumentoRepository`;
-  - `RevisaoRepository`;
-- camada completa de services implementada e testada:
-  - `ContractService`;
-  - `ImportacaoService`;
-  - `DocumentoService`;
-  - `CadastroService`;
-  - `DashboardService`;
-- paginas `1_Dashboard.py`, `4_CadastroManual.py` e `5_Documento.py` refatoradas para consumir exclusivamente as novas camadas;
-- suite de testes com 570 testes passando.
-
-## Marco 10.7 - Revisao do Cadastro Manual e Fluxo de Entrada
-
-### Objetivo
-
-Transformar o Cadastro Manual em um fluxo mais seguro, controlado e produtivo para lancamento de documentos tecnicos.
-
-### Motivacao
-
-O Cadastro Manual precisava de:
-
-- validacao mais clara do codigo documental antes de salvar;
-- exibicao somente leitura dos dados derivados do codigo (tipo, trecho, disciplina, etapa, sequencial);
-- previa consolidada antes de persistir;
-- suporte natural a multiplos documentos por operacao;
-- reducao de erro humano sem complicar a interface.
-
-### Decisao de Produto — Entrada por Lista
-
-O Marco 10.7 definiu que o fluxo de entrada principal e a **lista de codigos colados e analisados via textarea**, nao um formulario segmentado campo a campo. Essa decisao foi tomada apos experimentacao:
-
-- formulario segmentado individual foi implementado e testado;
-- a abordagem aumentou complexidade de UI sem ganho operacional claro;
-- o modelo de colar multiplos codigos (um por linha) e mais rapido para o uso real;
-- o cadastro em lote ja funciona naturalmente pelo textarea.
-
-### Resultado Entregue
-
-Concluido no marco:
-
-- `lógica pura validar_partes_codigo` em `core/parsers/codigo_builder.py`;
-- componente `app/components/dados_derivados_codigo.py` para exibicao somente leitura;
-- metodo `CadastroService.obter_dados_derivados_parseado` para extrair campos derivados do parse;
-- dados derivados (tipo, linha, trecho, nome do trecho, subtrecho, unidade, etapa, classe/subclasse, disciplina/estrutura, sequencial) exibidos readonly em cada card do Cadastro Manual;
-- textarea como fluxo principal de entrada de codigos (aceita um ou varios);
-- testes atualizados verificando que o fluxo principal e o textarea e que o fluxo segmentado individual nao existe.
-
-### Pendente
-
-| Sub-marco | Descricao | Status |
-| --- | --- | --- |
-| 10.7.1 | Documentar o Marco 10.7 | Concluido |
-| 10.7.2 | Entrada segmentada (experimentacao, decisao: textarea e o fluxo) | Concluido |
-| 10.7.3 | Exibir dados derivados como somente leitura nos cards | Concluido |
-| 10.7.4 | Preview consolidado antes de salvar | Concluido |
-| 10.7.5 | UX visual — revisao dos cards e do fluxo de cadastro | Pendente |
-| 10.7.6 | Atualizar testes e documentacao final | Pendente |
-
-### Proximo Passo
-
-O proximo sub-marco e o **10.7.5 — UX visual — revisao dos cards e do fluxo de cadastro**.
-
-### Fora do Escopo
-
-- Central de Pendencias;
-- GRDs;
-- PDF;
-- Snapshots mensais;
-- Django ou SQLAlchemy;
-- Nova autenticacao;
-- Alteracao de schema, salvo se estritamente necessario e justificado.
-
-## Marcos Apos o 10.7
-
-Com a revisao do fluxo de entrada concluida, o roadmap funcional de novas funcionalidades pode avancar:
-
-| Marco | Nome | Objetivo |
-| --- | --- | --- |
-| 11 | Central de Pendencias | Consolidar pendencias operacionais e orientar acao do usuario |
-| 12 | Edicao Operacional | Permitir correcao controlada de dados de documentos |
-| 13 | Conciliacao Assistida | Transformar divergencias ID x Lista em fluxo de decisao |
-| 14 | GRDs | Criar area propria para consulta e controle de GRDs |
-| 15 | Importador de Status GED/PW | Importar relatorios externos de status e atualizar acompanhamento |
-
-## Pendencias Arquiteturais Remanescentes
-
-Os itens abaixo nao foram bloqueantes para o Marco 10.6 e podem ser tratados incrementalmente:
-
-- `ArquivosService`;
-- separacao de `core/auth` puro e `app/auth` UI;
-- remocao gradual de `sys.path.insert`.
-
+- Marcos 0–10.6: m00; Marco 10.7: m01; Marco 11: m02; Marcos 12–13 e 15–20: m05; Marco 14: m03.
+- O Marco 11, Central de Pendências, está concluído. Os Marcos 12–20 passaram para m05, com primeiras fatias entregues; o Marco 14 segue em m03.
+- O Marco 10.6 preparou o crescimento: o MVP já tinha valor, mas SQL direto nas páginas e dependência de Streamlit/SQLite dificultavam evoluir.
+- Também faltavam services/repositories, com riscos para multiusuário, autenticação e implantação corporativa. Foram documentadas arquitetura e visão de produto, criadas camadas de serviço/repositório e refatoradas três páginas; a suíte da época registrou 570 testes passando.
+- Naquele marco, a migração para Django ainda não era o objetivo; a decisão posterior de construir a Plataforma Django está em D-020.
