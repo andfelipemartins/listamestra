@@ -14,7 +14,7 @@ from acoes.models import AcaoPendencia
 from acoes.services import contratos_acessiveis, resolver_contrato
 from contas.models import Usuario
 from core.perfil import ErroPerfil, perfil_de_dict
-from core.perfil.ciclo import _normalizar_situacao, rotulos_ciclo
+from core.perfil.ciclo import _normalizar_situacao, rotulo_cronologico, rotulos_ciclo
 from core.perfil.codigo import ErroCodigo, interpretar
 from core.perfil.painel import classificar, classificar_categoria
 from contratos.models import Participacao, PerfilContrato
@@ -31,10 +31,152 @@ from importacoes.models import PrevisaoEmissao
 
 
 TAMANHO_PAGINA = 50
+TAMANHO_PAGINA_LISTA_MESTRA = 100
 
 
 class DocumentosIndisponiveis(ValueError):
     pass
+
+
+def carregar_lista_mestra(
+    usuario,
+    contrato_id=None,
+    *,
+    busca="",
+    tipo="",
+    disciplina="",
+    fase="",
+    situacao="",
+    mostrar_cancelados=False,
+    pagina=1,
+):
+    contratos = list(contratos_acessiveis(usuario))
+    contrato = resolver_contrato(usuario, contrato_id)
+    if contrato is None:
+        pagina_obj = Paginator([], TAMANHO_PAGINA_LISTA_MESTRA).get_page(1)
+        return {
+            "contratos": contratos,
+            "contrato": None,
+            "pagina": pagina_obj,
+            "total_filtrado": 0,
+            "segmentos_codigo": [],
+            "tipos": [],
+            "disciplinas": [],
+            "fases": [],
+            "situacoes": [],
+            "busca": busca,
+            "tipo_selecionado": "",
+            "disciplina_selecionada": "",
+            "fase_selecionada": "",
+            "situacao_selecionada": "",
+            "mostrar_cancelados": bool(mostrar_cancelados),
+        }
+
+    perfil_modelo, perfil = _perfil_vigente(contrato)
+    campos_codigo = [
+        campo
+        for campo in perfil.codigo.campos
+        if campo.nome != perfil.codigo.segmento_revisao
+    ]
+    documentos = _documentos_com_historico(contrato, perfil_modelo)
+    linhas = []
+    for documento in documentos:
+        if documento.cancelado_em and not mostrar_cancelados:
+            continue
+        codigo, valores = _codigo_e_valores(documento, perfil, perfil_modelo.pk)
+        emissoes = sorted(
+            documento.emissoes.all(),
+            key=lambda emissao: (emissao.data_emissao, emissao.pk),
+        )
+        rotulos = rotulo_cronologico(emissoes)
+        for emissao, rotulo in zip(emissoes, rotulos):
+            analise = next(iter(emissao.analises.all()), None)
+            tipo_documental = valores.get("tipo") or documento.tipo or ""
+            disciplina_documento = documento.disciplina or valores.get("classe", "")
+            linhas.append(
+                {
+                    "documento": documento,
+                    "emissao": emissao,
+                    "codigo": codigo,
+                    "segmentos": [valores.get(campo.nome, "") for campo in campos_codigo],
+                    "tipo": tipo_documental,
+                    "disciplina": disciplina_documento,
+                    "fase": emissao.fase,
+                    "fase_rotulo": emissao.get_fase_display(),
+                    "rotulo_cronologico": rotulo,
+                    "analise": analise,
+                    "situacao": (analise.situacao or "—") if analise else "Em análise",
+                    "data_analise": analise.data_analise if analise else None,
+                    "documento_retorno": analise.documento_retorno if analise else "",
+                    "observacao": (
+                        (analise.observacao or emissao.observacao)
+                        if analise
+                        else emissao.observacao
+                    ),
+                }
+            )
+
+    tipos = _opcoes_lista_mestra(linhas, "tipo")
+    disciplinas = _opcoes_lista_mestra(linhas, "disciplina")
+    fases = [
+        {"valor": valor, "rotulo": rotulo}
+        for valor, rotulo in Emissao.Fase.choices
+        if any(linha["fase"] == valor for linha in linhas)
+    ]
+    situacoes = _opcoes_lista_mestra(linhas, "situacao")
+    tipo_selecionado = _selecionar_opcao_lista_mestra(tipo, tipos)
+    disciplina_selecionada = _selecionar_opcao_lista_mestra(disciplina, disciplinas)
+    fase_selecionada = _selecionar_opcao_lista_mestra(fase, fases)
+    situacao_selecionada = _selecionar_opcao_lista_mestra(situacao, situacoes)
+
+    termo = (busca or "").strip().casefold()
+    linhas_filtradas = [
+        linha
+        for linha in linhas
+        if (not termo or termo in linha["codigo"].casefold() or termo in (linha["documento"].titulo or "").casefold())
+        and (not tipo_selecionado or linha["tipo"] == tipo_selecionado)
+        and (not disciplina_selecionada or linha["disciplina"] == disciplina_selecionada)
+        and (not fase_selecionada or linha["fase"] == fase_selecionada)
+        and (not situacao_selecionada or linha["situacao"] == situacao_selecionada)
+    ]
+    linhas_filtradas.sort(
+        key=lambda linha: (
+            linha["codigo"].casefold(),
+            linha["emissao"].data_emissao,
+            linha["emissao"].pk,
+        )
+    )
+    pagina_obj = Paginator(linhas_filtradas, TAMANHO_PAGINA_LISTA_MESTRA).get_page(pagina)
+    return {
+        "contratos": contratos,
+        "contrato": contrato,
+        "perfil": perfil,
+        "pagina": pagina_obj,
+        "total_filtrado": len(linhas_filtradas),
+        "segmentos_codigo": campos_codigo,
+        "tipos": tipos,
+        "disciplinas": disciplinas,
+        "fases": fases,
+        "situacoes": situacoes,
+        "busca": busca,
+        "tipo_selecionado": tipo_selecionado,
+        "disciplina_selecionada": disciplina_selecionada,
+        "fase_selecionada": fase_selecionada,
+        "situacao_selecionada": situacao_selecionada,
+        "mostrar_cancelados": bool(mostrar_cancelados),
+    }
+
+
+def _opcoes_lista_mestra(linhas, campo):
+    valores = sorted(
+        {linha[campo] for linha in linhas if linha[campo]},
+        key=str.casefold,
+    )
+    return [{"valor": valor, "rotulo": valor} for valor in valores]
+
+
+def _selecionar_opcao_lista_mestra(valor, opcoes):
+    return valor if any(opcao["valor"] == valor for opcao in opcoes) else ""
 
 
 def carregar_lista_documentos(

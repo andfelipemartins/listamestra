@@ -13,6 +13,7 @@ from .servicos import (
     carregar_confirmacao_cancelamento,
     carregar_confirmacao_reativacao,
     carregar_lista_documentos,
+    carregar_lista_mestra,
     carregar_pasta_documento,
     reativar_documentos,
 )
@@ -35,6 +36,34 @@ class DocumentosListaView(LoginRequiredMixin, View):
                 filtros_caixas=filtros_caixas,
                 categoria=request.GET.get("categoria", ""),
                 situacao=request.GET.get("situacao", ""),
+                pagina=request.GET.get("pagina", 1),
+            )
+        except DocumentosIndisponiveis as erro:
+            contexto = {
+                "contratos": [],
+                "contrato": None,
+                "erro": str(erro),
+            }
+        query_sem_pagina = request.GET.copy()
+        query_sem_pagina.pop("pagina", None)
+        contexto["query_sem_pagina"] = query_sem_pagina.urlencode()
+        return render(request, self.template_name, contexto)
+
+
+class ListaMestraView(LoginRequiredMixin, View):
+    template_name = "documentos/lista_mestra.html"
+
+    def get(self, request):
+        try:
+            contexto = carregar_lista_mestra(
+                request.user,
+                request.GET.get("contrato"),
+                busca=request.GET.get("q", ""),
+                tipo=request.GET.get("tipo", ""),
+                disciplina=request.GET.get("disciplina", ""),
+                fase=request.GET.get("fase", ""),
+                situacao=request.GET.get("situacao", ""),
+                mostrar_cancelados=request.GET.get("mostrar_cancelados") == "1",
                 pagina=request.GET.get("pagina", 1),
             )
         except DocumentosIndisponiveis as erro:
