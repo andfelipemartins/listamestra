@@ -1390,3 +1390,14 @@ Aprovado, Não Conforme, Inconsistente, Erro de Assinatura, Cancelado, Revisão 
   mesmo caminho do block-069, com motivo automático citando o ID, e registra na Atividade) e "Manter o atual"
   (o "Ignorar" já existente das Pendências, com motivo).
 - Fora desta fatia: outras divergências (atributos, situação), ações em lote e "enviar para revisão posterior".
+
+## D-124 · Marco 19 (Auditabilidade) começa por baixar a Atividade em planilha (escolha do Claude, a confirmar)
+
+*Origem: esteira contínua (D-100) · 2026-11-27 · confirmação na pergunta AV2 e na avaliação do block-076*
+
+- A Plataforma já guarda o histórico de cada mudança (Atividade, com filtros por pessoa, ação, período e código, e o
+  bloco "Ações e Atividade" na pasta do documento). O que falta para auditoria é levar esse registro para fora: hoje
+  ele só existe na tela.
+- Fatia: na Atividade, "Baixar planilha (CSV)" com exatamente os eventos filtrados na tela (todos, sem paginação),
+  em UTF-8 com `;`, para abrir direto no Excel. Mesma permissão da tela.
+- Fora desta fatia: Excel formatado (.xlsx), PDF, registro de quem viu/baixou e trilha de leitura.

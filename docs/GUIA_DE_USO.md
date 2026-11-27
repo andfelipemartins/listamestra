@@ -161,7 +161,7 @@ O grupo `Título diferente do ID` mostra o título atual do documento e o títul
 **Menu e título:** `Atividade` · `Atividade`.  
 **Para que serve:** consultar eventos registrados no contrato.  
 **Quem vê:** staff ou Administrador do contrato ativo.  
-**O que dá para fazer:** filtrar por contrato, pessoa, ação, período ou código; abrir detalhes do evento; seguir para o documento ou para as linhas recusadas; e navegar pelas páginas de resultados.  
+**O que dá para fazer:** filtrar por contrato, pessoa, ação, período ou código; baixar os eventos filtrados em `Baixar planilha (CSV)`; abrir detalhes do evento; seguir para o documento ou para as linhas recusadas; e navegar pelas páginas de resultados.  
 **Como chegar:** menu lateral `Atividade` quando o acesso está disponível; na `Minha mesa`, use `Ver toda a atividade` se o link aparecer.
 
 ## Resumo executivo

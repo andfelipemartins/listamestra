@@ -1,11 +1,15 @@
+import csv
 from datetime import date
+from io import StringIO
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.text import slugify
 from django.views import View
 
 from contas.models import Usuario
@@ -43,6 +47,9 @@ class AtividadeView(LoginRequiredMixin, View):
             "codigo": request.GET.get("codigo", "").strip(),
         }
         eventos_filtrados = _filtrar(eventos, filtros)
+        if request.GET.get("formato") == "csv":
+            return _resposta_csv(contrato, eventos_filtrados)
+
         chave_evento = request.GET.get("evento", "")
         evento_detalhe = next(
             (evento for evento in eventos if evento["chave"] == chave_evento), None
@@ -114,9 +121,39 @@ class AtividadeView(LoginRequiredMixin, View):
             "proxima_url": proxima_url,
             "evento_detalhe": evento_detalhe,
             "url_lista": _url_sem_parametro(request.GET, "evento"),
+            "url_csv": _url_csv(request.GET),
             "total_filtrado": len(eventos_filtrados),
         }
         return render(request, self.template_name, contexto)
+
+
+def _resposta_csv(contrato, eventos):
+    arquivo = StringIO(newline="")
+    escritor = csv.writer(arquivo, delimiter=";", lineterminator="\r\n")
+    escritor.writerow(
+        ("Data e hora", "Pessoa", "Ação", "Evento", "Código do documento", "Resumo")
+    )
+    for evento in eventos:
+        data_hora_local = timezone.localtime(evento["data_hora"])
+        escritor.writerow(
+            (
+                data_hora_local.strftime("%d/%m/%Y %H:%M"),
+                evento["usuario_nome"],
+                evento["acao_rotulo"],
+                evento["entidade"],
+                evento.get("codigo", ""),
+                evento["resumo"],
+            )
+        )
+
+    identificador = slugify(contrato.codigo_interno) or f"contrato-{contrato.pk}"
+    nome_arquivo = f"atividade-{identificador}-{timezone.localdate().isoformat()}.csv"
+    resposta = HttpResponse(
+        arquivo.getvalue().encode("utf-8-sig"),
+        content_type="text/csv; charset=utf-8",
+    )
+    resposta["Content-Disposition"] = f'attachment; filename="{nome_arquivo}"'
+    return resposta
 
 
 def _contratos_acessiveis(request):
@@ -192,3 +229,11 @@ def _url_sem_parametro(parametros, remover, nome=None, valor=None):
     if nome:
         consulta[nome] = str(valor)
     return f"{reverse('atividade')}?{consulta.urlencode()}" if consulta else reverse("atividade")
+
+
+def _url_csv(parametros):
+    consulta = parametros.copy()
+    consulta.pop("evento", None)
+    consulta.pop("pagina", None)
+    consulta["formato"] = "csv"
+    return f"{reverse('atividade')}?{consulta.urlencode()}"

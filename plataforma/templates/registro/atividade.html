@@ -87,6 +87,7 @@
     <div class="painel-filtros-acoes">
       <button class="button button-primary" type="submit">Filtrar</button>
       <a class="button button-quiet" href="{% url 'atividade' %}?contrato={{ contrato.pk }}">Limpar filtros</a>
+      <a class="button button-quiet" href="{{ url_csv }}">Baixar planilha (CSV)</a>
     </div>
   </form>
 </details>
