@@ -221,6 +221,7 @@ def _urls_inicio(contrato, perfil=None):
     return {
         "pendencias": f"{reverse('acoes:pendencias')}?{query}",
         "analise_cliente": f"{reverse('acoes:janela', args=(PRAZO_ANALISE,))}?{query}",
+        "atrasados": f"{reverse('acoes:atrasados')}?{query}",
         "documentos": f"{reverse('documentos_lista')}?{query}",
         "documentos_aprovados": f"{reverse('documentos_lista')}?{query_aprovados}",
         "importar_pw": f"{reverse('importar_situacao_pw')}?{query}",
@@ -258,12 +259,15 @@ def _indicadores_inicio(usuario, mesa, cards_janelas, resumo_atrasos, hoje, urls
             if classificar(perfil, situacao).id == grupo_aprovado.id
         )
 
+    atrasos_por_lado = _itens_atrasados_por_lado(mesa)
+
     return [
         {
             "id": "pendencias",
             "titulo": "Pendências abertas",
             "quantidade": sum(card["quantidade"] for card in cards_janelas),
             "descricao": "Itens com ação pendente",
+            "ajuda": "Pendências abertas em todas as janelas",
             "url": urls.get("pendencias", "#"),
         },
         {
@@ -271,20 +275,26 @@ def _indicadores_inicio(usuario, mesa, cards_janelas, resumo_atrasos, hoje, urls
             "titulo": "Em análise do cliente",
             "quantidade": len(documentos_analise),
             "descricao": "Aguardando retorno do cliente",
+            "ajuda": "Documentos aguardando análise do cliente",
             "url": urls.get("analise_cliente", "#"),
         },
         {
             "id": "atrasados",
             "titulo": "Atrasados",
             "quantidade": resumo_atrasos["quantidade"],
-            "descricao": "Com prazo vencido",
-            "url": urls.get("pendencias", "#"),
+            "descricao": (
+                f"{len(atrasos_por_lado[PRAZO_ANALISE])} do cliente · "
+                f"{len(atrasos_por_lado[PRAZO_DEVOLUCAO])} nossos"
+            ),
+            "ajuda": "Análise do cliente ou devolução nossa com prazo vencido",
+            "url": urls.get("atrasados", "#"),
         },
         {
             "id": "aprovados",
             "titulo": "Aprovados na semana",
             "quantidade": aprovados_na_semana,
             "descricao": "Análises aprovadas nos últimos 7 dias",
+            "ajuda": "Documentos com análise aprovada nos últimos 7 dias",
             "url": urls.get("documentos_aprovados", urls.get("documentos", "#")),
         },
     ]
@@ -561,8 +571,28 @@ def _mapa_documentos_atrasados(mesa):
             documento_id = item["documento"].pk
             atual = documentos_atrasados.get(documento_id)
             if atual is None or item["dias"] > atual["dias"]:
-                documentos_atrasados[documento_id] = item
+                documentos_atrasados[documento_id] = {**item, "janela_id": janela["id"]}
     return documentos_atrasados
+
+
+def _itens_atrasados_por_lado(mesa):
+    itens_por_lado = {PRAZO_ANALISE: [], PRAZO_DEVOLUCAO: []}
+    for item in _mapa_documentos_atrasados(mesa).values():
+        itens_por_lado[item["janela_id"]].append(item)
+    for itens in itens_por_lado.values():
+        itens.sort(key=lambda item: (-item["dias"], item["codigo"].casefold()))
+    return itens_por_lado
+
+
+def carregar_atrasados(usuario, contrato_id=None, *, hoje=None):
+    mesa = carregar_minha_mesa(usuario, contrato_id, hoje=hoje, limite=None)
+    itens_por_lado = _itens_atrasados_por_lado(mesa)
+    return {
+        **mesa,
+        "atrasos_cliente": itens_por_lado[PRAZO_ANALISE],
+        "atrasos_nossos": itens_por_lado[PRAZO_DEVOLUCAO],
+        "quantidade_atrasados": sum(len(itens) for itens in itens_por_lado.values()),
+    }
 
 
 def _faixas_atraso_perfil(perfil):

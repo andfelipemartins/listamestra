@@ -81,12 +81,12 @@ def test_metro_interpreta_classe_e_subclasse_com_rotulo(metro):
     assert resultado.significados["classe"] == "Iluminação"
 
 
-def test_metro_aceita_classe_a7_provisoria(metro):
+def test_metro_aceita_classe_a7_qualidade(metro):
     resultado = interpretar(metro, "RT-15.00.00.00-6A7-001")
 
     assert isinstance(resultado, CodigoInterpretado)
     assert resultado.segmentos["classe"] == "A7"
-    assert resultado.significados["classe"] == "Qualidade (a confirmar)"
+    assert resultado.significados["classe"] == "Qualidade"
 
 
 @pytest.mark.parametrize(

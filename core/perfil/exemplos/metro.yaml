@@ -124,7 +124,7 @@ codigo:
         A4: "Implantação geral"
         A6: "Infraestrutura administrativa"
         # D-038: ausente do MAN-10-201; veio do ID do cliente.
-        A7: "Qualidade (a confirmar)"
+        A7: "Qualidade"
         A8: "Planta chave"
         A9: "Diversos"
         B1: "Arquitetura conceitual"
@@ -347,7 +347,13 @@ painel:
       rotulo: QUALIDADE
       regras:
         - tipo: [PE, MQ]
+          classe: [A9]
         - classe: [A7]
+    - id: ato
+      rotulo: ATO
+      regras:
+        - tipo: [RT, ID]
+          classe: [A9]
     - id: arquitetura
       rotulo: ARQUITETURA
       regras:

@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Atrasados{% endblock %}
+{% block extra_head %}
+<style>
+  .atrasos-cabecalho { display:flex; align-items:flex-end; justify-content:space-between; gap:18px; margin-bottom:24px; }
+  .atrasos-seletor { display:flex; align-items:flex-end; gap:9px; }
+  .atrasos-seletor label { display:grid; gap:6px; color:var(--text-secondary); font-size:12px; }
+  .atrasos-seletor select { min-width:min(280px,54vw); min-height:40px; padding:7px 10px; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--text-primary); }
+  .atrasos-secoes { display:grid; gap:18px; }
+  .atrasos-secao { padding:18px; border:1px solid var(--border); border-radius:12px; background:var(--surface); box-shadow:0 2px 8px #1b2b3d12; }
+  .atrasos-secao h2 { margin:0 0 13px; font-size:16px; }
+  .atrasos-lista { display:grid; gap:12px; }
+  .atrasos-item { min-width:0; padding:14px; border:1px solid var(--border); border-radius:9px; background:var(--surface); }
+  .atrasos-item p { margin:4px 0; color:var(--text-secondary); font-size:12px; line-height:1.5; overflow-wrap:anywhere; }
+  .atrasos-meta { display:flex; flex-wrap:wrap; gap:5px 13px; color:var(--text-secondary); font-size:11px; }
+  .atrasos-selo { display:inline-flex; padding:3px 7px; border-radius:999px; background:var(--warning-surface); color:var(--warning-text); font-size:10px; font-weight:700; }
+  .atrasos-faixa-1 { background:#fee2e2; color:#7f1d1d; }
+  .atrasos-faixa-2 { background:#fecaca; color:#7f1d1d; }
+  .atrasos-faixa-3 { background:#f87171; color:#1f1f1f; }
+  .atrasos-faixa-4 { background:#b91c1c; color:#fff; }
+  .atrasos-vazio { margin:0; color:var(--text-secondary); font-size:12px; }
+  @media(max-width:560px) { .atrasos-cabecalho { align-items:stretch; flex-direction:column; } .atrasos-seletor { align-items:stretch; flex-direction:column; } .atrasos-seletor select { width:100%; } }
+</style>
+{% endblock %}
+{% block content %}
+  {% if not contrato %}
+    <section class="welcome-panel"><div class="welcome-symbol">LM</div><div><h2>Nenhum contrato disponível</h2><p>Peça à administração para incluir sua participação em um contrato ativo.</p></div></section>
+  {% else %}
+  <div class="atrasos-cabecalho">
+    <div><span class="eyebrow">{{ contrato.codigo_interno }}</span><h1>Atrasados</h1><p>{{ quantidade_atrasados }} documento{{ quantidade_atrasados|pluralize:",s" }} com prazo vencido</p></div>
+    {% if contratos %}<form class="atrasos-seletor" method="get"><label for="atrasos-contrato">Contrato<select id="atrasos-contrato" name="contrato" onchange="this.form.submit()">{% for opcao in contratos %}<option value="{{ opcao.pk }}" {% if contrato.pk == opcao.pk %}selected{% endif %}>{{ opcao.codigo_interno }} · {{ opcao.nome }}</option>{% endfor %}</select></label><noscript><button class="button button-quiet" type="submit">Abrir</button></noscript></form>{% endif %}
+  </div>
+  {% if perfil_erro %}<div class="notice" style="margin-bottom:16px">{{ perfil_erro }}</div>{% endif %}
+  <div class="atrasos-secoes">
+    <section class="atrasos-secao" aria-labelledby="atraso-cliente">
+      <h2 id="atraso-cliente">Atraso do cliente <span>({{ atrasos_cliente|length }})</span></h2>
+      {% if atrasos_cliente %}<div class="atrasos-lista">
+        {% for item in atrasos_cliente %}
+          <article class="atrasos-item">
+            <div class="atrasos-meta"><span class="atrasos-selo">Atrasado há {{ item.dias }} dia{{ item.dias|pluralize }}</span>{% if item.faixa_atraso %}<span class="atrasos-selo atrasos-faixa-{{ item.faixa_atraso_tom }}">{{ item.faixa_atraso }}</span>{% endif %}</div>
+            <a href="{% url 'documento_pasta' contrato.pk item.documento.pk %}"><strong>{{ item.codigo }}</strong></a><p>{{ item.titulo }}</p>
+          </article>
+        {% endfor %}
+      </div>{% else %}<p class="atrasos-vazio">Nenhum atraso do cliente.</p>{% endif %}
+    </section>
+    <section class="atrasos-secao" aria-labelledby="atraso-nosso">
+      <h2 id="atraso-nosso">Atraso nosso <span>({{ atrasos_nossos|length }})</span></h2>
+      {% if atrasos_nossos %}<div class="atrasos-lista">
+        {% for item in atrasos_nossos %}
+          <article class="atrasos-item">
+            <div class="atrasos-meta"><span class="atrasos-selo">Atrasado há {{ item.dias }} dia{{ item.dias|pluralize }}</span>{% if item.faixa_atraso %}<span class="atrasos-selo atrasos-faixa-{{ item.faixa_atraso_tom }}">{{ item.faixa_atraso }}</span>{% endif %}</div>
+            <a href="{% url 'documento_pasta' contrato.pk item.documento.pk %}"><strong>{{ item.codigo }}</strong></a><p>{{ item.titulo }}</p>
+          </article>
+        {% endfor %}
+      </div>{% else %}<p class="atrasos-vazio">Nenhum atraso nosso.</p>{% endif %}
+    </section>
+  </div>
+  <p style="margin-top:20px"><a href="{% url 'inicio' %}?contrato={{ contrato.pk }}">← Voltar ao Início</a></p>
+  {% endif %}
+{% endblock %}

@@ -7,6 +7,7 @@ from django.views import View
 
 from .services import (
     carregar_ignorados,
+    carregar_atrasados,
     carregar_janela,
     carregar_minha_mesa,
     reativar_ignorado,
@@ -20,6 +21,14 @@ class PendenciasView(LoginRequiredMixin, View):
     def get(self, request):
         contexto = carregar_minha_mesa(request.user, request.GET.get("contrato"))
         contexto["email_aberto"] = request.GET.get("email", "")
+        return render(request, self.template_name, contexto)
+
+
+class AtrasadosView(LoginRequiredMixin, View):
+    template_name = "acoes/atrasados.html"
+
+    def get(self, request):
+        contexto = carregar_atrasados(request.user, request.GET.get("contrato"))
         return render(request, self.template_name, contexto)
 
 

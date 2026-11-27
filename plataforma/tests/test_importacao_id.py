@@ -411,7 +411,7 @@ def test_reprocessa_com_perfil_vigente_e_permanece_idempotente(contrato, perfil_
         vigencia_inicio=date.fromisoformat(definicao_v2["vigencia_inicio"]),
         definicao=definicao_v2,
     )
-    assert perfil_de_dict(perfil_v2.definicao).codigo.campos[6].valores["A7"] == "Qualidade (a confirmar)"
+    assert perfil_de_dict(perfil_v2.definicao).codigo.campos[6].valores["A7"] == "Qualidade"
     previa_reprocessada = gerar_previa_linhas_recusadas(
         [inconsistencia],
         contrato_id=contrato.pk,

@@ -11,6 +11,8 @@ from django.core.management.base import CommandError
 from django.urls import reverse
 from django.utils import timezone
 
+from core.perfil import perfil_de_dict
+from core.perfil.painel import classificar_categoria
 from contratos.admin import ContratoAdminForm
 from contratos.models import Contrato, EscopoContrato, Participacao, PerfilContrato
 from documentos.models import Analise, Documento, Emissao
@@ -551,7 +553,7 @@ def test_categorias_do_perfil_aparecem_em_cartoes_recortes_e_filtros(
     usuario = django_user_model.objects.create_user(username="chefia-categorias", password="senha")
     Participacao.objects.create(usuario=usuario, contrato=contrato, papel="chefia")
     indice = _indice(contrato, "ID-CATEGORIAS")
-    _documento(contrato, indice, 6101, tipo="PE", classe="B3")
+    _documento(contrato, indice, 6101, tipo="PE", classe="A9")
     _documento(contrato, indice, 6102, tipo="DE", classe="A7", situacao="Em Análise")
     _documento(contrato, indice, 6103, tipo="DE", classe="B3", situacao="Aprovado")
     _documento(contrato, indice, 6104, tipo="DE", classe="P7")
@@ -568,6 +570,7 @@ def test_categorias_do_perfil_aparecem_em_cartoes_recortes_e_filtros(
     assert dados["por"] == "categoria"
     assert {nome: item["total"] for nome, item in cartoes.items()} == {
         "QUALIDADE": 2,
+        "ATO": 0,
         "ARQUITETURA": 1,
         "SISTEMAS": 1,
         "CIVIL": 1,
@@ -583,12 +586,21 @@ def test_categorias_do_perfil_aparecem_em_cartoes_recortes_e_filtros(
     }
     assert filtrado["total_documentos_previstos"] == 1
     assert {item["rotulo"]: item["total"] for item in filtrado["recortes"]} == {"SISTEMAS": 1}
-    assert {item["rotulo"]: item["total"] for item in filtrado["categoria_cards"]}[
-        "SISTEMAS"
-    ] == 1
+    assert {item["rotulo"]: item["total"] for item in filtrado["categoria_cards"]}["SISTEMAS"] == 1
     html = resposta.content.decode()
     assert "Categoria" in html
     assert "QUALIDADE" in html
+
+
+@pytest.mark.django_db
+def test_perfil_metro_classifica_a7_e_siglas_da_a9_por_categoria(perfil_modelo):
+    perfil = perfil_de_dict(perfil_modelo.definicao)
+
+    assert classificar_categoria(perfil, {"tipo": "DE", "classe": "A7"}).id == "qualidade"
+    for tipo in ("PE", "MQ"):
+        assert classificar_categoria(perfil, {"tipo": tipo, "classe": "A9"}).id == "qualidade"
+    for tipo in ("RT", "ID"):
+        assert classificar_categoria(perfil, {"tipo": tipo, "classe": "A9"}).id == "ato"
 
 
 @pytest.mark.django_db

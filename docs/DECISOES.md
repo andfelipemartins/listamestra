@@ -1154,3 +1154,35 @@ Aprovado, Não Conforme, Inconsistente, Erro de Assinatura, Cancelado, Revisão 
   função para ficar ligando e desligando.
 - Consequência técnica (escolha do Claude, sem nova pergunta): as pendências "falta no PW" / "falta no nosso ID" são
   **calculadas ao vivo** a partir dessa opção; não há tratamento especial para "desligar com pendência aberta".
+
+## D-099 · A7 e os PE/MQ da A9 são QUALIDADE neste contrato; não existe MAN de qualidade
+
+*Origem: chat com o dono · 2026-11-27 · fecha a D-038 e o lembrete l01; confirma a D-057*
+
+- O dono informou que **não existe MAN de qualidade**: a busca pelo manual (D-034/P6, D-038) se encerra aqui.
+- Para **este contrato**, a classe **A7** e os documentos de qualidade da **A9** (PE e MQ) são **QUALIDADE**, e a
+  plataforma os categoriza assim. O rótulo provisório "Qualidade (a confirmar)" da A7 vira definitivo: **"Qualidade"**.
+- Os RT/ID da A9 continuam como estão (ATO), conforme a D-057. A sigla do manual de treinamento (D-061) não foi
+  tratada nesta resposta e continua a confirmar.
+
+## D-100 · Esteira contínua: sem resposta nova, a esteira executa o roadmap
+
+*Origem: chat com o dono · 2026-11-27 · amplia a D-012/D-013 e a regra "Nada para a esteira"*
+
+- O dono achou o avanço lento por depender só das respostas dele ("precisa ter uma certa continuidade").
+- Nova regra: **havendo respostas, a esteira executa as respostas; não havendo, executa o roadmap** e vai criando
+  perguntas de **avaliação** do que entregou. As avaliações do dono geram ajustes e novas perguntas, em laço.
+- O dono pesou os dois lados: o programa fica pronto mais cedo para ele criticar, mas pode gastar em algo que ele não
+  quer. Por isso a esteira trabalha em fatias pequenas e revisáveis (ver ESTEIRA.md, "Autorização atual").
+
+## D-101 · Minha mesa aprovada; cards precisam se explicar e abrir só o que mostram
+
+*Origem: AG3 · 2026-11-27 · fecha a aprovação do Início (block-059/064)*
+
+- O dono **aprovou** a Minha mesa e quer continuar avançando.
+- **Clareza dos cards:** um funcionário do escritório não entendeu o card "Atrasados" ("é a gente que está atrasado? quem
+  é?"). Os cards têm de dizer de quem é o atraso e o que contam. O dono vai testar a compreensão com usuários no futuro.
+- **Clique filtra:** ao clicar num card, a tela deve mostrar **só aquilo** (como "maximizar" o card), mesmo dentro de
+  Pendências. Hoje só "Em análise do cliente" faz isso; "Atrasados" abre Pendências inteira.
+- Escolha do Claude, a confirmar (pergunta AL1): "Atrasados" passa a separar **do cliente** (análise do cliente vencida)
+  e **nossos** (devolução nossa vencida), e o clique abre uma lista só dos atrasados, com essa separação.
