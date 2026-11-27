@@ -19,6 +19,7 @@ from importacoes.models import (
     PrevisaoEmissao,
     ReprocessamentoImportacao,
 )
+from painel.models import FotoPainel
 
 
 ACOES = (
@@ -172,6 +173,11 @@ def carregar_eventos(contrato):
                 documento_id=registro.documento_id if registro.documento_id in documentos_existentes_ids else None,
             )
         )
+
+    for registro in FotoPainel.history.filter(contrato_id=contrato.pk).select_related(
+        "history_user", "criado_por"
+    ):
+        eventos.append(_evento_foto_painel(registro))
 
     eventos.extend(
         _evento_cancelamento_sistema(registros, contrato)
@@ -442,6 +448,60 @@ def _evento_importacao(registro, *, chave, tipo, titulo, resumo, validas, recusa
         "recusadas": recusadas,
         "importacao_id": registro.pk,
         "link_recusadas": recusadas > 0,
+        "agrupar_no_evento": False,
+    }
+
+
+def _evento_foto_painel(registro):
+    ator = _ator_historico(registro)
+    nome = _nome_usuario(ator)
+    anterior = registro.prev_record
+    numeros_anteriores = anterior.numeros if anterior is not None else {}
+    rotulos = (
+        ("avanco_percentual", "Avanço (%)"),
+        ("previstos", "Previstos"),
+        ("emitidos", "Emitidos"),
+        ("aprovados", "Aprovados"),
+        ("em_analise", "Em análise"),
+        ("pendentes", "Pendentes"),
+        ("cancelados", "Cancelados"),
+        ("pendencias_abertas", "Pendências abertas"),
+        ("atrasos_cliente", "Atrasos cliente"),
+        ("atrasos_nossos", "Atrasos nossos"),
+    )
+    detalhes = [
+        {"campo": "Data", "antes": "", "depois": _formatar(registro.data)},
+    ]
+    for campo, rotulo in rotulos:
+        antes = numeros_anteriores.get(campo)
+        depois = registro.numeros.get(campo)
+        if anterior is None or antes != depois:
+            detalhes.append(
+                {
+                    "campo": rotulo,
+                    "antes": _formatar(antes) if anterior is not None else "",
+                    "depois": _formatar(depois),
+                }
+            )
+    verbo = {"+": "criou", "~": "alterou", "-": "excluiu"}.get(
+        registro.history_type, "alterou"
+    )
+    return {
+        "chave": f"historico-fotopainel-{registro.history_id}",
+        "data_hora": _localizar(registro.history_date),
+        "acao": verbo,
+        "acao_rotulo": "Foto do Painel guardada",
+        "entidade": "foto do Painel",
+        "tipo_importacao": "",
+        "codigo": "",
+        "usuario": ator,
+        "usuario_id": getattr(ator, "pk", None),
+        "usuario_nome": nome,
+        "resumo": f"{nome} · Foto do Painel guardada em {registro.data:%d/%m/%Y}",
+        "detalhes": detalhes,
+        "validas": None,
+        "recusadas": None,
+        "link_recusadas": False,
         "agrupar_no_evento": False,
     }
 

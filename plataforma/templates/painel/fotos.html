@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% load l10n %}
+{% block title %}Fotos do contrato · {{ contrato.codigo_interno }}{% endblock %}
+{% block extra_head %}
+<style>
+  .fotos-painel{max-width:1500px;margin:0 auto}
+  .fotos-painel-cabecalho{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+  .fotos-painel-cabecalho h1{margin:0}
+  .fotos-painel-tabela-wrap{overflow-x:auto;background:var(--surface);border:1px solid var(--border);border-radius:10px}
+  .fotos-painel-tabela{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}
+  .fotos-painel-tabela th,.fotos-painel-tabela td{padding:8px 9px;border-bottom:1px solid var(--border);text-align:right}
+  .fotos-painel-tabela th:first-child,.fotos-painel-tabela td:first-child,.fotos-painel-tabela th:nth-child(2),.fotos-painel-tabela td:nth-child(2){text-align:left}
+  .fotos-painel-tabela thead th{color:var(--text-secondary);font-size:10px}
+  .fotos-painel-diferenca{display:block;color:var(--text-secondary);font-size:10px;line-height:1.2}
+  .fotos-painel-vazio{padding:20px;color:var(--text-secondary)}
+</style>
+{% endblock %}
+{% block content %}
+<section class="fotos-painel">
+  <div class="fotos-painel-cabecalho">
+    <div><span class="eyebrow">ACOMPANHAMENTO EXECUTIVO</span><h1>Fotos do contrato</h1><p>{{ contrato.codigo_interno }} · {{ contrato.nome }}</p></div>
+    <a class="button" href="{% url 'painel' contrato.pk %}">Voltar ao Painel</a>
+  </div>
+  {% if messages %}{% for message in messages %}<p class="notice notice-{{ message.tags }}">{{ message }}</p>{% endfor %}{% endif %}
+  {% if fotos %}
+  <div class="fotos-painel-tabela-wrap">
+    <table class="fotos-painel-tabela">
+      <thead><tr><th>Data</th><th>Guardada por</th>{% for metrica in fotos.0.metricas %}<th>{{ metrica.rotulo }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% for item in fotos %}
+        <tr>
+          <td>{{ item.foto.data|date:"d/m/Y" }}</td>
+          <td>{% if item.foto.criado_por %}{{ item.foto.criado_por.get_full_name|default:item.foto.criado_por.username }}{% else %}Sistema{% endif %}</td>
+          {% for metrica in item.metricas %}
+          <td>
+            {{ metrica.valor|default_if_none:"—"|floatformat:"-2"|localize }}
+            {% if metrica.diferenca is not None %}<small class="fotos-painel-diferenca">{% if metrica.diferenca > 0 %}+{% endif %}{{ metrica.diferenca|floatformat:"-2"|localize }}{% if metrica.pontos_percentuais %} p.p.{% endif %}</small>{% endif %}
+          </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="fotos-painel-vazio">Nenhuma foto guardada ainda.</p>
+  {% endif %}
+</section>
+{% endblock %}

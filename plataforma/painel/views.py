@@ -1,5 +1,8 @@
 from datetime import datetime, timedelta
 
+from django.contrib import messages
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.exceptions import PermissionDenied
 from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -7,11 +10,14 @@ from django.views import View
 
 from contas.models import Usuario
 from contratos.models import Contrato, Participacao
+from documentos.servicos import pode_cancelar_documentos
 from importacoes.models import InconsistenciaImportacao
 from .servicos import (
     PainelIndisponivel,
     carregar_painel,
     carregar_resumo_executivo,
+    guardar_foto,
+    listar_fotos,
 )
 
 
@@ -67,6 +73,34 @@ class ResumoExecutivoView(View):
                 {"contrato": contrato, "erro": erro},
             )
         response = render(request, "painel/resumo_executivo.html", contexto)
+        response["Cache-Control"] = "private, no-store"
+        return response
+
+
+class GuardarFotoPainelView(LoginRequiredMixin, View):
+    def post(self, request, contrato_id):
+        contrato = get_object_or_404(Contrato, pk=contrato_id, ativo=True)
+        if not pode_cancelar_documentos(request.user, contrato):
+            raise PermissionDenied
+        guardar_foto(contrato, request.user)
+        messages.success(request, "Foto de hoje guardada.")
+        return redirect("painel_fotos", contrato_id=contrato.pk)
+
+
+class FotosPainelView(LoginRequiredMixin, View):
+    def get(self, request, contrato_id):
+        contrato = get_object_or_404(Contrato, pk=contrato_id, ativo=True)
+        if not Participacao.objects.filter(
+            usuario=request.user,
+            contrato=contrato,
+            ativo=True,
+        ).exists():
+            raise PermissionDenied
+        response = render(
+            request,
+            "painel/fotos.html",
+            {"contrato": contrato, "fotos": listar_fotos(contrato)},
+        )
         response["Cache-Control"] = "private, no-store"
         return response
 
@@ -189,6 +223,11 @@ def _contexto_painel(contrato, por, filtros=None, *, usuario=None):
             contrato=contrato,
             ativo=True,
         ).exists()
+    )
+    dados["pode_guardar_foto"] = bool(
+        usuario
+        and usuario.is_authenticated
+        and pode_cancelar_documentos(usuario, contrato)
     )
     dados["grafico_pizza"] = {
         "labels": [grupo.rotulo for grupo in chart_groups],

@@ -33,11 +33,26 @@ from .prazos import (
 )
 from documentos.models import Analise, Documento, Emissao
 from acoes.services import carregar_atrasados, carregar_resumo_inicio
+from .models import FotoPainel
 from importacoes.models import (
     ImportacaoID,
     ImportacaoSituacao,
     IndiceDocumentos,
     ItemPrevisto,
+)
+
+
+CAMPOS_FOTO_PAINEL = (
+    ("avanco_percentual", "Avanço"),
+    ("previstos", "Previstos"),
+    ("emitidos", "Emitidos"),
+    ("aprovados", "Aprovados"),
+    ("em_analise", "Em análise"),
+    ("pendentes", "Pendentes"),
+    ("cancelados", "Cancelados"),
+    ("pendencias_abertas", "Pendências abertas"),
+    ("atrasos_cliente", "Atrasos cliente"),
+    ("atrasos_nossos", "Atrasos nossos"),
 )
 
 
@@ -1039,3 +1054,56 @@ def _normalizar_rotulo(valor):
         .decode()
     )
     return " ".join(sem_acentos.casefold().replace("_", " ").split())
+
+
+def guardar_foto(contrato, usuario, hoje=None):
+    hoje = hoje or timezone.localdate()
+    resumo = carregar_resumo_executivo(contrato, usuario, hoje=hoje)
+    numeros = {campo: resumo[campo] for campo, _ in CAMPOS_FOTO_PAINEL}
+    foto, _ = FotoPainel.objects.update_or_create(
+        contrato=contrato,
+        data=hoje,
+        defaults={"numeros": numeros, "criado_por": usuario},
+    )
+    return foto
+
+
+def listar_fotos(contrato):
+    fotos = list(
+        FotoPainel.objects.filter(contrato=contrato)
+        .select_related("criado_por")
+        .order_by("data", "pk")
+    )
+    resultado = []
+    anterior = None
+    for foto in fotos:
+        diferencas = {}
+        metricas = []
+        for campo, rotulo in CAMPOS_FOTO_PAINEL:
+            valor = foto.numeros.get(campo)
+            valor_anterior = anterior.numeros.get(campo) if anterior else None
+            diferenca = (
+                _diferenca_numerica(valor, valor_anterior)
+                if anterior is not None
+                else None
+            )
+            diferencas[campo] = diferenca
+            metricas.append(
+                {
+                    "campo": campo,
+                    "rotulo": rotulo,
+                    "valor": valor,
+                    "diferenca": diferenca,
+                    "pontos_percentuais": campo == "avanco_percentual",
+                }
+            )
+        resultado.append({"foto": foto, "diferencas": diferencas, "metricas": metricas})
+        anterior = foto
+    return list(reversed(resultado))
+
+
+def _diferenca_numerica(valor, valor_anterior):
+    if not isinstance(valor, (int, float)) or not isinstance(valor_anterior, (int, float)):
+        return None
+    diferenca = valor - valor_anterior
+    return round(diferenca, 2) if isinstance(diferenca, float) else diferenca

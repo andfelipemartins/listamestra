@@ -1331,3 +1331,14 @@ Aprovado, Não Conforme, Inconsistente, Erro de Assinatura, Cancelado, Revisão 
   sem biblioteca de PDF nova.
 - Os números vêm do Painel e das Pendências que já existem (avanço, previstos, aprovados, em análise, atrasados por
   lado, avanço por disciplina e trecho). Quem vê: quem participa do contrato.
+
+## D-119 · Marco 17 começa por guardar uma "foto" dos números do Painel (escolha do Claude, a confirmar)
+
+*Origem: esteira contínua (D-100) · 2026-11-27 · confirmação na avaliação do block-071*
+
+- Com Pendências, Lista Mestra, Marco 12 e Marco 16 esperando respostas/avaliação (AN1–AN8, AO1–AO2, AP1, AQ1), a
+  esteira abre o Marco 17 (snapshots) pela menor fatia: **botão "Guardar foto de hoje" no Painel**, para staff/admin
+  do contrato, que grava os números gerais do Painel (avanço %, previstos, emitidos, aprovados, em análise, pendentes,
+  cancelados, atrasados por lado). Uma foto por contrato e por dia: guardar de novo no mesmo dia substitui.
+- Página **"Fotos do contrato"** com a lista das fotos e a diferença de cada uma para a anterior. Sem gravação
+  automática mensal e sem gráfico nesta fatia. Tabela nova (justificada: histórico não existe em outro lugar).
