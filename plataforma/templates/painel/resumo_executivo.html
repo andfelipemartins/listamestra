@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Resumo executivo · {{ contrato.codigo_interno }}{% endblock %}
+{% block extra_head %}
+<style>
+  .resumo-executivo{max-width:190mm;margin:0 auto;color:#18212f;font-size:13px}
+  .resumo-topo{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:14px}
+  .resumo-topo h1{margin:3px 0 4px;font-size:25px;line-height:1.1}
+  .resumo-topo p,.resumo-metadados{margin:0;color:#536174}
+  .resumo-eyebrow{font-size:10px;font-weight:700;letter-spacing:.12em;color:#536174}
+  .resumo-metadados{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px 14px;margin-top:8px;font-size:11px}
+  .resumo-metricas{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;margin:10px 0 14px}
+  .resumo-metrica{border:1px solid #d8dee8;border-radius:6px;padding:7px 8px;min-width:0}
+  .resumo-metrica span{display:block;color:#536174;font-size:10px;line-height:1.2}
+  .resumo-metrica strong{display:block;margin-top:3px;font-size:19px;line-height:1.1}
+  .resumo-secao{margin:12px 0 0;break-inside:avoid}
+  .resumo-secao h2{font-size:14px;margin:0 0 5px}
+  .resumo-pendencias{display:flex;flex-wrap:wrap;gap:5px 18px;margin:0 0 6px}
+  .resumo-pendencias strong{color:#18212f}
+  .resumo-tabela{width:100%;border-collapse:collapse;font-size:10px;line-height:1.2}
+  .resumo-tabela th,.resumo-tabela td{border-bottom:1px solid #d8dee8;padding:4px 5px;text-align:right;vertical-align:top}
+  .resumo-tabela thead th{background:#eef2f7;color:#344256;font-size:9px}
+  .resumo-tabela th:first-child,.resumo-tabela td:first-child{text-align:left}
+  .resumo-tabela tbody th{font-weight:600}
+  .resumo-mais,.resumo-sem-dados{margin:4px 0 0;color:#536174;font-size:10px}
+  .resumo-atrasos{max-width:105mm}
+  .resumo-assinatura{margin-top:9px;color:#64748b;font-size:9px}
+  @media(max-width:800px){.resumo-metricas{grid-template-columns:repeat(4,minmax(0,1fr))}.resumo-metadados{grid-template-columns:1fr}}
+  @page{size:A4 portrait;margin:10mm}
+  @media print{
+    html,body{background:#fff!important;color:#111!important}
+    .topbar,.sidebar,.print-actions{display:none!important}
+    .app-shell{display:block!important;margin:0!important;padding:0!important}
+    .main-content{display:block!important;margin:0!important;padding:0!important;width:100%!important;max-width:none!important}
+    .resumo-executivo{max-width:none;font-size:9pt}
+    .resumo-topo{margin-bottom:3mm}
+    .resumo-topo h1{font-size:19pt}
+    .resumo-metadados{font-size:8pt;gap:1mm 4mm}
+    .resumo-metricas{grid-template-columns:repeat(7,minmax(0,1fr));gap:1.5mm;margin:2mm 0 3mm}
+    .resumo-metrica{padding:1.5mm;border-radius:1mm}
+    .resumo-metrica span{font-size:7pt}
+    .resumo-metrica strong{font-size:13pt}
+    .resumo-secao{margin-top:2.5mm;break-inside:avoid}
+    .resumo-secao h2{font-size:10pt;margin-bottom:1mm}
+    .resumo-pendencias{gap:1mm 4mm;margin-bottom:1mm;font-size:8pt}
+    .resumo-tabela{font-size:7pt;line-height:1.05}
+    .resumo-tabela th,.resumo-tabela td{padding:.8mm 1mm}
+    .resumo-tabela thead th{font-size:6.5pt}
+    .resumo-mais,.resumo-sem-dados{font-size:7pt;margin-top:.8mm}
+    .resumo-assinatura{font-size:7pt;margin-top:2mm}
+    a{color:inherit;text-decoration:none}
+  }
+</style>
+{% endblock %}
+{% block content %}
+<article class="resumo-executivo">
+  <div class="print-actions" style="display:flex;justify-content:flex-end;margin-bottom:10px">
+    <button class="button button-primary" type="button" onclick="window.print()">Imprimir / salvar PDF</button>
+  </div>
+
+  <header class="resumo-topo">
+    <div>
+      <span class="resumo-eyebrow">RESUMO EXECUTIVO DO CONTRATO</span>
+      <h1>{{ contrato.nome }}</h1>
+      <p>{{ contrato.codigo_interno }} · {{ contrato.cliente }}</p>
+      <div class="resumo-metadados">
+        <span>Gerado em <strong>{{ gerado_em|date:"d/m/Y H:i" }}</strong></span>
+        <span>ID importado em <strong>{% if ultima_importacao_id %}{{ ultima_importacao_id|date:"d/m/Y" }}{% else %}sem importação{% endif %}</strong></span>
+        <span>Situação importada em <strong>{% if ultima_importacao_situacao %}{{ ultima_importacao_situacao|date:"d/m/Y" }}{% else %}sem importação{% endif %}</strong></span>
+      </div>
+    </div>
+  </header>
+
+  <section class="resumo-metricas" aria-label="Resumo geral">
+    <div class="resumo-metrica"><span>Avanço</span><strong>{{ avanco_percentual|floatformat:1 }}%</strong></div>
+    <div class="resumo-metrica"><span>Previstos</span><strong>{{ previstos }}</strong></div>
+    <div class="resumo-metrica"><span>Emitidos</span><strong>{{ emitidos }}</strong></div>
+    <div class="resumo-metrica"><span>Aprovados</span><strong>{{ aprovados }}</strong></div>
+    <div class="resumo-metrica"><span>Em análise</span><strong>{{ em_analise }}</strong></div>
+    <div class="resumo-metrica"><span>Pendentes · a emitir</span><strong>{{ pendentes }}</strong></div>
+    <div class="resumo-metrica"><span>Cancelados</span><strong>{{ cancelados }}</strong></div>
+  </section>
+
+  <section class="resumo-secao" aria-labelledby="resumo-pendencias-titulo">
+    <h2 id="resumo-pendencias-titulo">Pendências</h2>
+    <p class="resumo-pendencias">
+      <span>Total em aberto: <strong>{{ pendencias_abertas }}</strong></span>
+      <span>Atrasadas do cliente: <strong>{{ atrasos_cliente }}</strong></span>
+      <span>Atrasadas nossas: <strong>{{ atrasos_nossos }}</strong></span>
+    </p>
+    {% if atrasos_mais_antigos %}
+    <table class="resumo-tabela resumo-atrasos">
+      <thead><tr><th>Código</th><th>Revisão</th><th>Dias em atraso</th></tr></thead>
+      <tbody>{% for item in atrasos_mais_antigos %}<tr><td>{{ item.codigo }}</td><td>{{ item.revisao }}</td><td>{{ item.dias }}</td></tr>{% endfor %}</tbody>
+    </table>
+    {% else %}<p class="resumo-sem-dados">Nenhum atraso em aberto.</p>{% endif %}
+  </section>
+
+  {% for tabela in tabelas_avanco %}
+  <section class="resumo-secao" aria-label="Avanço por {{ tabela.rotulo|lower }}">
+    <h2>Avanço por {{ tabela.rotulo|lower }}</h2>
+    {% if tabela.linhas %}
+    <table class="resumo-tabela">
+      <thead><tr><th>{{ tabela.rotulo }}</th>{% for grupo in tabela.grupos %}<th>{{ grupo.rotulo }}</th>{% endfor %}<th>Total</th></tr></thead>
+      <tbody>{% for linha in tabela.linhas %}<tr><th scope="row">{{ linha.rotulo }}</th>{% for quantidade in linha.contagens %}<td>{{ quantidade }}</td>{% endfor %}<td>{{ linha.total }}</td></tr>{% endfor %}</tbody>
+    </table>
+    {% if tabela.linhas_omitidas %}<p class="resumo-mais">e mais {{ tabela.linhas_omitidas }}</p>{% endif %}
+    {% else %}<p class="resumo-sem-dados">Sem agrupamentos disponíveis neste perfil.</p>{% endif %}
+  </section>
+  {% endfor %}
+
+  <p class="resumo-assinatura">Dados consolidados a partir do Painel e das Pendências deste contrato.</p>
+</article>
+{% endblock %}

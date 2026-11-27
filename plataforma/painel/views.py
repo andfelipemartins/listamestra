@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 
+from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views import View
@@ -7,7 +8,11 @@ from django.views import View
 from contas.models import Usuario
 from contratos.models import Contrato, Participacao
 from importacoes.models import InconsistenciaImportacao
-from .servicos import PainelIndisponivel, carregar_painel
+from .servicos import (
+    PainelIndisponivel,
+    carregar_painel,
+    carregar_resumo_executivo,
+)
 
 
 _PALETA = ("#64748b", "#1769aa", "#2e8b62", "#c27a19", "#bf514b", "#7857a5")
@@ -42,6 +47,28 @@ class PainelRecorteView(View):
         except PainelIndisponivel as erro:
             return render(request, "painel/indisponivel.html", {"contrato": contrato, "erro": erro})
         return render(request, "painel/_recortes.html", contexto)
+
+
+class ResumoExecutivoView(View):
+    def get(self, request, contrato_id):
+        contrato = get_object_or_404(Contrato, pk=contrato_id, ativo=True)
+        if not request.user.is_authenticated or not Participacao.objects.filter(
+            usuario=request.user,
+            contrato=contrato,
+            ativo=True,
+        ).exists():
+            return HttpResponseForbidden()
+        try:
+            contexto = carregar_resumo_executivo(contrato, request.user)
+        except PainelIndisponivel as erro:
+            return render(
+                request,
+                "painel/indisponivel.html",
+                {"contrato": contrato, "erro": erro},
+            )
+        response = render(request, "painel/resumo_executivo.html", contexto)
+        response["Cache-Control"] = "private, no-store"
+        return response
 
 
 def _verificar_acesso(request, contrato, verificar_pin=False):
@@ -153,6 +180,15 @@ def _contexto_painel(contrato, por, filtros=None, *, usuario=None):
         ).count()
         if tem_acesso_recusadas
         else 0
+    )
+    dados["pode_ver_resumo_executivo"] = bool(
+        usuario
+        and usuario.is_authenticated
+        and Participacao.objects.filter(
+            usuario=usuario,
+            contrato=contrato,
+            ativo=True,
+        ).exists()
     )
     dados["grafico_pizza"] = {
         "labels": [grupo.rotulo for grupo in chart_groups],

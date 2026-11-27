@@ -1321,3 +1321,13 @@ Aprovado, Não Conforme, Inconsistente, Erro de Assinatura, Cancelado, Revisão 
   contrato, com **motivo obrigatório** e registro na Atividade (D-050).
 - A reimportação do ID **não** sobrescreve o título editado (comportamento atual: diferença vira "Título divergente").
 - Classe, disciplina e demais campos ficam para depois da avaliação.
+
+## D-118 · Marco 16 começa por um resumo executivo imprimível (escolha do Claude, a confirmar)
+
+*Origem: esteira contínua (D-100) · 2026-11-27 · confirmação na avaliação do block-070*
+
+- Com Pendências, Lista Mestra e Marco 12 esperando respostas/avaliação (AN1–AN8, AO1–AO2, AP1), a esteira abre o
+  Marco 16 pela menor fatia: **uma página de resumo por contrato, para imprimir ou salvar em PDF pelo navegador**,
+  sem biblioteca de PDF nova.
+- Os números vêm do Painel e das Pendências que já existem (avanço, previstos, aprovados, em análise, atrasados por
+  lado, avanço por disciplina e trecho). Quem vê: quem participa do contrato.
