@@ -1353,3 +1353,13 @@ Aprovado, Não Conforme, Inconsistente, Erro de Assinatura, Cancelado, Revisão 
   documentos em conta) e links para o Painel, a Lista Mestra do contrato e a edição no admin.
 - Ao abrir um contrato na tela: quem participa (nome, papel, ativo). Criar, editar, ativar e desativar continuam no
   admin nesta fatia. Sem tabela nova.
+
+## D-121 · Marco 20 começa por um guia "Como usar a Plataforma" (escolha do Claude, a confirmar)
+
+*Origem: esteira contínua (D-100) · 2026-11-27 · confirmação na avaliação do block-073*
+
+- Com os Marcos 12, 16, 17 e 18 esperando avaliação (AP1, AQ1, AR1, AS1), a esteira abre o Marco 20 (Preparação
+  para apresentação) pela menor fatia, só documentação: o `README.md` da raiz deixa de descrever o Streamlit como
+  produto principal e passa a apresentar a Plataforma Django (o que é, como ligar, quais telas existem, quem vê cada
+  uma), com o Streamlit citado como legado; e um guia novo `docs/GUIA_DE_USO.md`, tela por tela, em linguagem de
+  usuário, com os nomes reais dos menus. Sem código de produto, sem prints e sem changelog nesta fatia.

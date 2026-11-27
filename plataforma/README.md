@@ -31,3 +31,8 @@ $env:DATABASE_URL = "postgres://sclme:sclme-dev@localhost:5432/sclme"
 Configure `SCLME_SECRET_KEY`, `SCLME_DEBUG=False` e `SCLME_ALLOWED_HOSTS` no ambiente antes de qualquer deploy.
 Sem `SCLME_SECRET_KEY`, a configuração em modo de desenvolvimento emite um aviso e usa uma
 chave local de desenvolvimento.
+
+
+## Guia de uso
+
+Consulte o [Guia de uso da Plataforma](../docs/GUIA_DE_USO.md) para conhecer as telas e os acessos.
