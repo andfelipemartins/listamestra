@@ -61,6 +61,10 @@ class AtividadeView(LoginRequiredMixin, View):
                 )
             if evento["link_recusadas"]:
                 evento["url_recusadas"] = reverse("linhas_recusadas", args=(contrato.pk,))
+            if evento.get("grd_id"):
+                evento["url_grd"] = reverse(
+                    "grds:detalhe", args=(evento["grd_contrato_id"], evento["grd_id"])
+                )
 
         if evento_detalhe is not None:
             evento_detalhe["data_hora_local"] = timezone.localtime(evento_detalhe["data_hora"])
@@ -70,6 +74,11 @@ class AtividadeView(LoginRequiredMixin, View):
                 )
             if evento_detalhe["link_recusadas"]:
                 evento_detalhe["url_recusadas"] = reverse("linhas_recusadas", args=(contrato.pk,))
+            if evento_detalhe.get("grd_id"):
+                evento_detalhe["url_grd"] = reverse(
+                    "grds:detalhe",
+                    args=(evento_detalhe["grd_contrato_id"], evento_detalhe["grd_id"]),
+                )
 
         pagina = Paginator(eventos_filtrados, self.page_size).get_page(request.GET.get("pagina"))
         links_paginas = [

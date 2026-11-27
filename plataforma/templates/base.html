@@ -55,7 +55,7 @@
       {% endif %}
       {% if user.is_staff %}<a class="nav-item" href="{% url 'importar_cronograma' %}"><span class="nav-icon">⇧</span>Importar cronograma</a>{% endif %}
       <a class="nav-item {% if request.resolver_match.namespace == 'acoes' %}active{% endif %}" href="{% url 'acoes:pendencias' %}"><span class="nav-icon">◇</span>Pendências</a>
-      <span class="nav-item disabled" aria-disabled="true"><span class="nav-icon">▧</span>GRDs <small>Em breve</small></span>
+      <a class="nav-item {% if request.resolver_match.namespace == 'grds' %}active{% endif %}" href="{% url 'grds:lista' %}"><span class="nav-icon">▧</span>GRDs</a>
       {% if user.is_staff %}<a class="nav-item" href="{% url 'admin:index' %}"><span class="nav-icon">⚙</span>Admin</a>{% else %}<span class="nav-item disabled" aria-disabled="true"><span class="nav-icon">⚙</span>Admin</span>{% endif %}
       <div class="sidebar-foot">Linha 15 · Metrô de São Paulo</div>
     </aside>

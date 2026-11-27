@@ -106,6 +106,7 @@ INSTALLED_APPS = [
     "registro.apps.RegistroConfig",
     "acoes.apps.AcoesConfig",
     "backups.apps.BackupsConfig",
+    "grds.apps.GrdsConfig",
 ]
 
 MIDDLEWARE = [

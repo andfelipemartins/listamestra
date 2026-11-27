@@ -22,6 +22,7 @@
   </div>
 
   {% if evento_detalhe.codigo %}<p><strong>Documento:</strong> {% if evento_detalhe.url_documento %}<a href="{{ evento_detalhe.url_documento }}">{{ evento_detalhe.codigo }}</a>{% else %}{{ evento_detalhe.codigo }}{% endif %}</p>{% endif %}
+  {% if evento_detalhe.url_grd %}<p><a class="button button-quiet" href="{{ evento_detalhe.url_grd }}">Abrir GRD</a></p>{% endif %}
   {% if evento_detalhe.detalhes %}
   <div class="table-wrap">
     <table>

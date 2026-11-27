@@ -601,6 +601,13 @@ def carregar_pasta_documento(usuario, contrato_id, documento_id, *, hoje=None):
     )
     hoje = hoje or timezone.localdate()
     linha_tempo = _linha_tempo(perfil, documento, hoje)
+    from grds.servicos import grds_por_emissoes
+
+    grds_por_emissao = grds_por_emissoes(
+        [item["emissao"] for item in linha_tempo]
+    )
+    for item in linha_tempo:
+        item["grds"] = grds_por_emissao.get(item["emissao"].pk, [])
     pode_editar_motivo = _pode_editar_motivo_reabertura(usuario, contrato)
     _anotar_motivos_reabertura(perfil, documento, linha_tempo, pode_editar_motivo)
     atividades = _atividades_documento(contrato, documento, codigo)
@@ -952,9 +959,18 @@ def _rotulo_motivo_cancelamento(perfil, identificador):
 
 
 def _rotulo_ultima_emissao(documento, perfil):
-    emissoes = sorted(documento.emissoes.all(), key=lambda item: (item.data_emissao, item.pk))
+    emissoes = emissoes_cronologicas(documento)
     rotulos = rotulos_ciclo(perfil, emissoes)
     return rotulos[-1] if rotulos else "—"
+
+
+def emissoes_cronologicas(documento):
+    return sorted(documento.emissoes.all(), key=lambda item: (item.data_emissao, item.pk))
+
+
+def ultima_emissao(documento):
+    emissoes = emissoes_cronologicas(documento)
+    return emissoes[-1] if emissoes else None
 
 
 def _opcoes_filtros_caixas(perfil, documentos, valores_por_documento):
@@ -1012,7 +1028,7 @@ def _movimentacoes_por_documento(documentos):
 
 
 def _linha_tempo(perfil, documento, hoje):
-    emissoes = sorted(documento.emissoes.all(), key=lambda item: (item.data_emissao, item.pk))
+    emissoes = emissoes_cronologicas(documento)
     rotulos = rotulos_ciclo(perfil, emissoes)
     aprovacoes = _situacoes_aprovacao(perfil)
     primeiro_aprovado = None

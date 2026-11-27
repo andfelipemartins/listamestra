@@ -37,5 +37,6 @@ urlpatterns = [
     path("acoes/", include("acoes.urls")),
     path("documentos/", include("documentos.urls")),
     path("backups/", include("backups.urls")),
+    path("grds/", include("grds.urls")),
     path("", InicioView.as_view(), name="inicio"),
 ]

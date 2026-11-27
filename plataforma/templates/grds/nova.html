@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Nova GRD · {{ contrato.codigo_interno }}{% endblock %}
+{% block extra_head %}
+<style>
+  .grd-form { display: grid; gap: 14px; }
+  .grd-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .grd-form label { display: grid; gap: 6px; color: var(--text-secondary); font-size: 12px; }
+  .grd-form input, .grd-form select, .grd-form textarea { width: 100%; }
+  .grd-codigos { min-height: 220px; font-family: ui-monospace, Consolas, monospace; }
+  .grd-acoes { display: flex; flex-wrap: wrap; gap: 8px; }
+  .grd-previa { margin-top: 18px; }
+  @media (max-width: 620px) { .grd-form-grid { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <div><span class="eyebrow">{{ contrato.codigo_interno }} · {{ contrato.nome }}</span><h1>Nova GRD</h1><p>Informe os dados da remessa e cole um código documental por linha.</p></div>
+  <a class="button button-quiet" href="{% url 'grds:lista' %}?contrato={{ contrato.pk }}">Voltar às GRDs</a>
+</section>
+
+{% if erro %}<div class="notice notice-error">{{ erro }}</div>{% endif %}
+{% if form.errors %}<div class="notice notice-error">Revise os campos indicados antes de continuar.</div>{% endif %}
+
+{% if previa %}
+<section class="panel grd-previa">
+  <div class="panel-heading"><div><h2>Prévia</h2><p>{{ previa.aceitos|length }} documento(s) aceito(s) · {{ previa.recusados|length }} recusado(s). A lista será conferida novamente ao confirmar.</p></div></div>
+  <h3>Aceitos</h3>
+  {% if previa.aceitos %}
+  <div class="table-wrap"><table><thead><tr><th>Código</th><th>Título</th><th>Revisão</th><th>Versão</th></tr></thead><tbody>
+    {% for item in previa.aceitos %}<tr><td>{{ item.codigo }}</td><td>{{ item.titulo }}</td><td>{{ item.revisao }}</td><td>{{ item.versao|default_if_none:"—" }}</td></tr>{% endfor %}
+  </tbody></table></div>
+  {% else %}<p class="painel-sem-dados">Nenhum documento foi aceito.</p>{% endif %}
+  <h3>Recusados</h3>
+  {% if previa.recusados %}
+  <div class="table-wrap"><table><thead><tr><th>Código</th><th>Motivo</th></tr></thead><tbody>
+    {% for item in previa.recusados %}<tr><td>{{ item.codigo }}</td><td>{{ item.motivo }}</td></tr>{% endfor %}
+  </tbody></table></div>
+  {% else %}<p class="painel-sem-dados">Nenhum código recusado.</p>{% endif %}
+  <form method="post" class="grd-acoes">
+    {% csrf_token %}
+    <input type="hidden" name="contrato" value="{{ form.contrato.value }}">
+    <input type="hidden" name="data" value="{{ form.data.value }}">
+    <input type="hidden" name="destinatario" value="{{ form.destinatario.value }}">
+    <input type="hidden" name="observacao" value="{{ form.observacao.value }}">
+    <textarea name="texto_codigos" hidden>{{ form.texto_codigos.value }}</textarea>
+    {% if previa.aceitos %}<button class="button button-primary" type="submit" name="etapa" value="confirmar">Confirmar GRD</button>{% endif %}
+    <button class="button button-quiet" type="submit" name="etapa" value="editar">Voltar à edição</button>
+  </form>
+</section>
+{% else %}
+<section class="panel">
+  <form method="post" class="grd-form">
+    {% csrf_token %}
+    <div class="grd-form-grid">
+      <label>{{ form.contrato.label }}{{ form.contrato }}{{ form.contrato.errors }}</label>
+      <label>{{ form.data.label }}{{ form.data }}{{ form.data.errors }}</label>
+      <label>{{ form.destinatario.label }}{{ form.destinatario }}{{ form.destinatario.errors }}</label>
+      <label>{{ form.observacao.label }}{{ form.observacao }}{{ form.observacao.errors }}</label>
+    </div>
+    <label>{{ form.texto_codigos.label }}{{ form.texto_codigos }}{{ form.texto_codigos.errors }}<small>Linhas vazias e códigos repetidos são ignorados.</small></label>
+    <div class="grd-acoes"><button class="button button-primary" type="submit" name="etapa" value="previa">Prévia</button></div>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

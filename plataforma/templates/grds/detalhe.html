@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}{{ grd.rotulo }}{% endblock %}
+{% block extra_head %}
+<style>
+  .grd-cabecalho { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 14px; }
+  .grd-dados { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin: 0; }
+  .grd-dados div { padding: 11px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); }
+  .grd-dados dt { color: var(--text-secondary); font-size: 11px; }
+  .grd-dados dd { margin: 5px 0 0; font-size: 13px; }
+  .grd-observacao { white-space: pre-wrap; }
+  @media print {
+    .topbar, .sidebar, .grd-acoes, .no-print { display: none !important; }
+    .app-shell, .main-content { display: block !important; width: 100% !important; margin: 0 !important; padding: 0 !important; }
+    body { background: #fff !important; color: #111 !important; }
+    .panel { box-shadow: none !important; break-inside: avoid; }
+    a { color: inherit !important; text-decoration: none !important; }
+  }
+</style>
+{% endblock %}
+{% block content %}
+<section class="page-heading grd-cabecalho">
+  <div><span class="eyebrow">{{ contrato.codigo_interno }} · {{ contrato.nome }}</span><h1>{{ grd.rotulo }}</h1><p>Guia de remessa de documentos.</p></div>
+  <div class="grd-acoes no-print"><button class="button button-primary" type="button" onclick="window.print()">Imprimir</button><a class="button button-quiet" href="{{ url_lista }}">Voltar às GRDs</a></div>
+</section>
+
+<section class="panel">
+  <div class="panel-heading"><div><h2>Dados da remessa</h2></div></div>
+  <dl class="grd-dados">
+    <div><dt>Data</dt><dd>{{ grd.data|date:"d/m/Y" }}</dd></div>
+    <div><dt>Destinatário</dt><dd>{{ grd.destinatario }}</dd></div>
+    <div><dt>Criada por</dt><dd>{{ grd.criado_por.get_full_name|default:grd.criado_por.username|default:"Sistema" }}</dd></div>
+  </dl>
+  {% if grd.observacao %}<p class="grd-observacao"><strong>Observação:</strong> {{ grd.observacao }}</p>{% endif %}
+</section>
+
+<section class="panel">
+  <div class="panel-heading"><div><h2>Documentos enviados</h2><p>{{ itens|length }} item(ns)</p></div></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Código</th><th>Título</th><th>Revisão</th><th>Versão</th></tr></thead>
+    <tbody>
+      {% for item in itens %}
+      <tr>
+        <td><a href="{% url 'documento_pasta' contrato.pk item.emissao.documento.pk %}"><strong>{{ item.emissao.documento.identificador_base }}</strong></a></td>
+        <td>{{ item.emissao.documento.titulo|default:"(sem título)" }}</td>
+        <td>{{ item.emissao.revisao }}</td>
+        <td>{{ item.emissao.versao|default_if_none:"—" }}</td>
+      </tr>
+      {% empty %}<tr><td colspan="4" class="painel-sem-dados">Esta GRD não tem itens.</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% endblock %}

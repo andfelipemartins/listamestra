@@ -194,9 +194,31 @@ Este guia descreve as telas presentes na Plataforma. O acesso depende do login, 
 **O que dá para fazer:** criar ou editar a versão do perfil; consultar `Caixas do código`, `Separadores` e `Exemplo de código`; usar `Testar códigos` e abrir `Feriados`. O cadastro de Contrato também reúne perfis e escopos; as participações ligam usuários a contratos e papéis.  
 **Como chegar:** clique em `Admin` no menu lateral. Para um contrato específico, abra `Contratos` → `Editar no admin`; no cadastro do contrato, abra ou adicione o `Perfil do contrato` associado.
 
-## Item de menu sem tela disponível
+## GRDs
 
-`GRDs` aparece desabilitado no menu lateral com o rótulo `Em breve`; não há uma tela navegável de GRDs nesta versão.
+### Lista de GRDs
+
+**Menu e título:** `GRDs` · `GRDs`.  
+**Para que serve:** consultar as guias de remessa registradas para o contrato selecionado.  
+**Quem vê:** staff e participantes ativos do contrato.  
+**O que dá para fazer:** consultar data, destinatário e quantidade de documentos; abrir uma GRD; e, para staff, Administrador do contrato ou Equipe técnica, iniciar uma nova remessa.  
+**Como chegar:** menu lateral `GRDs`.
+
+### Nova GRD
+
+**Título:** `Nova GRD`.  
+**Para que serve:** registrar no sistema uma remessa de documentos do contrato.  
+**Quem vê:** staff, Administrador do contrato ou Equipe técnica com participação ativa no contrato.  
+**O que dá para fazer:** informar data, destinatário e observação; colar um código por linha; conferir os documentos aceitos e recusados na `Prévia`; e confirmar a criação. Cada código aceito inclui a última emissão do documento.  
+**Como chegar:** em `GRDs`, clique em `Nova GRD`.
+
+### Detalhe da GRD
+
+**Título:** `[rótulo da GRD]`.  
+**Para que serve:** consultar e imprimir os dados e documentos incluídos na remessa.  
+**Quem vê:** staff e participantes ativos do contrato.  
+**O que dá para fazer:** consultar rótulo, data, destinatário, observação, autor e itens; abrir a pasta de um documento; e usar `Imprimir` para imprimir ou salvar em PDF pelo navegador.  
+**Como chegar:** clique no rótulo de uma GRD na lista ou em um link de GRD na linha do tempo da pasta do documento.
 
 ## Primeiros passos
 

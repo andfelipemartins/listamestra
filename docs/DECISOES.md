@@ -1363,3 +1363,15 @@ Aprovado, Não Conforme, Inconsistente, Erro de Assinatura, Cancelado, Revisão 
   produto principal e passa a apresentar a Plataforma Django (o que é, como ligar, quais telas existem, quem vê cada
   uma), com o Streamlit citado como legado; e um guia novo `docs/GUIA_DE_USO.md`, tela por tela, em linguagem de
   usuário, com os nomes reais dos menus. Sem código de produto, sem prints e sem changelog nesta fatia.
+
+## D-122 · Marco 14 (GRDs) começa por criar e consultar GRD no sistema (escolha do Claude, a confirmar)
+
+*Origem: esteira contínua (D-100) · 2026-11-27 · confirmação na pergunta AT2 e na avaliação do block-074*
+
+- D-105 e D-110 dizem que as GRDs futuras nascem pela tela de GRD do sistema, e o menu lateral mostra "GRDs · Em
+  breve". Com a Lista Mestra esperando AO1/AN2 e as tarefas esperando AN3/AN4/AN8, a esteira abre a primeira fatia
+  de GRDs na Plataforma Django, a menor versão usável: criar uma GRD do contrato (número sequencial por contrato,
+  data, destinatário em texto livre, observação) com os documentos colados como lista de códigos (cada código pega a
+  última emissão), listar as GRDs, abrir o detalhe imprimível e ver na pasta do documento em que GRD cada revisão saiu.
+- Fora desta fatia: cópias por formato (A0–A4/Digital), distribuição por setor (AN2), recebimento por token, GRD
+  antiga como histórico (D-110/AN6) e editar/cancelar GRD.

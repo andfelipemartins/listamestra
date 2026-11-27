@@ -81,6 +81,7 @@
     {% for item in linha_tempo %}
     <li class="pasta-emissao">
       <div class="pasta-emissao-topo"><div><h3>{{ item.rotulo }}</h3><p class="pasta-emissao-meta">Rev {{ item.emissao.revisao }}{% if item.emissao.versao != None %} · Ver {{ item.emissao.versao }}{% endif %} · {{ item.emissao.get_fase_display }}</p></div><strong>{{ item.emissao.data_emissao|date:"d/m/Y" }}</strong></div>
+      {% if item.grds %}<p class="pasta-emissao-meta">Enviada em {% for grd in item.grds %}{% if not forloop.first %} · {% endif %}<a href="{% url 'grds:detalhe' contrato.pk grd.pk %}">{{ grd.rotulo }}</a>{% endfor %}</p>{% endif %}
       {% if item.serie %}
       <div class="pasta-motivo-reabertura">
         <p><strong>Motivo da reabertura {{ item.serie }}:</strong> {{ item.motivo_rotulo }}{% if item.motivo_obs %} · {{ item.motivo_obs }}{% endif %}</p>

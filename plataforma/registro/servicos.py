@@ -3,7 +3,7 @@ from datetime import date, datetime
 
 from django.utils import timezone
 from django.contrib.auth import get_user_model
-from django.db.models import Q
+from django.db.models import Count, Q
 
 from core.perfil import ErroPerfil, perfil_de_dict
 from core.perfil.painel import classificar
@@ -20,6 +20,7 @@ from importacoes.models import (
     ReprocessamentoImportacao,
 )
 from painel.models import FotoPainel
+from grds.models import Grd
 
 
 ACOES = (
@@ -178,6 +179,14 @@ def carregar_eventos(contrato):
         "history_user", "criado_por"
     ):
         eventos.append(_evento_foto_painel(registro))
+
+    eventos.extend(
+        _evento_grd(registro)
+        for registro in Grd.objects.filter(contrato=contrato)
+        .select_related("contrato", "criado_por")
+        .prefetch_related("itens__emissao__documento")
+        .annotate(quantidade_itens=Count("itens"))
+    )
 
     eventos.extend(
         _evento_cancelamento_sistema(registros, contrato)
@@ -502,6 +511,46 @@ def _evento_foto_painel(registro):
         "validas": None,
         "recusadas": None,
         "link_recusadas": False,
+        "agrupar_no_evento": False,
+    }
+
+
+def _evento_grd(registro):
+    ator = registro.criado_por
+    nome = _nome_usuario(ator)
+    codigos = sorted(
+        {
+            item.emissao.documento.identificador_base
+            for item in registro.itens.all()
+        },
+        key=str.casefold,
+    )
+    rotulo = registro.rotulo()
+    quantidade = registro.quantidade_itens
+    return {
+        "chave": f"grd-{registro.pk}",
+        "data_hora": _localizar(registro.criado_em),
+        "acao": "criou",
+        "acao_rotulo": "GRD criada",
+        "entidade": "GRD",
+        "tipo_importacao": "",
+        "codigo": "",
+        "codigos": codigos,
+        "usuario": ator,
+        "usuario_id": getattr(ator, "pk", None),
+        "usuario_nome": nome,
+        "resumo": f"GRD criada: {nome} criou {rotulo} para {registro.destinatario}: {quantidade} item(ns)",
+        "detalhes": [
+            {"campo": "Rótulo", "antes": "", "depois": rotulo},
+            {"campo": "Destinatário", "antes": "", "depois": registro.destinatario},
+            {"campo": "Quantidade de itens", "antes": "", "depois": quantidade},
+            {"campo": "Quem criou", "antes": "", "depois": nome},
+        ],
+        "validas": None,
+        "recusadas": None,
+        "link_recusadas": False,
+        "grd_id": registro.pk,
+        "grd_contrato_id": registro.contrato_id,
         "agrupar_no_evento": False,
     }
 
