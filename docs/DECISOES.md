@@ -1421,3 +1421,223 @@ Aprovado, Não Conforme, Inconsistente, Erro de Assinatura, Cancelado, Revisão 
 - Escolha: o campo `prazos.dias_alerta_vencimento` do perfil (inteiro ≥ 0, padrão 3) vale para os dois prazos que
   a Plataforma já avisa: a análise do cliente e a nossa devolução (opção recomendada em AN7, que é o comportamento atual).
 - Fora desta fatia: antecedência diferente por regra de prazo e aviso por e-mail.
+
+## D-127 · Cards do Início que abrem seções de Pendências: aprovado
+
+*Origem: AN1 · 2026-11-28 · confirma o block-066*
+
+- O dono avaliou "Está bom": os cards do Início abrem as seções de Pendências como estão.
+
+## D-128 · Segunda fatia da Lista Mestra: distribuição por setor
+
+*Origem: AN2 · 2026-11-28 · detalha a D-114*
+
+- Depois da tela da lista (e do ajuste visual pedido na AO1), entra primeiro a **distribuição por setor**: GRD, data
+  de envio e "em campo" por setor (Produção, Topografia, Qualidade), ligada às GRDs que já existem.
+  Concessionárias, exportar em Excel e medição ficam depois.
+
+## D-129 · Tarefas da equipe: gestor atribui para a equipe, cada pessoa cria para si
+
+*Origem: AN3 · 2026-11-28 · detalha a D-112*
+
+- Gestor (e admin) cria e atribui tarefas para a equipe; qualquer pessoa cria tarefa para si mesma.
+
+## D-130 · Quem o gestor gere: equipe cadastrada, e um gestor pode ter equipes em vários contratos
+
+*Origem: AN4 · 2026-11-28 · detalha a D-115*
+
+- Escolha do dono: **equipe cadastrada** (o admin monta equipes com gestor e membros; o gestor vê a equipe dele, e o de
+  cima vê as equipes abaixo).
+- Observação do dono: o gestor **não** pode ficar limitado a um bloco só. Exemplo real: o chefe dele é chefe de dois
+  contratos, com pessoas diferentes em cada um (grupo A num contrato, grupo B no outro), todos sob o mesmo chefe. Na
+  configuração, o gestor precisa poder **selecionar qual contrato quer enxergar** e ver as informações de cada um.
+- Consequência: equipe é por contrato, e uma pessoa pode ser gestora de equipes em vários contratos. Detalhes ainda
+  em pergunta (AX).
+
+## D-131 · Escopo Qualidade do Metrô: A7 + PE/A9 + MQ/A9; o resto da A9 em Arquitetura e Civil
+
+*Origem: AN5 · 2026-11-28 · completa a D-113*
+
+- Confirmado para os contratos do Metrô: A7 inteira, PE da A9 e MQ da A9 são Qualidade; o resto da A9 fica em
+  Arquitetura e Civil.
+- Observação do dono: essa é a regra dos contratos do Metrô, que sempre usam esses documentos. Outros contratos terão
+  outras regras, a testar um dia com documentos de outro contrato; por enquanto o Metrô é o único exemplo real.
+
+## D-132 · GRD anterior ao sistema aparece na revisão e na Lista Mestra
+
+*Origem: AN6 · 2026-11-28 · detalha a D-110*
+
+- O número da GRD antiga aparece na pasta do documento, na linha da revisão, marcado "anterior ao sistema", **e** numa
+  coluna GRD da Lista Mestra.
+
+## D-133 · Alerta de prazo vencendo vale para os dois prazos
+
+*Origem: AN7 · 2026-11-28 · confirma a D-126*
+
+- Confirmado: o alerta avisa a análise do cliente e a nossa devolução (o que o block-079 já entregou).
+
+## D-134 · Tarefa ligada a documento: o sistema sugere fechar, a pessoa confirma
+
+*Origem: AN8 · 2026-11-28 · detalha a D-112*
+
+- Quando o documento anda (ex.: a revisão da tarefa foi emitida), o sistema mostra "parece feita", mas **quem fecha é
+  sempre a pessoa responsável**, seja a tarefa aberta por outro ou por ela mesma. A responsabilidade de fechar é dela.
+
+## D-135 · Lista Mestra: linhas finas como no Excel antes de discutir colunas
+
+*Origem: AO1 · 2026-11-28 · ajuste do block-068*
+
+- O dono pediu ajuste visual antes de avaliar colunas: o título fica numa coluna estreita, o texto quebra em várias
+  linhas e a linha fica "gorda". Quer linhas finas, como na planilha, sem texto encavalado.
+- A Lista Mestra real é bem mais extensa que a tela atual; colunas serão discutidas depois do ajuste.
+- O dono não entendeu "Documento de retorno": precisa de explicação (pergunta no painel).
+
+## D-136 · Escopo por classe: configuração confusa, sem efeito visível; alinhar antes de seguir
+
+*Origem: AO2 · 2026-11-28 · revisa a tela do block-067b*
+
+- O dono cadastrou os escopos (Arquitetura, Civil, Elétrica, Qualidade) no admin, mas **não viu o resultado prático** e
+  **não encontrou onde ligar cada escopo às classes** (a explicação da D-113 não ficou clara para ele).
+- Layout do admin "tenebroso": "Remover?" com caixa de marcar, "Ativo" solto, perfis de contrato com campo de versão
+  livre que permite vários perfis com a mesma versão (ex.: "L15 teste V6" repetido).
+- Decisão: parar de empilhar escopo até alinhar com o dono o que é escopo e onde se configura. A ligação classe → escopo
+  precisa de uma tela própria, clara, fora do admin cru. Perguntas no painel (AY).
+
+## D-137 · Pasta do documento no estilo do PW: painel lateral com Detalhes, Histórico e Atributos
+
+*Origem: AP1 · 2026-11-28 · ajuste do block-069*
+
+- O botão "Editar título" solto ficou rígido e "no meio do nada". O dono prefere o jeito do ProjectWise: clica no
+  documento na lista e abre um **painel que desliza da direita**, com abas **Detalhes** (só ver), **Histórico**
+  (audit trail: tudo o que aconteceu com o documento) e **Atributos** (com botão de editar: título, observação, partes
+  do código com o significado de cada uma, código base sem pontos e traço, número do contrato, assinantes e
+  responsáveis técnicos do cliente e da projetista).
+- Problema achado: em Admin › Documentos, o admin altera o documento sem motivo e sem registro. Edição de dados de
+  documento deve passar pelo caminho com motivo e Atividade.
+
+## D-138 · Resumo executivo: reprovado; repensar passo a passo o que a tela mostra
+
+*Origem: AQ1 · 2026-11-28 · revisa o block-070*
+
+- Letras com cor ilegível, tela grande com pouca informação, e a página impressa curta e vazia. O dono não vê quem
+  usaria isso (gestão executiva? impressão?).
+- Decisão: não seguir o Marco 16 até definir com o dono, passo a passo, o que a tela precisa mostrar e para quem
+  (pergunta no painel). O block-070 fica como está até lá.
+
+## D-139 · Contratos: tudo do contrato dentro do contrato
+
+*Origem: AS1 · 2026-11-28 · ajuste do block-072*
+
+- A tela Contratos está confusa. A aba de contratos deve ter só o que é do contrato e reunir tudo nele, sem partes
+  soltas pelo menu.
+- Dentro do contrato: quem participa, com o papel e a função de cada pessoa; a região do contrato e, por consequência,
+  um calendário que puxa os feriados da região, onde a pessoa clica num dia para acrescentar algo à mão.
+- "Acervo de feriados" em destaque logo abaixo de Contratos e "Participações" como menu separado não fazem sentido.
+  Criar usuário continua separado (Usuários/Contas); a participação no contrato se define dentro do contrato.
+- Criar o contrato é uma configuração completa, com tudo num painel do contrato. Falta melhorar mais; é ajuste.
+
+## D-140 · README e Guia de uso aprovados
+
+*Origem: AT1 · 2026-11-28 · aprova o block-073 (D-121)*
+
+- Seguir o Marco 20: prints das telas no guia e um changelog curto.
+
+## D-141 · GRD no padrão da empresa, configurável por contrato, com recebimento físico e digital
+
+*Origem: AT2 e AU1 · 2026-11-28 · revisa a D-122 e o block-074 · anexos: scan da GRD ÁLYA 008/2025*
+
+- A tela de GRDs para colar os códigos, com prévia de aceitos e recusados e o motivo, ficou boa e não é problema.
+- Cada GRD pertence ao contrato. A numeração e a identificação seguem quem emite: a ÁLYA (CNPJ próprio) usa
+  "ÁLYA 008/2025"; contratos em consórcio usam a sigla do consórcio (CML, SEB, SEI) e a numeração deles. Isso é
+  **configuração da GRD do contrato** (logo, nome, formato do número).
+- O documento impresso precisa chegar perto do modelo da empresa: logo, título "Guia de Remessa de Documentos",
+  número, data, quantidade de documentos, trecho(s), A/C (destinatário), obra, módulo; tabela com item, documento
+  técnico, revisão, versão, descrição e nº de cópias por formato (A1, A3, A4, Digital); no fim, assinatura e data de
+  quem recebeu e de quem emitiu.
+- Precisa ser **personalizável** por contrato/empresa (escolher os campos), e quem preenche aperta "Imprimir" e sai
+  pronto em PDF.
+- Quem emitiu aparece pelo **nome completo do perfil da pessoa** (ex.: André Felipe), não pelo login (andre.abreu).
+- Além do papel assinado à mão, **recebimento digital**: um link externo (e-mail ou WhatsApp) que abre uma tela sem
+  login; quem recebe escreve o nome e aceita ("atesto que recebi os documentos no dia tal"); o sistema guarda o
+  aceite e mostra depois. Os dois caminhos (físico e digital) devem existir.
+
+## D-142 · Conciliação começa pelos títulos: confirmado
+
+*Origem: AU2 · 2026-11-28 · confirma a D-123*
+
+## D-143 · "Título diferente do ID": o dono não encontrou na tela
+
+*Origem: AV1 · 2026-11-28 · avaliação do block-075*
+
+- O dono procurou no Início e em Pendências e não achou o card nem a seção. No Início atual não existe esse card (o
+  passo a passo da pergunta estava errado) e, sem nenhuma diferença no contrato de teste, nada chama atenção.
+- Lição da esteira: o "para ver" de cada pergunta tem de ser conferido no navegador, com dados do contrato de teste
+  que mostrem o caso; quando não houver caso, a tela precisa dizer "nenhum agora" num lugar fácil de achar.
+- Ajuste (block-081): tornar as seções de Pendências fáceis de achar, com estado vazio explícito.
+
+## D-144 · Exportação da Atividade em Excel formatado
+
+*Origem: AV2 · 2026-11-28 · revisa a D-124*
+
+- Trocar o CSV por um .xlsx com cabeçalho e colunas largas (block-082).
+
+## D-145 · Histórico de importações: confirmado como fatia do Marco 15
+
+*Origem: AW1 · 2026-11-28 · confirma a D-125*
+
+## D-146 · Roadmap: reconstruir com o dono
+
+*Origem: AW2 · 2026-11-28 · revisa o block-077*
+
+- O dono sente o roadmap "perdido": muita coisa e pouco claro. O projeto começou como uma Lista Mestra e virou um
+  gerenciador de engenharia e documentos. Quer reavaliar, melhorar a visualização e entender o que são os Marcos e
+  para onde o projeto caminha, numa discussão mais longa antes de reescrever o ROADMAP.md.
+- Decisão: o roadmap não é reescrito agora; abrir a conversa no painel (perguntas AZ).
+
+## D-147 · Importações: um menu só, contrato do usuário, ID mais recente vale, ID nosso rege
+
+*Origem: AW3 · 2026-11-28 · ajuste do block-078 e das telas de importação*
+
+- Não existe uma tela "Importações"; existem quatro entradas soltas (Importar ID, Importar situação PW, Atualizar
+  situação por planilha, Importar cronograma). Deve haver **um item "Importações"** e, dentro dele, as importações.
+- Quem trabalha num contrato importa para o contrato em que está; **não escolhe contrato** na importação.
+- Importar de novo um ID com o mesmo código **não é "substituir"**: o mais recente com aquele código é o vigente. A
+  troca de código (1501 → 2000) foi caso esporádico de configuração.
+- **O nosso ID rege o sistema** (cálculos e engine seguem ele); o ID do PW serve sempre só para **comparação**. Se o PW
+  tem documento que falta no nosso ID, é o nosso ID que precisa ser corrigido.
+- Depois de importado, deve dar para abrir aquele ID e editar seus atributos (ex.: de quais escopos ele é; pode ser
+  misto). Como no PW, o ID é uma pasta de documentos do contrato.
+- O histórico é por contrato: a pessoa vê só o do contrato selecionado e a que tem acesso. A tela atual do histórico
+  ("ID vigente", data de revisão) ficou estranha.
+
+## D-148 · Alerta "Vence em N dias": o dono não viu na tela
+
+*Origem: AX1 · 2026-11-28 · avaliação do block-079 · anexo: print do Início*
+
+- No Início do contrato de teste só aparece "Atrasado há 400 dias" em Análise do cliente; nenhum prazo vence nos
+  próximos dias, então o aviso novo não aparece e o dono não pôde avaliar. Ajustes de layout do Início virão numa
+  pergunta própria do dono.
+- Ajuste (block-081): quando não houver prazo vencendo, dizer isso na tela ("nenhum prazo vence nos próximos N dias").
+
+## D-149 · Escopo = modalidade do ID, configurado no contrato com as suas classes
+
+*Origem: AY1 · 2026-11-28 · responde a D-136*
+
+- O escopo é o que no ID se chama **modalidade**. A relação modalidade/escopo → classes vem do manual do contrato (no
+  Metrô, o MAN), e cada contrato tem a sua (SPObras, Metrô, outros).
+- Na criação/configuração do contrato haverá uma parte onde se escolhem os **escopos do contrato** (Qualidade, Civil,
+  Elétrica… nem sempre todos) e, para cada escopo, as **classes** que pertencem a ele (A, B… ou A1, A2, B6, F6…).
+- Todo documento cujo código tem uma classe configurada cai automaticamente naquele escopo; filtrar por escopo puxa
+  essas classes.
+- Ler o manual em texto e o sistema entender sozinho foi lembrado como "talvez mirabolante": fica fora por agora.
+
+## D-150 · Resumo executivo: sem propósito como está; o Painel já é o resumo
+
+*Origem: AY2 · 2026-11-28 · responde a D-138*
+
+- O Painel do contrato (Acompanhamento executivo) já mostra o que importa: a emitir, em análise, aprovados, avanço,
+  porcentagem, gráficos e tabelas. O botão "Resumo executivo" imprime outra coisa, em outro layout, e ficou sem
+  propósito; o dono duvida que ele deva existir.
+- Depois se pode pensar em tela cheia ou um "slide" com esses dados.
+- Escolha do Claude, a confirmar: tirar o botão "Resumo executivo" e fazer a impressão do próprio Painel sair igual
+  ao que se vê na tela.
