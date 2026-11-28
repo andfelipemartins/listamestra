@@ -23,6 +23,7 @@ from importacoes.models import (
     ItemPrevisto,
     PrevisaoEmissao,
 )
+from tests.importacoes_helpers import ativar_contrato
 
 
 RAIZ_REPOSITORIO = Path(__file__).resolve().parents[2]
@@ -266,6 +267,7 @@ def test_tela_exibe_previa_e_confirma_importacao(client, contrato, perfil_modelo
         password="senha-segura",
     )
     client.force_login(administrador)
+    ativar_contrato(client, contrato)
     planilha = _xlsx([[_codigo("1001"), "1", 1, "19/12/2026"]])
     upload = SimpleUploadedFile(
         "cronograma.xlsx",
@@ -275,7 +277,7 @@ def test_tela_exibe_previa_e_confirma_importacao(client, contrato, perfil_modelo
 
     previa = client.post(
         reverse("importar_cronograma"),
-        {"acao": "prever", "contrato": str(contrato.pk), "arquivo": upload},
+        {"acao": "prever", "arquivo": upload},
         HTTP_HX_REQUEST="true",
     )
     assert previa.status_code == 200

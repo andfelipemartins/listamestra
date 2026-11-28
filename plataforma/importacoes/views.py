@@ -1,6 +1,6 @@
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
-from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -81,22 +81,53 @@ CHAVE_SESSAO_ELABORACAO = "previa_importacao_elaboracao"
 PREFIXO_ARQUIVO_SITUACAO_PADRAO = "[Planilha padrão] "
 
 
-class HistoricoImportacoesView(LoginRequiredMixin, View):
-    template_name = "importacoes/historico.html"
-    http_method_names = ["get"]
+class ContratoAtivoImportacaoMixin(LoginRequiredMixin):
+    def usuario_pode_importar(self, usuario, contrato):
+        return usuario.is_staff
 
     def dispatch(self, request, *args, **kwargs):
         if not request.user.is_authenticated:
-            return self.handle_no_permission()
-        contrato = get_object_or_404(Contrato, pk=kwargs["contrato_id"])
-        if not request.user.is_staff and not Participacao.objects.filter(
-            usuario=request.user,
+            return super().dispatch(request, *args, **kwargs)
+        contrato_id = request.session.get("contrato_ativo_id")
+        contrato = Contrato.objects.filter(pk=contrato_id, ativo=True).first()
+        if contrato is None:
+            request.session.pop("contrato_ativo_id", None)
+            return redirect("contratos_escolher")
+        self.contrato = contrato
+        if not self.usuario_pode_importar(request.user, contrato):
+            raise PermissionDenied
+        self.configurar_permissoes(request, contrato)
+        return super().dispatch(request, *args, **kwargs)
+
+    def configurar_permissoes(self, request, contrato):
+        pass
+
+
+class ImportacoesView(ContratoAtivoImportacaoMixin, View):
+    template_name = "importacoes/index.html"
+
+    def usuario_pode_importar(self, usuario, contrato):
+        return usuario.is_staff or Participacao.objects.filter(
+            usuario=usuario,
             contrato=contrato,
             ativo=True,
-        ).exists():
-            raise PermissionDenied
-        self.contrato = contrato
-        return super().dispatch(request, *args, **kwargs)
+            papel__in=(Usuario.Perfil.ADMIN, Usuario.Perfil.EQUIPE),
+        ).exists()
+
+    def get(self, request):
+        return render(request, self.template_name, {"contrato": self.contrato})
+
+
+class HistoricoImportacoesView(ContratoAtivoImportacaoMixin, View):
+    template_name = "importacoes/historico.html"
+    http_method_names = ["get"]
+
+    def usuario_pode_importar(self, usuario, contrato):
+        return usuario.is_staff or Participacao.objects.filter(
+            usuario=usuario,
+            contrato=contrato,
+            ativo=True,
+        ).exists()
 
     def get(self, request, contrato_id):
         importacoes = []
@@ -186,19 +217,17 @@ def _linha_historico_importacao(
     }
 
 
-class LinhasRecusadasView(LoginRequiredMixin, View):
+class LinhasRecusadasView(ContratoAtivoImportacaoMixin, View):
     template_name = "importacoes/recusadas.html"
 
-    def dispatch(self, request, *args, **kwargs):
-        if not request.user.is_authenticated:
-            return self.handle_no_permission()
-        contrato = get_object_or_404(Contrato, pk=kwargs["contrato_id"])
-        if not request.user.is_staff and not Participacao.objects.filter(
-            usuario=request.user,
+    def usuario_pode_importar(self, usuario, contrato):
+        return usuario.is_staff or Participacao.objects.filter(
+            usuario=usuario,
             contrato=contrato,
             ativo=True,
-        ).exists():
-            raise PermissionDenied
+        ).exists()
+
+    def configurar_permissoes(self, request, contrato):
         self.pode_reprocessar = request.user.is_staff or Participacao.objects.filter(
             usuario=request.user,
             contrato=contrato,
@@ -207,8 +236,6 @@ class LinhasRecusadasView(LoginRequiredMixin, View):
         ).exists()
         if request.method == "POST" and not self.pode_reprocessar:
             raise PermissionDenied
-        self.contrato = contrato
-        return super().dispatch(request, *args, **kwargs)
 
     def get(self, request, contrato_id):
         dados_sessao = request.session.get(CHAVE_SESSAO_REPROCESSAMENTO)
@@ -657,12 +684,8 @@ def _instrucao_recusa(categoria, origem=""):
     }.get(categoria, "Corrija a linha na planilha ou no PW e importe de novo.")
 
 
-class ImportarIDView(LoginRequiredMixin, UserPassesTestMixin, View):
+class ImportarIDView(ContratoAtivoImportacaoMixin, View):
     template_name = "importacoes/id.html"
-    raise_exception = True
-
-    def test_func(self):
-        return self.request.user.is_staff
 
     def get(self, request):
         request.session.pop(CHAVE_SESSAO, None)
@@ -670,10 +693,9 @@ class ImportarIDView(LoginRequiredMixin, UserPassesTestMixin, View):
             request,
             self.template_name,
             {
-                "form": ImportarIDForm(
-                    initial={"contrato": request.GET.get("contrato", "")}
-                ),
-                "indices": _indices_para_listagem(),
+                "form": ImportarIDForm(contrato=self.contrato),
+                "contrato": self.contrato,
+                "indices": _indices_para_listagem(self.contrato),
             },
         )
 
@@ -683,13 +705,13 @@ class ImportarIDView(LoginRequiredMixin, UserPassesTestMixin, View):
         return self._prever(request)
 
     def _prever(self, request):
-        form = ImportarIDForm(request.POST, request.FILES)
+        form = ImportarIDForm(request.POST, request.FILES, contrato=self.contrato)
         if not form.is_valid():
             return self._render_result(request, {"form": form})
-        contrato = form.cleaned_data["contrato"]
+        contrato = self.contrato
         perfil_modelo = PerfilContrato.perfil_vigente(contrato, timezone.localdate())
         if perfil_modelo is None:
-            form.add_error("contrato", "O contrato não tem perfil vigente para a data de hoje.")
+            form.add_error(None, "O contrato não tem perfil vigente para a data de hoje.")
             return self._render_result(request, {"form": form})
         try:
             perfil = perfil_de_dict(perfil_modelo.definicao)
@@ -767,11 +789,13 @@ class ImportarIDView(LoginRequiredMixin, UserPassesTestMixin, View):
                     (ROTULOS_CATEGORIA[categoria], previa.contagens[categoria])
                     for categoria in CATEGORIAS
                 ],
-                "indices": _indices_para_listagem(),
+                "indices": _indices_para_listagem(self.contrato),
             },
         )
 
     def _render_result(self, request, context):
+        context.setdefault("contrato", self.contrato)
+        context.setdefault("indices", _indices_para_listagem(self.contrato))
         template = self.template_name
         if request.headers.get("HX-Request") == "true":
             template = "importacoes/_resultado.html"
@@ -784,7 +808,9 @@ class ImportarIDView(LoginRequiredMixin, UserPassesTestMixin, View):
             return redirect("importar_id")
         try:
             previa = _previsao_da_sessao(dados)
-            contrato = get_object_or_404(Contrato, pk=previa.contrato_id)
+            contrato = self.contrato
+            if previa.contrato_id != contrato.pk:
+                raise ErroAplicacaoID("O contrato ativo mudou. Gere uma nova prévia.")
             perfil_modelo = get_object_or_404(
                 PerfilContrato,
                 pk=previa.perfil_id,
@@ -885,9 +911,10 @@ def _previsao_da_sessao(dados):
     )
 
 
-def _indices_para_listagem():
+def _indices_para_listagem(contrato):
     indices = list(
-        IndiceDocumentos.objects.select_related("contrato", "substituido_por")
+        IndiceDocumentos.objects.filter(contrato=contrato)
+        .select_related("contrato", "substituido_por")
         .order_by("-importado_em", "-pk")[:20]
     )
     ids_substituidos = [indice.pk for indice in indices if indice.substituido_por_id]
@@ -905,12 +932,8 @@ def _indices_para_listagem():
     return indices
 
 
-class ImportarSituacaoPWView(LoginRequiredMixin, UserPassesTestMixin, View):
+class ImportarSituacaoPWView(ContratoAtivoImportacaoMixin, View):
     template_name = "importacoes/situacao_pw.html"
-    raise_exception = True
-
-    def test_func(self):
-        return self.request.user.is_staff
 
     def get(self, request):
         request.session.pop(CHAVE_SESSAO_SITUACAO, None)
@@ -919,7 +942,9 @@ class ImportarSituacaoPWView(LoginRequiredMixin, UserPassesTestMixin, View):
             self.template_name,
             {
                 "form": ImportarSituacaoPWForm(),
-                "importacoes": ImportacaoSituacao.objects.select_related("contrato", "importado_por")
+                "contrato": self.contrato,
+                "importacoes": ImportacaoSituacao.objects.filter(contrato=self.contrato)
+                .select_related("contrato", "importado_por")
                 .exclude(arquivo_nome__startswith=PREFIXO_ARQUIVO_SITUACAO_PADRAO)[:20],
             },
         )
@@ -933,11 +958,11 @@ class ImportarSituacaoPWView(LoginRequiredMixin, UserPassesTestMixin, View):
         form = ImportarSituacaoPWForm(request.POST, request.FILES)
         if not form.is_valid():
             return self._render_result(request, {"form": form})
-        contrato = form.cleaned_data["contrato"]
+        contrato = self.contrato
         data_extracao = form.cleaned_data["data_extracao"]
         perfil_modelo = PerfilContrato.perfil_vigente(contrato, data_extracao)
         if perfil_modelo is None:
-            form.add_error("contrato", "O contrato não tem perfil vigente na data da extração.")
+            form.add_error(None, "O contrato não tem perfil vigente na data da extração.")
             return self._render_result(request, {"form": form})
         try:
             arquivo = form.cleaned_data["arquivo"]
@@ -972,12 +997,20 @@ class ImportarSituacaoPWView(LoginRequiredMixin, UserPassesTestMixin, View):
                     ("Históricos truncados", len(previa.historicos_truncados)),
                     ("Linhas inválidas", len(previa.linhas_invalidas)),
                 ],
-                "importacoes": ImportacaoSituacao.objects.select_related("contrato", "importado_por")
+                "importacoes": ImportacaoSituacao.objects.filter(contrato=self.contrato)
+                .select_related("contrato", "importado_por")
                 .exclude(arquivo_nome__startswith=PREFIXO_ARQUIVO_SITUACAO_PADRAO)[:20],
             },
         )
 
     def _render_result(self, request, context):
+        context.setdefault("contrato", self.contrato)
+        context.setdefault(
+            "importacoes",
+            ImportacaoSituacao.objects.filter(contrato=self.contrato)
+            .exclude(arquivo_nome__startswith=PREFIXO_ARQUIVO_SITUACAO_PADRAO)
+            .select_related("contrato", "importado_por")[:20],
+        )
         template = self.template_name
         if request.headers.get("HX-Request") == "true":
             template = "importacoes/_resultado_situacao_pw.html"
@@ -990,7 +1023,9 @@ class ImportarSituacaoPWView(LoginRequiredMixin, UserPassesTestMixin, View):
             return redirect("importar_situacao_pw")
         try:
             previa = _previsao_situacao_da_sessao(dados["previa"])
-            contrato = get_object_or_404(Contrato, pk=previa.contrato_id)
+            contrato = self.contrato
+            if previa.contrato_id != contrato.pk:
+                raise ValueError("O contrato ativo mudou. Gere uma nova prévia.")
             perfil_modelo = get_object_or_404(
                 PerfilContrato,
                 pk=previa.perfil_id,
@@ -1165,15 +1200,9 @@ def _previsao_situacao_da_sessao(dados):
     )
 
 
-class PermissaoImportarSituacaoPadraoMixin(LoginRequiredMixin, UserPassesTestMixin):
-    raise_exception = True
-
-    def test_func(self):
-        return self.request.user.is_staff or Participacao.objects.filter(
-            usuario=self.request.user,
-            ativo=True,
-            papel__in=(Usuario.Perfil.ADMIN, Usuario.Perfil.EQUIPE),
-        ).exists()
+class PermissaoImportarSituacaoPadraoMixin(ContratoAtivoImportacaoMixin):
+    def usuario_pode_importar(self, usuario, contrato):
+        return _usuario_pode_importar_situacao_padrao(usuario, contrato)
 
 
 class BaixarModeloSituacaoPadraoView(PermissaoImportarSituacaoPadraoMixin, View):
@@ -1195,8 +1224,9 @@ class ImportarSituacaoPadraoView(PermissaoImportarSituacaoPadraoMixin, View):
             request,
             self.template_name,
             {
-                "form": ImportarSituacaoPadraoForm(usuario=request.user),
-                "importacoes": _importacoes_situacao_padrao(),
+                "form": ImportarSituacaoPadraoForm(),
+                "contrato": self.contrato,
+                "importacoes": _importacoes_situacao_padrao(self.contrato),
             },
         )
 
@@ -1206,14 +1236,14 @@ class ImportarSituacaoPadraoView(PermissaoImportarSituacaoPadraoMixin, View):
         return self._prever(request)
 
     def _prever(self, request):
-        form = ImportarSituacaoPadraoForm(request.POST, request.FILES, usuario=request.user)
+        form = ImportarSituacaoPadraoForm(request.POST, request.FILES)
         if not form.is_valid():
             return self._render_result(request, {"form": form})
-        contrato = form.cleaned_data["contrato"]
+        contrato = self.contrato
         data_importacao = timezone.localdate()
         perfil_modelo = PerfilContrato.perfil_vigente(contrato, data_importacao)
         if perfil_modelo is None:
-            form.add_error("contrato", "O contrato não tem perfil vigente para a data de hoje.")
+            form.add_error(None, "O contrato não tem perfil vigente para a data de hoje.")
             return self._render_result(request, {"form": form})
         try:
             arquivo = form.cleaned_data["arquivo"]
@@ -1233,16 +1263,11 @@ class ImportarSituacaoPadraoView(PermissaoImportarSituacaoPadraoMixin, View):
             "usuario_id": request.user.pk,
             "previa": _serializar_previa_situacao_padrao(previa),
         }
-        return self._render_result(
-            request,
-            {
-                "form": form,
-                "previa": previa,
-                "importacoes": _importacoes_situacao_padrao(),
-            },
-        )
+        return self._render_result(request, {"form": form, "previa": previa})
 
     def _render_result(self, request, context):
+        context.setdefault("contrato", self.contrato)
+        context.setdefault("importacoes", _importacoes_situacao_padrao(self.contrato))
         template = self.template_name
         if request.headers.get("HX-Request") == "true":
             template = "importacoes/_resultado_situacao_padrao.html"
@@ -1255,9 +1280,9 @@ class ImportarSituacaoPadraoView(PermissaoImportarSituacaoPadraoMixin, View):
             return redirect("importar_situacao_padrao")
         try:
             previa = _previsao_situacao_padrao_da_sessao(dados["previa"])
-            contrato = get_object_or_404(Contrato, pk=previa.contrato_id)
-            if not _usuario_pode_importar_situacao_padrao(request.user, contrato):
-                raise PermissionDenied
+            contrato = self.contrato
+            if previa.contrato_id != contrato.pk:
+                raise ValueError("O contrato ativo mudou. Envie o arquivo e gere outra prévia.")
             perfil_modelo = get_object_or_404(
                 PerfilContrato,
                 pk=previa.perfil_id,
@@ -1266,14 +1291,12 @@ class ImportarSituacaoPadraoView(PermissaoImportarSituacaoPadraoMixin, View):
             vigente = PerfilContrato.perfil_vigente(contrato, previa.data_importacao)
             if vigente is None or vigente.pk != perfil_modelo.pk:
                 raise ValueError("O perfil vigente mudou. Envie o arquivo e gere outra prévia.")
-            importacao = aplicar_previa_situacao_padrao(
+            aplicar_previa_situacao_padrao(
                 previa,
                 contrato=contrato,
                 perfil_modelo=perfil_modelo,
                 usuario=request.user,
             )
-        except PermissionDenied:
-            raise
         except (ValueError, KeyError, TypeError) as erro:
             messages.error(request, str(erro))
             return redirect("importar_situacao_padrao")
@@ -1370,18 +1393,15 @@ def _previsao_situacao_padrao_da_sessao(dados):
     )
 
 
-def _importacoes_situacao_padrao():
+def _importacoes_situacao_padrao(contrato):
     return ImportacaoSituacao.objects.filter(
-        arquivo_nome__startswith=PREFIXO_ARQUIVO_SITUACAO_PADRAO
+        contrato=contrato,
+        arquivo_nome__startswith=PREFIXO_ARQUIVO_SITUACAO_PADRAO,
     ).select_related("contrato", "importado_por")[:20]
 
 
-class ImportarCronogramaView(LoginRequiredMixin, UserPassesTestMixin, View):
+class ImportarCronogramaView(ContratoAtivoImportacaoMixin, View):
     template_name = "importacoes/cronograma.html"
-    raise_exception = True
-
-    def test_func(self):
-        return self.request.user.is_staff
 
     def get(self, request):
         request.session.pop(CHAVE_SESSAO_CRONOGRAMA, None)
@@ -1390,9 +1410,9 @@ class ImportarCronogramaView(LoginRequiredMixin, UserPassesTestMixin, View):
             self.template_name,
             {
                 "form": ImportarCronogramaForm(),
-                "importacoes": ImportacaoCronograma.objects.select_related(
-                    "contrato", "importado_por"
-                )[:20],
+                "contrato": self.contrato,
+                "importacoes": ImportacaoCronograma.objects.filter(contrato=self.contrato)
+                .select_related("contrato", "importado_por")[:20],
             },
         )
 
@@ -1405,10 +1425,10 @@ class ImportarCronogramaView(LoginRequiredMixin, UserPassesTestMixin, View):
         form = ImportarCronogramaForm(request.POST, request.FILES)
         if not form.is_valid():
             return self._render_result(request, {"form": form})
-        contrato = form.cleaned_data["contrato"]
+        contrato = self.contrato
         perfil_modelo = PerfilContrato.perfil_vigente(contrato, timezone.localdate())
         if perfil_modelo is None:
-            form.add_error("contrato", "O contrato não tem perfil vigente para a data de hoje.")
+            form.add_error(None, "O contrato não tem perfil vigente para a data de hoje.")
             return self._render_result(request, {"form": form})
         try:
             arquivo = form.cleaned_data["arquivo"]
@@ -1435,6 +1455,12 @@ class ImportarCronogramaView(LoginRequiredMixin, UserPassesTestMixin, View):
         return self._render_result(request, {"form": form, "previa": previa})
 
     def _render_result(self, request, context):
+        context.setdefault("contrato", self.contrato)
+        context.setdefault(
+            "importacoes",
+            ImportacaoCronograma.objects.filter(contrato=self.contrato)
+            .select_related("contrato", "importado_por")[:20],
+        )
         template = self.template_name
         if request.headers.get("HX-Request") == "true":
             template = "importacoes/_resultado_cronograma.html"
@@ -1447,7 +1473,9 @@ class ImportarCronogramaView(LoginRequiredMixin, UserPassesTestMixin, View):
             return redirect("importar_cronograma")
         try:
             previa = _previsao_cronograma_da_sessao(dados["previa"])
-            contrato = get_object_or_404(Contrato, pk=previa.contrato_id)
+            contrato = self.contrato
+            if previa.contrato_id != contrato.pk:
+                raise ErroAplicacaoCronograma("O contrato ativo mudou. Gere uma nova prévia.")
             perfil_modelo = get_object_or_404(
                 PerfilContrato,
                 pk=previa.perfil_id,
@@ -1476,19 +1504,15 @@ class ImportarCronogramaView(LoginRequiredMixin, UserPassesTestMixin, View):
         return redirect("importar_cronograma")
 
 
-class ImportarElaboracaoView(LoginRequiredMixin, UserPassesTestMixin, View):
+class ImportarElaboracaoView(ContratoAtivoImportacaoMixin, View):
     template_name = "importacoes/elaboracao.html"
-    raise_exception = True
-
-    def test_func(self):
-        return self.request.user.is_staff
 
     def get(self, request):
         request.session.pop(CHAVE_SESSAO_ELABORACAO, None)
         return render(
             request,
             self.template_name,
-            {"form": ImportarElaboracaoForm(initial={"contrato": request.GET.get("contrato", "")})},
+            {"form": ImportarElaboracaoForm(), "contrato": self.contrato},
         )
 
     def post(self, request):
@@ -1497,22 +1521,30 @@ class ImportarElaboracaoView(LoginRequiredMixin, UserPassesTestMixin, View):
 
         form = ImportarElaboracaoForm(request.POST, request.FILES)
         if not form.is_valid():
-            return render(request, self.template_name, {"form": form})
+            return render(request, self.template_name, {"form": form, "contrato": self.contrato})
         try:
             arquivo = form.cleaned_data["arquivo"]
             previa = gerar_previa_elaboracao(
                 arquivo,
-                form.cleaned_data["contrato"],
+                self.contrato,
                 nome_arquivo=arquivo.name,
             )
         except (ErroFormatoElaboracao, ValueError) as erro:
-            return render(request, self.template_name, {"form": form, "erro": str(erro)})
+            return render(
+                request,
+                self.template_name,
+                {"form": form, "contrato": self.contrato, "erro": str(erro)},
+            )
 
         request.session[CHAVE_SESSAO_ELABORACAO] = {
             "usuario_id": request.user.pk,
             "previa": serializar_previa(previa),
         }
-        return render(request, self.template_name, {"form": form, "previa": previa})
+        return render(
+            request,
+            self.template_name,
+            {"form": form, "contrato": self.contrato, "previa": previa},
+        )
 
     def _confirmar(self, request):
         dados = request.session.get(CHAVE_SESSAO_ELABORACAO)
@@ -1520,10 +1552,8 @@ class ImportarElaboracaoView(LoginRequiredMixin, UserPassesTestMixin, View):
             messages.error(request, "A prévia expirou. Envie a planilha novamente.")
             return redirect("importar_elaboracao")
         try:
-            contrato_id = int(dados["previa"]["contrato_id"])
-            contrato = get_object_or_404(Contrato, pk=contrato_id, ativo=True)
-            previa = previa_da_sessao(dados["previa"], contrato)
-            resultado = aplicar_previa_elaboracao(previa, contrato, request.user)
+            previa = previa_da_sessao(dados["previa"], self.contrato)
+            resultado = aplicar_previa_elaboracao(previa, self.contrato, request.user)
         except (ErroFormatoElaboracao, ValueError, KeyError, TypeError) as erro:
             messages.error(request, str(erro))
             return redirect("importar_elaboracao")
@@ -1542,8 +1572,6 @@ class ImportarElaboracaoView(LoginRequiredMixin, UserPassesTestMixin, View):
                 f"{len(resultado['conflitos'])} conflito(s) de empresa existente foram ignorados.",
             )
         return redirect("importar_elaboracao")
-
-
 def _serializar_previa_cronograma(previa):
     return {
         "contrato_id": previa.contrato_id,

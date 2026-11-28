@@ -8,6 +8,7 @@
     <span class="eyebrow">Importações</span>
     <h1>Importar situação por planilha padrão</h1>
     <p>Use o mesmo modelo para contratos sem PW ou para dados de outros GEDs. A prévia mostra as linhas que podem ser aplicadas.</p>
+    {% include "importacoes/_contrato_ativo.html" %}
   </div>
 </section>
 
@@ -17,7 +18,7 @@
 
 <section class="panel">
   <div class="panel-heading">
-    <div><h2>Arquivo e contrato</h2><p>O código é obrigatório. As outras colunas são opcionais.</p></div>
+    <div><h2>Arquivo</h2><p>O código é obrigatório. As outras colunas são opcionais.</p></div>
     <a class="button" href="{% url 'modelo_situacao_padrao' %}">Baixar modelo</a>
   </div>
   <form method="post" enctype="multipart/form-data" hx-post="{% url 'importar_situacao_padrao' %}" hx-target="#resultado-previa-padrao" hx-swap="innerHTML" hx-encoding="multipart/form-data">

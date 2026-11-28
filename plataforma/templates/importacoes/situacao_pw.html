@@ -8,6 +8,7 @@
     <span class="eyebrow">Importações</span>
     <h1>Importar situação do PW</h1>
     <p>A extração reconstrói emissões e análises. Estados inferidos pelo ciclo aparecem separados dos estados explícitos.</p>
+    {% include "importacoes/_contrato_ativo.html" %}
   </div>
 </section>
 
@@ -16,7 +17,7 @@
 {% endif %}
 
 <section class="panel">
-  <h2>Arquivo, contrato e data da extração</h2>
+  <h2>Arquivo e data da extração</h2>
   <form method="post" enctype="multipart/form-data" hx-post="{% url 'importar_situacao_pw' %}" hx-target="#resultado-previa-pw" hx-swap="innerHTML" hx-encoding="multipart/form-data">
     {% csrf_token %}
     <input type="hidden" name="acao" value="prever">

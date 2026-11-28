@@ -5,6 +5,7 @@ from django.urls import include, path
 
 from acoes.views import AtivarContratoView, HomeContratosView, InicioView
 from importacoes.views import (
+    ImportacoesView,
     ImportarCronogramaView,
     ImportarElaboracaoView,
     ImportarIDView,
@@ -30,6 +31,7 @@ urlpatterns = [
         name="logout",
     ),
     path("importacoes/id/", ImportarIDView.as_view(), name="importar_id"),
+    path("importacoes/", ImportacoesView.as_view(), name="importacoes_home"),
     path("importacoes/situacao-pw/", ImportarSituacaoPWView.as_view(), name="importar_situacao_pw"),
     path("importacoes/situacao-padrao/", ImportarSituacaoPadraoView.as_view(), name="importar_situacao_padrao"),
     path("importacoes/situacao-padrao/modelo/", BaixarModeloSituacaoPadraoView.as_view(), name="modelo_situacao_padrao"),

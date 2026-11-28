@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}Importações{% endblock %}
+
+{% block content %}
+<section class="page-heading">
+  <div>
+    <span class="eyebrow">Importações</span>
+    <h1>Importações</h1>
+    {% include "importacoes/_contrato_ativo.html" %}
+    <p>Escolha o arquivo que deseja carregar no contrato ativo.</p>
+  </div>
+</section>
+
+<section class="panel" aria-label="Tipos de importação">
+  <div class="cards">
+    <article class="summary-card">
+      <h2>Índice de Documentos (ID)</h2>
+      <p>Importe o ID para atualizar a relação de documentos previstos do contrato.</p>
+      <a class="button" href="{% url 'importar_id' %}">Importar ID</a>
+    </article>
+    <article class="summary-card">
+      <h2>Situação PW</h2>
+      <p>Carregue a extração do ProjectWise para registrar emissões e análises.</p>
+      <a class="button" href="{% url 'importar_situacao_pw' %}">Importar situação PW</a>
+    </article>
+    <article class="summary-card">
+      <h2>Situação por planilha padrão</h2>
+      <p>Atualize situações a partir de uma planilha padrão, inclusive de outros GEDs.</p>
+      <a class="button" href="{% url 'importar_situacao_padrao' %}">Importar planilha padrão</a>
+    </article>
+    <article class="summary-card">
+      <h2>Cronograma</h2>
+      <p>Atualize as datas previstas de emissão dos documentos do ID vigente.</p>
+      <a class="button" href="{% url 'importar_cronograma' %}">Importar cronograma</a>
+    </article>
+    <article class="summary-card">
+      <h2>Elaboração da Lista Mestra</h2>
+      <p>Vincule documentos à empresa responsável com base na planilha de elaboração.</p>
+      <a class="button" href="{% url 'importar_elaboracao' %}">Importar elaboração</a>
+    </article>
+  </div>
+  <p><a href="{% url 'historico_importacoes' contrato.pk %}">Histórico de importações</a></p>
+</section>
+{% endblock %}

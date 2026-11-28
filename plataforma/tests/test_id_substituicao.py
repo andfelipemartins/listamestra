@@ -15,6 +15,7 @@ from documentos.models import Documento, Emissao
 from importacoes.id_excel import FORMATOS_ID, gerar_previa_id
 from importacoes.models import IndiceDocumentos, ItemPrevisto
 from importacoes.services import aplicar_previa, previstos_vigentes, resumir_substituicao
+from tests.importacoes_helpers import ativar_contrato
 
 
 METRO = Path(__file__).resolve().parents[2] / "core" / "perfil" / "exemplos" / "metro.yaml"
@@ -184,6 +185,7 @@ def test_previa_e_confirmacao_mostram_substituicao_e_aviso_de_movimentacao(
         password="senha-segura",
     )
     client.force_login(administrador)
+    ativar_contrato(client, contrato)
     antigo = _importar(contrato, perfil_modelo, "ID-ANTIGO", ["1001", "1501"])
     documento = ItemPrevisto.objects.get(
         indice=antigo,
@@ -202,7 +204,6 @@ def test_previa_e_confirmacao_mostram_substituicao_e_aviso_de_movimentacao(
         reverse("importar_id"),
         {
             "acao": "prever",
-            "contrato": str(contrato.pk),
             "codigo_id": "ID-NOVO",
             "revisao": "1",
             "substituidos": [str(antigo.pk)],
@@ -227,7 +228,7 @@ def test_previa_e_confirmacao_mostram_substituicao_e_aviso_de_movimentacao(
     html_confirmacao = resposta_confirmacao.content.decode()
     assert "Aviso: código saiu do ID vigente e possui movimentação" in html_confirmacao
     assert documento.identificador_base in html_confirmacao
-    resposta_lista = client.get(reverse("importar_id"), {"contrato": str(contrato.pk)})
+    resposta_lista = client.get(reverse("importar_id"))
     html = resposta_lista.content.decode()
     assert "Histórico — substituído pelo ID-NOVO" in html
     assert "admin-tela-substituicao" in html
@@ -235,7 +236,7 @@ def test_previa_e_confirmacao_mostram_substituicao_e_aviso_de_movimentacao(
 
 @pytest.mark.django_db
 def test_permissao_da_substituicao_e_a_mesma_da_importacao_id(
-    client, django_user_model
+    client, contrato, django_user_model
 ):
     usuario = django_user_model.objects.create_user(
         username="participante-substituicao",
@@ -243,5 +244,6 @@ def test_permissao_da_substituicao_e_a_mesma_da_importacao_id(
         password="senha-segura",
     )
     client.force_login(usuario)
+    ativar_contrato(client, contrato)
 
     assert client.get(reverse("importar_id")).status_code == 403

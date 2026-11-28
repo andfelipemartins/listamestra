@@ -48,22 +48,17 @@
       <a class="nav-item {% if request.resolver_match.url_name == 'documentos_lista' or request.resolver_match.url_name == 'documento_pasta' %}active{% endif %}" href="{% url 'documentos_lista' %}"><span class="nav-icon">▤</span>Documentos</a>
       <a class="nav-item {% if request.resolver_match.url_name == 'lista_mestra' %}active{% endif %}" href="{% url 'lista_mestra' %}"><span class="nav-icon">▤</span>Lista Mestra</a>
       {% if user.is_staff %}<a class="nav-item {% if request.resolver_match.url_name == 'contratos_lista' or request.resolver_match.url_name == 'contrato_detalhe' %}active{% endif %}" href="{% url 'contratos_lista' %}"><span class="nav-icon">▣</span>Contratos</a>{% endif %}
-      {% if user.is_staff %}<a class="nav-item" href="{% url 'importar_id' %}"><span class="nav-icon">⇧</span>Importar ID</a>{% endif %}
-      {% if user.is_staff %}<a class="nav-item" href="{% url 'importar_situacao_pw' %}"><span class="nav-icon">⇧</span>Importar situação PW</a>{% endif %}
       {% if user.is_staff %}
-        <a class="nav-item {% if request.resolver_match.url_name == 'importar_situacao_padrao' %}active{% endif %}" href="{% url 'importar_situacao_padrao' %}"><span class="nav-icon">⇧</span>Atualizar situação (planilha)</a>
-      {% else %}
+        <a class="nav-item {% if request.resolver_match.url_name == 'importacoes_home' or request.resolver_match.url_name == 'importar_id' or request.resolver_match.url_name == 'importar_situacao_pw' or request.resolver_match.url_name == 'importar_situacao_padrao' or request.resolver_match.url_name == 'importar_cronograma' or request.resolver_match.url_name == 'importar_elaboracao' or request.resolver_match.url_name == 'historico_importacoes' %}active{% endif %}" href="{% url 'importacoes_home' %}"><span class="nav-icon">⇧</span>Importações</a>
+      {% elif contrato_atual %}
         {% for participacao in user.participacoes_contratuais.all %}
-          {% if participacao.ativo and participacao.contrato.ativo %}
+          {% if participacao.ativo and participacao.contrato_id == contrato_atual.pk %}
             {% if participacao.papel == "admin" or participacao.papel == "equipe" %}
-              {% if not request.GET.contrato or request.GET.contrato == participacao.contrato.pk|stringformat:"s" %}
-                {% ifchanged %}<a class="nav-item {% if request.resolver_match.url_name == 'importar_situacao_padrao' %}active{% endif %}" href="{% url 'importar_situacao_padrao' %}{% if request.GET.contrato %}?contrato={{ request.GET.contrato }}{% endif %}"><span class="nav-icon">⇧</span>Atualizar situação (planilha)</a>{% endifchanged %}
-              {% endif %}
+              {% ifchanged %}<a class="nav-item {% if request.resolver_match.url_name == 'importacoes_home' or request.resolver_match.url_name == 'importar_id' or request.resolver_match.url_name == 'importar_situacao_pw' or request.resolver_match.url_name == 'importar_situacao_padrao' or request.resolver_match.url_name == 'importar_cronograma' or request.resolver_match.url_name == 'importar_elaboracao' or request.resolver_match.url_name == 'historico_importacoes' %}active{% endif %}" href="{% url 'importacoes_home' %}"><span class="nav-icon">⇧</span>Importações</a>{% endifchanged %}
             {% endif %}
           {% endif %}
         {% endfor %}
       {% endif %}
-      {% if user.is_staff %}<a class="nav-item" href="{% url 'importar_cronograma' %}"><span class="nav-icon">⇧</span>Importar cronograma</a>{% endif %}
       <a class="nav-item {% if request.resolver_match.namespace == 'acoes' %}active{% endif %}" href="{% url 'acoes:pendencias' %}"><span class="nav-icon">◇</span>Pendências</a>
       <a class="nav-item {% if request.resolver_match.namespace == 'grds' %}active{% endif %}" href="{% url 'grds:lista' %}"><span class="nav-icon">▧</span>GRDs</a>
       {% if user.is_staff %}<a class="nav-item" href="{% url 'admin:index' %}"><span class="nav-icon">⚙</span>Admin</a>{% else %}<span class="nav-item disabled" aria-disabled="true"><span class="nav-icon">⚙</span>Admin</span>{% endif %}

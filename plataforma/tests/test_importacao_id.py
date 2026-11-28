@@ -23,6 +23,7 @@ from importacoes.id_excel import (
 )
 from importacoes.models import InconsistenciaImportacao, ImportacaoID, IndiceDocumentos, ItemPrevisto
 from importacoes.services import aplicar_previa, previstos_vigentes
+from tests.importacoes_helpers import ativar_contrato
 
 
 RAIZ_REPOSITORIO = Path(__file__).resolve().parents[2]
@@ -280,7 +281,7 @@ def test_importa_linhas_validas_e_registra_invalidas_sem_bloquear(contrato, perf
     assert inconsistencia.caixa_falhou == "sequencial"
     assert any(valor == previa.linhas[1].titulo for valor in inconsistencia.dados_linha.values())
     assert not any("Assinador" in nome for nome in inconsistencia.dados_linha)
-    assert "DADO PESSOAL SINTÃ‰TICO" not in str(inconsistencia.dados_linha)
+    assert "DADO PESSOAL SINTÉTICO" not in str(inconsistencia.dados_linha)
 
 
 @pytest.mark.django_db
@@ -305,6 +306,7 @@ def test_recusas_ficam_agrupadas_por_caixa_e_valor_e_exigem_acesso(contrato, per
         password="senha-segura",
     )
     client.force_login(administrador)
+    ativar_contrato(client, contrato)
 
     resposta = client.get(reverse("linhas_recusadas", args=(contrato.pk,)))
 
@@ -321,6 +323,7 @@ def test_recusas_ficam_agrupadas_por_caixa_e_valor_e_exigem_acesso(contrato, per
     participante = django_user_model.objects.create_user(username="participante", password="senha")
     Participacao.objects.create(usuario=participante, contrato=contrato, papel="equipe")
     client.force_login(participante)
+    ativar_contrato(client, contrato)
     url = reverse("linhas_recusadas", args=(contrato.pk,))
     resposta_participante = client.get(url)
     assert resposta_participante.status_code == 200
@@ -333,6 +336,7 @@ def test_recusas_ficam_agrupadas_por_caixa_e_valor_e_exigem_acesso(contrato, per
 
     sem_participacao = django_user_model.objects.create_user(username="sem-participacao", password="senha")
     client.force_login(sem_participacao)
+    ativar_contrato(client, contrato)
     assert client.get(url).status_code == 403
 
 
@@ -374,6 +378,7 @@ def test_codigo_recusado_abre_pasta_do_documento_existente_em_busca_em_lote(
         password="senha-segura",
     )
     client.force_login(admin)
+    ativar_contrato(client, contrato)
 
     with CaptureQueriesContext(connection) as consultas:
         resposta = client.get(reverse("linhas_recusadas", args=(contrato.pk,)))
@@ -479,6 +484,7 @@ def test_tela_previsualiza_e_confirma_reprocessamento(client, contrato, perfil_m
     )
     Participacao.objects.create(usuario=admin, contrato=contrato, papel="admin")
     client.force_login(admin)
+    ativar_contrato(client, contrato)
     url = reverse("linhas_recusadas", args=(contrato.pk,))
 
     previa_resposta = client.post(
@@ -522,6 +528,7 @@ def test_participante_sem_papel_admin_consulta_recusas_mas_nao_reprocessa(
         ativo=True,
     )
     client.force_login(participante)
+    ativar_contrato(client, contrato)
     url = reverse("linhas_recusadas", args=(contrato.pk,))
 
     resposta = client.get(url)
@@ -649,7 +656,8 @@ def test_tela_staff_mostra_previa_htmx_e_confirma_importacao(client, contrato, p
         password="senha-segura",
     )
     client.force_login(administrador)
-    formulario = client.get(reverse("importar_id"), {"contrato": str(contrato.pk)})
+    ativar_contrato(client, contrato)
+    formulario = client.get(reverse("importar_id"))
     assert formulario.status_code == 200
     assert b'name="fase"' in formulario.content
     assert b'name="escopos"' in formulario.content
@@ -663,7 +671,6 @@ def test_tela_staff_mostra_previa_htmx_e_confirma_importacao(client, contrato, p
         reverse("importar_id"),
         {
             "acao": "prever",
-            "contrato": str(contrato.pk),
             "codigo_id": "ID-TESTE",
             "revisao": "1",
             "fase": "Fase 1",
@@ -692,6 +699,70 @@ def test_tela_staff_mostra_previa_htmx_e_confirma_importacao(client, contrato, p
 
 
 @pytest.mark.django_db
+def test_reimportar_mesmo_codigo_torna_revisao_mais_nova_vigente_sem_substituicao(
+    client, contrato, perfil_modelo, django_user_model
+):
+    indice_antigo = aplicar_previa(
+        previa_para(
+            criar_excel_id([{"titulo": "Documento", "sequencial": "1001"}]),
+            contrato,
+            perfil_modelo,
+            codigo="ID-ATUALIZADO",
+            revisao="1",
+        ),
+        contrato=contrato,
+        perfil_modelo=perfil_modelo,
+    )
+    staff = django_user_model.objects.create_user(
+        username="staff-id-atualizado",
+        password="senha",
+        is_staff=True,
+    )
+    client.force_login(staff)
+    ativar_contrato(client, contrato)
+    tela = client.get(reverse("importar_id"))
+    assert b"Op\xc3\xa7\xc3\xb5es avan\xc3\xa7adas" in tela.content
+    assert b'name="contrato"' not in tela.content
+
+    arquivo = criar_excel_id([{"titulo": "Documento atualizado", "sequencial": "1001"}])
+    resposta_previa = client.post(
+        reverse("importar_id"),
+        {
+            "acao": "prever",
+            "codigo_id": "ID-ATUALIZADO",
+            "revisao": "2",
+            "arquivo": SimpleUploadedFile(
+                "ID-ATUALIZADO-revisao-2.xlsx",
+                arquivo.read(),
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ),
+        },
+    )
+
+    assert resposta_previa.status_code == 200
+    assert b"ID-ATUALIZADO" in resposta_previa.content
+    resposta_aplicacao = client.post(
+        reverse("importar_id"), {"acao": "confirmar"}, follow=True
+    )
+
+    indice_antigo.refresh_from_db()
+    indice_novo = IndiceDocumentos.objects.get(
+        contrato=contrato,
+        codigo="ID-ATUALIZADO",
+        revisao="2",
+    )
+    assert not indice_antigo.vigente
+    assert indice_antigo.substituido_por_id is None
+    assert indice_novo.vigente
+    assert IndiceDocumentos.objects.filter(
+        contrato=contrato,
+        codigo="ID-ATUALIZADO",
+        vigente=True,
+    ).count() == 1
+    assert "substitu\xc3\xa7\xc3\xa3o" not in resposta_aplicacao.content.decode().lower()
+
+
+@pytest.mark.django_db
 def test_novo_escopo_e_criado_ao_confirmar_e_reutilizado_sem_diferenciar_maiusculas(
     client, contrato, perfil_modelo, django_user_model
 ):
@@ -701,6 +772,7 @@ def test_novo_escopo_e_criado_ao_confirmar_e_reutilizado_sem_diferenciar_maiuscu
         password="senha-segura",
     )
     client.force_login(administrador)
+    ativar_contrato(client, contrato)
     url = reverse("importar_id")
 
     for codigo_id, novo_escopo in (("ID-NOVO-1", "Sistemas"), ("ID-NOVO-2", "sistemas")):
@@ -709,7 +781,6 @@ def test_novo_escopo_e_criado_ao_confirmar_e_reutilizado_sem_diferenciar_maiuscu
             url,
             {
                 "acao": "prever",
-                "contrato": str(contrato.pk),
                 "codigo_id": codigo_id,
                 "revisao": "1",
                 "novo_escopo": novo_escopo,
@@ -746,13 +817,13 @@ def test_importacao_recusa_escopo_de_outro_contrato(client, contrato, perfil_mod
         password="senha-segura",
     )
     client.force_login(administrador)
+    ativar_contrato(client, contrato)
     arquivo = criar_excel_id([{"titulo": "Documento", "sequencial": "1001"}])
 
     resposta = client.post(
         reverse("importar_id"),
         {
             "acao": "prever",
-            "contrato": str(contrato.pk),
             "codigo_id": "ID-ESCOPO-EXTERNO",
             "revisao": "1",
             "escopos": [str(escopo.pk)],

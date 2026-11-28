@@ -13,6 +13,7 @@ from contratos.models import Contrato, Participacao, PerfilContrato
 from documentos.models import Documento, Emissao, EmpresaElaboradora
 from importacoes.elaboracao import aplicar_previa_elaboracao, gerar_previa_elaboracao
 from registro.servicos import carregar_eventos
+from tests.importacoes_helpers import ativar_contrato
 
 
 PERFIL_METRO = Path(__file__).resolve().parents[2] / "core" / "perfil" / "exemplos" / "metro.yaml"
@@ -218,11 +219,11 @@ def test_tela_apresenta_previa_e_so_aplica_apos_confirmacao(tmp_path, client, co
         [[_codigo(11), "Projetos Alfa Fictícios"]],
     )
     client.force_login(usuario)
+    ativar_contrato(client, contrato)
 
     resposta_previa = client.post(
         reverse("importar_elaboracao"),
         {
-            "contrato": contrato.pk,
             "arquivo": SimpleUploadedFile(
                 "lista.xlsx",
                 caminho.read_bytes(),
@@ -257,11 +258,12 @@ def test_empresa_e_exibida_na_pasta_e_na_lista_mestra(
         origem=Emissao.Origem.CLIENTE,
     )
     client.force_login(usuario)
+    ativar_contrato(client, contrato)
 
     pasta = client.get(reverse("documento_pasta", args=(contrato.pk, documento.pk)))
     lista = client.get(reverse("lista_mestra"), {"contrato": contrato.pk})
-    tela_importacao = client.get(reverse("importar_elaboracao"), {"contrato": contrato.pk})
-    hub_importacoes = client.get(reverse("importar_id"))
+    tela_importacao = client.get(reverse("importar_elaboracao"))
+    hub_importacoes = client.get(reverse("importacoes_home"))
 
     assert pasta.status_code == 200
     assert "Elaborado por:" in pasta.content.decode()

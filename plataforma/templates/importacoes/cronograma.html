@@ -9,6 +9,7 @@
     <h1>Importar cronograma</h1>
     <p>Informe o código do documento e a data prevista. Revisão e versão são apenas referências e serão ignoradas.</p>
     <p>A emissão real será lida das emissões importadas do PW.</p>
+    {% include "importacoes/_contrato_ativo.html" %}
   </div>
 </section>
 
@@ -17,7 +18,7 @@
 {% endif %}
 
 <section class="panel">
-  <h2>Arquivo e contrato</h2>
+  <h2>Arquivo</h2>
   <form method="post" enctype="multipart/form-data" hx-post="{% url 'importar_cronograma' %}" hx-target="#resultado-previa-cronograma" hx-swap="innerHTML" hx-encoding="multipart/form-data">
     {% csrf_token %}
     <input type="hidden" name="acao" value="prever">

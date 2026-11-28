@@ -103,8 +103,7 @@ def test_minha_mesa_nao_mostra_contagens_de_id_com_comparacao_desligada(
 def test_menu_da_planilha_padrao_aparece_para_admin_e_editor_e_some_para_leitor(
     contrato, client, django_user_model
 ):
-    url_menu = reverse("importar_situacao_padrao")
-    url_com_contrato = f"{url_menu}?contrato={contrato.pk}"
+    url_menu = reverse("importacoes_home")
 
     for papel, nome in (
         (Usuario.Perfil.ADMIN, "b064-admin"),
@@ -115,8 +114,8 @@ def test_menu_da_planilha_padrao_aparece_para_admin_e_editor_e_some_para_leitor(
         client.force_login(usuario)
         resposta = client.get(reverse("inicio"), {"contrato": contrato.pk})
         html = resposta.content.decode("utf-8")
-        assert f'href="{url_com_contrato}"' in html
-        assert "Atualizar situação (planilha)" in html
+        assert f'href="{url_menu}"' in html
+        assert "Importações" in html
 
     leitor = django_user_model.objects.create_user(username="b064-leitor", password="senha")
     Participacao.objects.create(
@@ -129,8 +128,8 @@ def test_menu_da_planilha_padrao_aparece_para_admin_e_editor_e_some_para_leitor(
     resposta = client.get(reverse("inicio"), {"contrato": contrato.pk})
 
     html = resposta.content.decode("utf-8")
-    assert f'href="{url_com_contrato}"' not in html
-    assert "Atualizar situação (planilha)" not in html
+    assert f'href="{url_menu}"' not in html
+    assert "Importações" not in html
 
 
 @pytest.mark.django_db

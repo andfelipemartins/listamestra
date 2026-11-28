@@ -6,7 +6,8 @@
     <span class="eyebrow">Importações</span>
     <h1>Elaboração da Lista Mestra</h1>
     <p>A prévia localiza as colunas CÓDIGO e ELABORAÇÃO pelo cabeçalho e reúne as revisões por documento.</p>
-    <p><a href="{% url 'importar_id' %}">Voltar às importações</a></p>
+    {% include "importacoes/_contrato_ativo.html" %}
+    <p><a href="{% url 'importacoes_home' %}">Voltar às importações</a></p>
   </div>
 </section>
 
@@ -16,11 +17,10 @@
 {% if erro %}<p class="notice notice-error">{{ erro }}</p>{% endif %}
 
 <section class="panel">
-  <h2>Arquivo e contrato</h2>
+  <h2>Arquivo</h2>
   <form method="post" enctype="multipart/form-data">
     {% csrf_token %}
     {{ form.non_field_errors }}
-    <p>{{ form.contrato.label_tag }} {{ form.contrato }} {{ form.contrato.errors }}</p>
     <p>{{ form.arquivo.label_tag }} {{ form.arquivo }} {{ form.arquivo.errors }}</p>
     <button class="button button-primary" type="submit">Gerar prévia</button>
   </form>

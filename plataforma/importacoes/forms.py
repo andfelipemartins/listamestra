@@ -1,15 +1,11 @@
 from django import forms
 from django.utils import timezone
 
-from contratos.models import Contrato, EscopoContrato
+from contratos.models import EscopoContrato
 from .models import IndiceDocumentos
 
 
 class ImportarIDForm(forms.Form):
-    contrato = forms.ModelChoiceField(
-        label="Contrato",
-        queryset=Contrato.objects.filter(ativo=True).order_by("nome"),
-    )
     arquivo = forms.FileField(label="Arquivo Excel (.xlsx)")
     substituidos = forms.ModelMultipleChoiceField(
         label="Este ID substitui",
@@ -17,8 +13,8 @@ class ImportarIDForm(forms.Form):
         required=False,
         widget=forms.CheckboxSelectMultiple,
         help_text=(
-            "Opcional. Marque os IDs vigentes deste contrato que este Excel substitui; "
-            "eles permanecem no histórico e deixam de compor o previsto."
+            "Use somente quando este ID substituir outro código vigente (por exemplo, 1501 → 2000). "
+            "Uma nova importação do mesmo código atualiza o ID vigente automaticamente."
         ),
     )
     codigo_id = forms.CharField(label="Código do ID", max_length=250, required=False)
@@ -38,44 +34,39 @@ class ImportarIDForm(forms.Form):
         help_text="Se já existir neste contrato, será reutilizado.",
     )
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, contrato=None, **kwargs):
         super().__init__(*args, **kwargs)
-        contrato_id = None
-        if self.is_bound:
-            contrato_id = self.data.get(self.add_prefix("contrato"))
-        else:
-            contrato = self.initial.get("contrato")
-            contrato_id = getattr(contrato, "pk", contrato)
-        if contrato_id:
+        self.contrato = contrato
+        if contrato:
             self.fields["escopos"].queryset = EscopoContrato.objects.filter(
-                contrato_id=contrato_id
+                contrato=contrato
             ).order_by("nome")
             self.fields["substituidos"].queryset = IndiceDocumentos.objects.filter(
-                contrato_id=contrato_id,
+                contrato=contrato,
                 fonte=IndiceDocumentos.Fonte.EXCEL_ID,
                 vigente=True,
             ).order_by("codigo", "revisao")
 
     def clean_substituidos(self):
         indices = self.cleaned_data["substituidos"]
-        contrato = self.cleaned_data.get("contrato")
-        if contrato and any(
-            indice.contrato_id != contrato.pk
+        if self.contrato and any(
+            indice.contrato_id != self.contrato.pk
             or indice.fonte != IndiceDocumentos.Fonte.EXCEL_ID
             or not indice.vigente
             for indice in indices
         ):
             raise forms.ValidationError(
-                "Selecione apenas IDs vigentes de Excel do contrato escolhido."
+                "Selecione apenas IDs vigentes de Excel do contrato ativo."
             )
         return indices
 
     def clean_escopos(self):
         escopos = self.cleaned_data["escopos"]
-        contrato = self.cleaned_data.get("contrato")
-        if contrato and any(escopo.contrato_id != contrato.pk for escopo in escopos):
+        if self.contrato and any(
+            escopo.contrato_id != self.contrato.pk for escopo in escopos
+        ):
             raise forms.ValidationError(
-                "Selecione apenas escopos cadastrados para o contrato escolhido."
+                "Selecione apenas escopos cadastrados para o contrato ativo."
             )
         return escopos
 
@@ -90,10 +81,6 @@ class ImportarIDForm(forms.Form):
 
 
 class ImportarSituacaoPWForm(forms.Form):
-    contrato = forms.ModelChoiceField(
-        label="Contrato",
-        queryset=Contrato.objects.filter(ativo=True).order_by("nome"),
-    )
     arquivo = forms.FileField(label="Extração de situação do PW (.xlsx)")
     data_extracao = forms.DateField(
         label="Data da extração",
@@ -110,26 +97,7 @@ class ImportarSituacaoPWForm(forms.Form):
 
 
 class ImportarSituacaoPadraoForm(forms.Form):
-    contrato = forms.ModelChoiceField(
-        label="Contrato",
-        queryset=Contrato.objects.none(),
-    )
     arquivo = forms.FileField(label="Planilha de situação (.xlsx ou .csv)")
-
-    def __init__(self, *args, usuario=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        contratos = Contrato.objects.filter(ativo=True)
-        if usuario and not usuario.is_staff:
-            from contas.models import Usuario
-            from contratos.models import Participacao
-
-            ids = Participacao.objects.filter(
-                usuario=usuario,
-                ativo=True,
-                papel__in=(Usuario.Perfil.ADMIN, Usuario.Perfil.EQUIPE),
-            ).values_list("contrato_id", flat=True)
-            contratos = contratos.filter(pk__in=ids)
-        self.fields["contrato"].queryset = contratos.order_by("nome")
 
     def clean_arquivo(self):
         arquivo = self.cleaned_data["arquivo"]
@@ -139,10 +107,6 @@ class ImportarSituacaoPadraoForm(forms.Form):
 
 
 class ImportarCronogramaForm(forms.Form):
-    contrato = forms.ModelChoiceField(
-        label="Contrato",
-        queryset=Contrato.objects.filter(ativo=True).order_by("nome"),
-    )
     arquivo = forms.FileField(label="Cronograma (.xlsx ou .csv)")
 
     def clean_arquivo(self):
@@ -153,10 +117,6 @@ class ImportarCronogramaForm(forms.Form):
 
 
 class ImportarElaboracaoForm(forms.Form):
-    contrato = forms.ModelChoiceField(
-        label="Contrato",
-        queryset=Contrato.objects.filter(ativo=True).order_by("nome"),
-    )
     arquivo = forms.FileField(label="Lista Mestra (.xlsx ou .xlsm)")
 
     def clean_arquivo(self):

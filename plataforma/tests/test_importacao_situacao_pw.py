@@ -14,6 +14,7 @@ from documentos.models import Analise, Documento, Emissao
 from importacoes.models import ImportacaoSituacao, InconsistenciaImportacao, ItemPrevisto
 from importacoes.situacao_pw import aplicar_previa_situacao_pw, gerar_previa_situacao_pw
 from registro.servicos import carregar_eventos
+from tests.importacoes_helpers import ativar_contrato
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -305,6 +306,7 @@ def test_tela_staff_preve_e_confirma_importacao_pw(client, contrato, perfil_mode
         password="senha-segura",
     )
     client.force_login(administrador)
+    ativar_contrato(client, contrato)
     codigo = "DE-15.25.00.00-6A1-1008"
     arquivo = criar_excel_pw(
         [_linha(codigo, "1", 1, "Em Análise", "01/02/2025", "28/02/2025 - (1.1) Em Análise")]
@@ -319,7 +321,6 @@ def test_tela_staff_preve_e_confirma_importacao_pw(client, contrato, perfil_mode
         reverse("importar_situacao_pw"),
         {
             "acao": "prever",
-            "contrato": str(contrato.pk),
             "data_extracao": "2026-11-18",
             "arquivo": upload,
         },
@@ -399,6 +400,7 @@ def test_reprocessa_recusa_situacao_com_perfil_vigente_e_resolve(contrato, perfi
         password="senha-segura",
     )
     client.force_login(administrador)
+    ativar_contrato(client, contrato)
     url = reverse("linhas_recusadas", args=(contrato.pk,))
 
     resposta = client.post(url, {"importacao_situacao_id": importacao.pk})

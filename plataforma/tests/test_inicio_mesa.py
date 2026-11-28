@@ -244,7 +244,7 @@ def test_pagina_minha_mesa_renderiza_os_cards_do_layout(
         "Ações rápidas",
     ):
         assert titulo in html
-    assert "Importar situação PW" in html
+    assert "Importações" in html
     assert (
         f'href="{reverse("acoes:pendencias")}?contrato={contrato.pk}#janela-titulo-diferente-id">'
         "Título diferente do ID: 0</a>"

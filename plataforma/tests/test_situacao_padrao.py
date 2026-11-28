@@ -24,6 +24,7 @@ from importacoes.situacao_padrao import (
 )
 from importacoes.views import _dados_existentes_situacao_padrao
 from registro.servicos import carregar_eventos
+from tests.importacoes_helpers import ativar_contrato
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -341,11 +342,11 @@ def test_permissoes_deixam_admin_e_editor_importarem_e_bloqueiam_leitor(contrato
         Participacao.objects.create(usuario=usuario, contrato=contrato, papel=papel)
         client = Client()
         client.force_login(usuario)
+        ativar_contrato(client, contrato)
         resposta = client.post(
             url,
             {
                 "acao": "prever",
-                "contrato": str(contrato.pk),
                 "arquivo": SimpleUploadedFile(
                     f"lote{indice}.xlsx",
                     criar_excel([{"Código": codigo, "Situação": "Aprovado"}], ["Código", "Situação"]).getvalue(),
@@ -362,6 +363,7 @@ def test_permissoes_deixam_admin_e_editor_importarem_e_bloqueiam_leitor(contrato
     Participacao.objects.create(usuario=leitor, contrato=contrato, papel=Usuario.Perfil.CHEFIA)
     cliente_leitor = Client()
     cliente_leitor.force_login(leitor)
+    ativar_contrato(cliente_leitor, contrato)
     assert cliente_leitor.get(url).status_code == 403
     assert cliente_leitor.post(url, {"acao": "prever"}).status_code == 403
     assert cliente_leitor.get(reverse("modelo_situacao_padrao")).status_code == 403

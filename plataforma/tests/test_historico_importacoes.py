@@ -12,6 +12,7 @@ from importacoes.models import (
     ImportacaoSituacao,
     IndiceDocumentos,
 )
+from tests.importacoes_helpers import ativar_contrato
 
 
 @pytest.fixture
@@ -102,6 +103,7 @@ def test_lista_importacoes_do_contrato_em_ordem_e_distingue_situacoes(
     client, contrato, outro_contrato, participante
 ):
     client.force_login(participante)
+    ativar_contrato(client, contrato)
     momento_id = _momento(1, 9)
     momento_pw = _momento(2, 10)
     momento_planilha = _momento(3, 11)
@@ -166,6 +168,7 @@ def test_participante_de_outro_contrato_recebe_403(client, outro_contrato, djang
         ativo=True,
     )
     client.force_login(usuario)
+    ativar_contrato(client, contrato)
 
     resposta = client.get(reverse("historico_importacoes", args=(contrato.pk,)))
 
@@ -186,6 +189,7 @@ def test_staff_acessa_historico(client, contrato, django_user_model):
         is_staff=True,
     )
     client.force_login(staff)
+    ativar_contrato(client, contrato)
 
     resposta = client.get(reverse("historico_importacoes", args=(contrato.pk,)))
 
@@ -196,6 +200,7 @@ def test_link_de_recusadas_so_aparece_quando_importacao_tem_linhas_recusadas(
     client, contrato, participante
 ):
     client.force_login(participante)
+    ativar_contrato(client, contrato)
     _importacao_id(contrato, participante, "id-sem-recusa.xlsx", _momento(1, 9), validas=4)
     _importacao_situacao(
         contrato,
@@ -224,6 +229,7 @@ def test_contrato_sem_importacoes_mostra_mensagem_vazia_e_acentos(
     client, contrato, participante
 ):
     client.force_login(participante)
+    ativar_contrato(client, contrato)
 
     resposta = client.get(reverse("historico_importacoes", args=(contrato.pk,)))
 
@@ -236,6 +242,7 @@ def test_contrato_sem_importacoes_mostra_mensagem_vazia_e_acentos(
 
 def test_historico_e_somente_get(client, contrato, participante):
     client.force_login(participante)
+    ativar_contrato(client, contrato)
 
     resposta = client.post(reverse("historico_importacoes", args=(contrato.pk,)))
 
