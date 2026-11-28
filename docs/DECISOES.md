@@ -1641,3 +1641,24 @@ Aprovado, Não Conforme, Inconsistente, Erro de Assinatura, Cancelado, Revisão 
 - Depois se pode pensar em tela cheia ou um "slide" com esses dados.
 - Escolha do Claude, a confirmar: tirar o botão "Resumo executivo" e fazer a impressão do próprio Painel sair igual
   ao que se vê na tela.
+
+## D-151 · Painel lateral do documento: começar por Detalhes + Histórico
+
+*Origem: AY3 · 2026-11-28 · detalha a D-137*
+
+- Primeira fatia só de leitura: Detalhes (partes do código com o significado, código base, contrato) e Histórico.
+  Editar vem depois.
+- Assinantes e responsáveis técnicos do PW ficam fora: são verificação de dentro do PW e talvez nem sejam úteis aqui.
+  A Lista Mestra (a .xlsm da pasta de entrada) só tem o **responsável que elaborou** o documento (ex.: Tecnotrans,
+  Bernardes Engenharia, Roma Engenharia); seguir esse padrão por enquanto.
+
+## D-152 · Equipe por contrato; entrada em duas telas: escolher o contrato, depois o Início dele
+
+*Origem: AY4 · 2026-11-28 · confirma a D-130 · anexos: prints da home do PW (lista e grade)*
+
+- Confirmado: cada equipe pertence a um contrato; o gestor escolhe o contrato.
+- Como no PW: depois do login abre uma **primeira home** com os contratos ativos da pessoa (em lista ou em grade, com
+  cartões). Chefia vê vários; um controlador vê só o seu. Pode haver um agrupamento acima (ex.: "Gestão Linha 15" com
+  vários contratos), mas às vezes é um contrato só.
+- Ao clicar no contrato, o sistema passa a trabalhar só com os dados dele e abre a **segunda home**, o Início do
+  contrato (o que hoje é a Minha mesa). Isso combina com a D-147 (importar sem escolher contrato).
