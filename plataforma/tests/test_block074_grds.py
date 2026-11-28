@@ -181,7 +181,7 @@ def test_criacao_usa_numero_sequencial_por_contrato_e_ultima_emissao(
     assert primeira["grd"].numero == 1
     assert segunda["grd"].numero == 2
     assert terceira["grd"].numero == 1
-    assert primeira["grd"].rotulo() == "GRD-CT-GRD-0001"
+    assert primeira["grd"].rotulo() == "ÁLYA 001/2026"
     assert primeira["grd"].itens.get().emissao == ultima
 
 

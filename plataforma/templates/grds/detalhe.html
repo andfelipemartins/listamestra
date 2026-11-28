@@ -8,27 +8,47 @@
   .grd-dados dt { color: var(--text-secondary); font-size: 11px; }
   .grd-dados dd { margin: 5px 0 0; font-size: 13px; }
   .grd-observacao { white-space: pre-wrap; }
+  .grd-impressao-cabecalho { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(260px, 2fr); align-items: center; gap: 24px; margin-bottom: 18px; }
+  .grd-marca { display: flex; align-items: center; gap: 12px; }
+  .grd-marca img { max-width: 150px; max-height: 70px; object-fit: contain; }
+  .grd-marca strong { font-size: 18px; }
+  .grd-titulo-impressao { text-align: right; }
+  .grd-titulo-impressao h1 { margin: 0 0 6px; font-size: 22px; }
+  .grd-titulo-impressao strong { font-size: 18px; }
+  .grd-assinaturas { display: grid; grid-template-columns: 1fr 1fr; gap: 50px; margin-top: 54px; }
+  .grd-assinatura { padding-top: 40px; border-top: 1px solid #222; text-align: center; }
+  .grd-assinatura strong, .grd-assinatura span { display: block; }
+  .grd-assinatura span { margin-top: 8px; }
+  @page { size: A4 portrait; margin: 14mm; }
   @media print {
     .topbar, .sidebar, .grd-acoes, .no-print { display: none !important; }
-    .app-shell, .main-content { display: block !important; width: 100% !important; margin: 0 !important; padding: 0 !important; }
-    body { background: #fff !important; color: #111 !important; }
-    .panel { box-shadow: none !important; break-inside: avoid; }
+    .app-shell, .main-content { display: block !important; width: 100% !important; max-width: none !important; margin: 0 !important; padding: 0 !important; }
+    body { background: #fff !important; color: #111 !important; font-size: 10pt; }
+    .page-heading { margin: 0 0 14px !important; }
+    .panel { margin: 0 0 10px !important; padding: 12px !important; box-shadow: none !important; border: 1px solid #777 !important; break-inside: avoid; }
+    .table-wrap { overflow: visible !important; }
+    table { width: 100%; font-size: 8pt; }
+    th, td { padding: 5px !important; }
     a { color: inherit !important; text-decoration: none !important; }
   }
 </style>
 {% endblock %}
 {% block content %}
-<section class="page-heading grd-cabecalho">
+<section class="page-heading grd-cabecalho no-print">
   <div><span class="eyebrow">{{ contrato.codigo_interno }} · {{ contrato.nome }}</span><h1>{{ grd.rotulo }}</h1><p>Guia de remessa de documentos.</p></div>
-  <div class="grd-acoes no-print"><button class="button button-primary" type="button" onclick="window.print()">Imprimir</button><a class="button button-quiet" href="{{ url_lista }}">Voltar às GRDs</a></div>
+  <div class="grd-acoes"><button class="button button-primary" type="button" onclick="window.print()">Imprimir</button><a class="button button-quiet" href="{{ url_lista }}">Voltar às GRDs</a></div>
 </section>
 
-<section class="panel">
-  <div class="panel-heading"><div><h2>Dados da remessa</h2></div></div>
+<section class="panel grd-impressao">
+  <div class="grd-impressao-cabecalho">
+    <div class="grd-marca">
+      {% if logo_data_uri %}<img src="{{ logo_data_uri }}" alt="Logo {{ configuracao.nome_emitente }}">{% endif %}
+      <strong>{{ configuracao.nome_emitente }}</strong>
+    </div>
+    <div class="grd-titulo-impressao"><h1>{{ configuracao.titulo }}</h1><strong>{{ grd.rotulo }}</strong></div>
+  </div>
   <dl class="grd-dados">
-    <div><dt>Data</dt><dd>{{ grd.data|date:"d/m/Y" }}</dd></div>
-    <div><dt>Destinatário</dt><dd>{{ grd.destinatario }}</dd></div>
-    <div><dt>Criada por</dt><dd>{{ grd.criado_por.get_full_name|default:grd.criado_por.username|default:"Sistema" }}</dd></div>
+    {% for campo in campos_impressao %}<div><dt>{{ campo.rotulo }}</dt><dd>{{ campo.valor }}</dd></div>{% endfor %}
   </dl>
   {% if grd.observacao %}<p class="grd-observacao"><strong>Observação:</strong> {{ grd.observacao }}</p>{% endif %}
 </section>
@@ -36,17 +56,24 @@
 <section class="panel">
   <div class="panel-heading"><div><h2>Documentos enviados</h2><p>{{ itens|length }} item(ns)</p></div></div>
   <div class="table-wrap"><table>
-    <thead><tr><th>Código</th><th>Título</th><th>Revisão</th><th>Versão</th></tr></thead>
+    <thead><tr><th>Item</th><th>Documento técnico</th><th>Revisão</th><th>Versão</th><th>Descrição</th>{% for formato in formatos_copias %}<th>{{ formato }}</th>{% endfor %}</tr></thead>
     <tbody>
       {% for item in itens %}
       <tr>
+        <td>{{ forloop.counter }}</td>
         <td><a href="{% url 'documento_pasta' contrato.pk item.emissao.documento.pk %}"><strong>{{ item.emissao.documento.identificador_base }}</strong></a></td>
-        <td>{{ item.emissao.documento.titulo|default:"(sem título)" }}</td>
         <td>{{ item.emissao.revisao }}</td>
         <td>{{ item.emissao.versao|default_if_none:"—" }}</td>
+        <td>{{ item.emissao.documento.titulo|default:"(sem título)" }}</td>
+        {% for quantidade in item.copias_impressao %}<td>{{ quantidade }}</td>{% endfor %}
       </tr>
-      {% empty %}<tr><td colspan="4" class="painel-sem-dados">Esta GRD não tem itens.</td></tr>{% endfor %}
+      {% empty %}<tr><td colspan="5" class="painel-sem-dados">Esta GRD não tem itens.</td></tr>{% endfor %}
     </tbody>
   </table></div>
+</section>
+
+<section class="grd-assinaturas">
+  <div class="grd-assinatura"><strong>Recebido por</strong><span>Data: ____ / ____ / ______</span></div>
+  <div class="grd-assinatura"><strong>Emitido por</strong><span>{{ emitido_por_nome }}</span><span>Data: {{ grd.data|date:"d/m/Y" }}</span></div>
 </section>
 {% endblock %}

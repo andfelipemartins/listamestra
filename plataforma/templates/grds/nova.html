@@ -9,6 +9,11 @@
   .grd-codigos { min-height: 220px; font-family: ui-monospace, Consolas, monospace; }
   .grd-acoes { display: flex; flex-wrap: wrap; gap: 8px; }
   .grd-previa { margin-top: 18px; }
+  .grd-cabecalho-previa { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+  .grd-cabecalho-previa div { padding: 11px 12px; border: 1px solid var(--border); border-radius: 8px; }
+  .grd-cabecalho-previa dt { color: var(--text-secondary); font-size: 11px; }
+  .grd-cabecalho-previa dd { margin: 5px 0 0; font-size: 13px; }
+  .grd-copia { width: 62px !important; }
   @media (max-width: 620px) { .grd-form-grid { grid-template-columns: 1fr; } }
 </style>
 {% endblock %}
@@ -24,10 +29,17 @@
 {% if previa %}
 <section class="panel grd-previa">
   <div class="panel-heading"><div><h2>Prévia</h2><p>{{ previa.aceitos|length }} documento(s) aceito(s) · {{ previa.recusados|length }} recusado(s). A lista será conferida novamente ao confirmar.</p></div></div>
+  <h3>Cabeçalho da GRD</h3>
+  <dl class="grd-cabecalho-previa">
+    {% for campo in previa.cabecalho %}<div><dt>{{ campo.rotulo }}</dt><dd>{{ campo.valor|default:"—" }}</dd></div>{% endfor %}
+  </dl>
   <h3>Aceitos</h3>
   {% if previa.aceitos %}
-  <div class="table-wrap"><table><thead><tr><th>Código</th><th>Título</th><th>Revisão</th><th>Versão</th></tr></thead><tbody>
-    {% for item in previa.aceitos %}<tr><td>{{ item.codigo }}</td><td>{{ item.titulo }}</td><td>{{ item.revisao }}</td><td>{{ item.versao|default_if_none:"—" }}</td></tr>{% endfor %}
+  <div class="table-wrap"><table><thead><tr><th>Item</th><th>Documento técnico</th><th>Revisão</th><th>Versão</th><th>Descrição</th>{% for formato in previa.formatos_copias %}<th>{{ formato }}</th>{% endfor %}</tr></thead><tbody>
+    {% for item in previa.aceitos %}<tr>
+      <td>{{ forloop.counter }}</td><td>{{ item.codigo }}</td><td>{{ item.revisao }}</td><td>{{ item.versao|default_if_none:"—" }}</td><td>{{ item.titulo }}</td>
+      {% for copia in item.copias_form %}<td><input class="grd-copia" type="number" min="0" max="999" name="{{ copia.nome }}" value="{{ copia.valor }}" form="confirmar-grd" aria-label="{{ copia.formato }} para {{ item.codigo }}"></td>{% endfor %}
+    </tr>{% endfor %}
   </tbody></table></div>
   {% else %}<p class="painel-sem-dados">Nenhum documento foi aceito.</p>{% endif %}
   <h3>Recusados</h3>
@@ -36,13 +48,14 @@
     {% for item in previa.recusados %}<tr><td>{{ item.codigo }}</td><td>{{ item.motivo }}</td></tr>{% endfor %}
   </tbody></table></div>
   {% else %}<p class="painel-sem-dados">Nenhum código recusado.</p>{% endif %}
-  <form method="post" class="grd-acoes">
+  <form id="confirmar-grd" method="post" class="grd-acoes">
     {% csrf_token %}
     <input type="hidden" name="contrato" value="{{ form.contrato.value }}">
     <input type="hidden" name="data" value="{{ form.data.value }}">
     <input type="hidden" name="destinatario" value="{{ form.destinatario.value }}">
     <input type="hidden" name="observacao" value="{{ form.observacao.value }}">
     <textarea name="texto_codigos" hidden>{{ form.texto_codigos.value }}</textarea>
+    {% for campo in form.campos_digitados_render %}<input type="hidden" name="campo_{{ campo.pk }}" value="{{ campo.form.value|default_if_none:'' }}">{% endfor %}
     {% if previa.aceitos %}<button class="button button-primary" type="submit" name="etapa" value="confirmar">Confirmar GRD</button>{% endif %}
     <button class="button button-quiet" type="submit" name="etapa" value="editar">Voltar à edição</button>
   </form>
@@ -56,6 +69,9 @@
       <label>{{ form.data.label }}{{ form.data }}{{ form.data.errors }}</label>
       <label>{{ form.destinatario.label }}{{ form.destinatario }}{{ form.destinatario.errors }}</label>
       <label>{{ form.observacao.label }}{{ form.observacao }}{{ form.observacao.errors }}</label>
+      {% for campo in form.campos_digitados_render %}
+      <label>{{ campo.form.label }}{{ campo.form }}{{ campo.form.errors }}</label>
+      {% endfor %}
     </div>
     <label>{{ form.texto_codigos.label }}{{ form.texto_codigos }}{{ form.texto_codigos.errors }}<small>Linhas vazias e códigos repetidos são ignorados.</small></label>
     <div class="grd-acoes"><button class="button button-primary" type="submit" name="etapa" value="previa">Prévia</button></div>

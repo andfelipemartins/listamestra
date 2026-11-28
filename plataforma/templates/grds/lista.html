@@ -3,7 +3,7 @@
 {% block content %}
 <section class="page-heading">
   <div><span class="eyebrow">REMESSAS DOCUMENTAIS</span><h1>GRDs</h1><p>Consulte as guias de remessa do contrato selecionado.</p></div>
-  {% if contrato and pode_criar %}<a class="button button-primary" href="{% url 'grds:nova' %}?contrato={{ contrato.pk }}">Nova GRD</a>{% endif %}
+  {% if contrato %}<div class="grd-acoes no-print">{% if pode_configurar %}<a class="button button-quiet" href="{% url 'grds:configurar' %}">Configurar GRD</a>{% endif %}{% if pode_criar %}<a class="button button-primary" href="{% url 'grds:nova' %}?contrato={{ contrato.pk }}">Nova GRD</a>{% endif %}</div>{% endif %}
 </section>
 
 {% if not contrato %}

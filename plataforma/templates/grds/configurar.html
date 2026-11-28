@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Configurar GRD · {{ contrato.codigo_interno }}{% endblock %}
+{% block extra_head %}
+<style>
+  .grd-config-form { display: grid; gap: 18px; }
+  .grd-config-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .grd-config-form label { display: grid; gap: 6px; color: var(--text-secondary); font-size: 12px; }
+  .grd-config-form input, .grd-config-form select { max-width: 100%; }
+  .grd-config-form input[type="checkbox"] { width: auto; }
+  .grd-campo-config { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--border); }
+  .grd-campo-config .grd-segmentos { grid-column: 1 / -1; }
+  .grd-campo-config ul { display: flex; flex-wrap: wrap; gap: 12px; padding: 0; list-style: none; }
+  .grd-campo-config ul label { display: flex; align-items: center; gap: 5px; }
+  .grd-campo-config .delete-row { grid-column: 1 / -1; }
+  .grd-logo-atual { display: flex; align-items: center; gap: 12px; }
+  .grd-logo-atual img { max-width: 150px; max-height: 80px; object-fit: contain; }
+  @media (max-width: 700px) { .grd-config-grid, .grd-campo-config { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <div><span class="eyebrow">{{ contrato.codigo_interno }} · {{ contrato.nome }}</span><h1>Configurar GRD</h1><p>Defina a identificação impressa, os campos do cabeçalho e as colunas de cópias deste contrato.</p></div>
+  <a class="button button-quiet" href="{% url 'grds:lista' %}?contrato={{ contrato.pk }}">Voltar às GRDs</a>
+</section>
+
+{% if form.errors or formset.non_form_errors %}<div class="notice notice-error">Revise os campos indicados antes de continuar.</div>{% endif %}
+<section class="panel">
+  <form method="post" enctype="multipart/form-data" class="grd-config-form">
+    {% csrf_token %}
+    <section>
+      <div class="panel-heading"><div><h2>Identificação</h2><p>O número sequencial segue por contrato.</p></div></div>
+      {% if logo_data_uri %}<div class="grd-logo-atual"><img src="{{ logo_data_uri }}" alt="Logo atual"><span>Logo atual</span></div>{% endif %}
+      <div class="grd-config-grid">
+        <label>{{ form.logo.label }}{{ form.logo }}{{ form.logo.errors }}</label>
+        <label>{{ form.nome_emitente.label }}{{ form.nome_emitente }}{{ form.nome_emitente.errors }}</label>
+        <label>{{ form.titulo.label }}{{ form.titulo }}{{ form.titulo.errors }}</label>
+        <label>{{ form.formato_numero.label }}{{ form.formato_numero }}{{ form.formato_numero.errors }}<small>Campos disponíveis: {sigla}, {seq:03d} e {ano}.</small></label>
+      </div>
+    </section>
+    <section>
+      <div class="panel-heading"><div><h2>Campos do cabeçalho</h2><p>Campos automáticos de número, data e quantidade de documentos sempre aparecem.</p></div></div>
+      {{ formset.management_form }}
+      {% for erro in formset.non_form_errors %}<p class="field-error">{{ erro }}</p>{% endfor %}
+      {% for campo in formset.forms %}
+      <div class="grd-campo-config">
+        {{ campo.id }}
+        <label>{{ campo.chave.label }}{{ campo.chave }}{{ campo.chave.errors }}</label>
+        <label>{{ campo.rotulo.label }}{{ campo.rotulo }}{{ campo.rotulo.errors }}</label>
+        <label>{{ campo.fonte.label }}{{ campo.fonte }}{{ campo.fonte.errors }}</label>
+        <label>{{ campo.ordem.label }}{{ campo.ordem }}{{ campo.ordem.errors }}</label>
+        <label>{{ campo.habilitado }} Exibir campo{{ campo.habilitado.errors }}</label>
+        <label>{{ campo.valor_contrato.label }}{{ campo.valor_contrato }}{{ campo.valor_contrato.errors }}<small>Usado na fonte “Texto configurado”.</small></label>
+        <div class="grd-segmentos"><label>{{ campo.segmentos_codigo.label }}{{ campo.segmentos_codigo }}{{ campo.segmentos_codigo.errors }}</label></div>
+        {% if campo.DELETE %}<label class="delete-row">{{ campo.DELETE }} Remover este campo</label>{% endif %}
+        {% for erro in campo.non_field_errors %}<p class="field-error">{{ erro }}</p>{% endfor %}
+      </div>
+      {% endfor %}
+    </section>
+    <section>
+      <div class="panel-heading"><div><h2>Colunas de cópias</h2><p>Digital começa com 1 cópia por documento; as demais começam com 0.</p></div></div>
+      {{ form.formatos_copias }}{{ form.formatos_copias.errors }}
+    </section>
+    <div class="grd-acoes"><button class="button button-primary" type="submit">Salvar configuração</button><a class="button button-quiet" href="{% url 'grds:lista' %}?contrato={{ contrato.pk }}">Cancelar</a></div>
+  </form>
+</section>
+{% endblock %}
