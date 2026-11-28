@@ -1,239 +1,148 @@
 # Guia de uso da Plataforma
 
-Este guia descreve as telas presentes na Plataforma. O acesso depende do login, do indicador de usuário **staff** no Django e, nas áreas de contrato, de uma participação ativa.
+**Atualizado em 28/11/2026 · Blocks 074–095 (com foco nas telas dos blocks 081–095).**
 
-**Staff** é uma permissão da plataforma e não significa, por si só, “Administrador do contrato”. Os papéis disponíveis no contrato são **Administrador do contrato**, **Equipe técnica**, **Projetista externo** e **Chefia / coordenação**.
+Este guia acompanha a versão atual da Plataforma da Lista Mestra. É preciso entrar com uma conta ativa. Depois, selecione um contrato: as telas de operação usam o contrato ativo da sessão; se nenhum estiver selecionado, a Plataforma abre **Escolha um contrato**. O acesso a cada ação também depende do papel que você tem naquele contrato.
 
-## Entrar na Plataforma
+Os papéis do contrato são **Administrador do contrato**, **Equipe técnica**, **Projetista externo** e **Chefia / coordenação**. A permissão **staff** é da conta da Plataforma e não substitui o papel no contrato. Quando uma ação aparece só para alguns perfis, a tela pode ocultar o botão para as demais pessoas.
 
-**Título:** `Acesse sua conta`  
-**Para que serve:** autenticar e abrir o espaço de trabalho.  
-**Quem vê:** qualquer pessoa com usuário ativo; não há cadastro aberto nesta tela.  
-**O que dá para fazer:** informar usuário e senha e entrar.  
-**Como chegar:** abrir `/contas/login/` ou acessar uma página que exige login.
+## Entrar e escolher o contrato
 
-## Início — Minha mesa
+### Acessar e escolher um contrato
 
-**Menu:** `Início` · **título:** `Minha mesa`.  
-**Para que serve:** reunir pendências, prazos, análise do cliente, atividade recente e atalhos do contrato selecionado.  
-**Quem vê:** qualquer usuário autenticado. A lista considera as participações ativas; staff também pode consultar contratos sem participação.  
-**O que dá para fazer:** trocar o contrato quando houver mais de um, abrir documentos e pendências, ir a importações disponíveis e consultar links de backup quando exibidos. As áreas “Mensagens / Integrações” e “Ações rápidas” só oferecem as opções que estiverem habilitadas.  
-**Como chegar:** é a página aberta após o login; clique em `Início` no menu lateral para voltar.
+**Para que serve:** entrar na Plataforma e definir qual contrato será usado nas telas de trabalho.  
+**Como chegar:** abra a tela **Acesse sua conta**, informe usuário e senha; após entrar, selecione um cartão em **Escolha um contrato**. Use **Grade** ou **Lista** para mudar a apresentação. Para trocar depois, use **Trocar contrato** na barra superior.  
+**O que dá para fazer:** ver o código, o nome, o cliente, seu papel e a quantidade de documentos; clicar em **Abrir contrato →** para ativar o contrato escolhido.  
+**Quem pode:** qualquer usuário ativo com participação ativa em pelo menos um contrato. Staff também pode selecionar contratos disponíveis para sua conta.  
+**Cuidado comum:** quem participa de um contrato só entra direto na **Minha mesa** dele, sem passar por esta tela. Se nenhum contrato aparecer, peça à administração para cadastrar sua participação e ativá-la.
 
-A antecedência do aviso “Vence em N dias” vem do perfil do contrato e, por padrão, é de 3 dias.
+## Minha mesa
 
-## Painel
+### Início — Minha mesa
 
-**Menu e título:** `Painel · [código interno]` e `Painel · [código interno]`.  
-**Para que serve:** mostrar o avanço do contrato conforme o perfil vigente, com situações, recortes e indicadores configurados.  
-**Quem vê:** participantes ativos do contrato entram autenticados. Quem não participa pode acessar a versão de acompanhamento com o PIN configurado para o contrato; o PIN também permite acesso sem login.  
-**O que dá para fazer:** filtrar e agrupar os dados, abrir `Resumo executivo`, consultar `Fotos` e, para staff ou Administrador do contrato, ver o atalho para `Linhas recusadas` quando houver linhas abertas. `Guardar foto de hoje` aparece para staff ou Administrador do contrato.  
-**Como chegar:** clique no painel do contrato na área de contratos da `Minha mesa` ou no menu lateral.
+**Para que serve:** reunir, para o contrato ativo, tarefas, prazos, pendências, análise do cliente e atividade recente.  
+**Como chegar:** clique em **Início** no menu lateral; é também a página de entrada depois do login.  
+**O que dá para fazer:** acompanhar os cartões e listas, abrir documentos e pendências, ver tarefas atribuídas a você e seguir os atalhos disponíveis para importações e atividade.  
+**Quem pode:** usuários autenticados com contrato ativo e participação nele; staff pode consultar contratos conforme seu acesso.  
+**Cuidado comum:** confira o contrato indicado na barra superior antes de agir. A mesa mostra dados do contrato selecionado.
 
-## Pendências e ações
+## Pendências e Tarefas
 
 ### Pendências
 
-**Menu e título:** `Pendências` · `Pendências`.  
-**Para que serve:** centralizar itens que pedem acompanhamento, como erros, prazos, cronograma e linhas recusadas.  
-**Quem vê:** staff e usuários com participação ativa no contrato; os dados seguem o contrato selecionado.  
-**O que dá para fazer:** abrir os detalhes de cada grupo e do documento relacionado. Para itens que oferecem ação, registrar `Ignorar`, `Pedir correção ao cliente` ou `Já corrigi`; uma pendência ignorada pode ser reativada. Algumas opções dependem do tipo de item e do acesso.  
-**Como chegar:** menu lateral `Pendências`, ou pelos atalhos e cartões na `Minha mesa`.
+**Para que serve:** acompanhar, por janelas, prazos, erros, emissões, diferenças de título e outros itens que pedem tratamento.  
+**Como chegar:** menu lateral **Pendências**; use o índice de janelas no alto da tela para pular para uma categoria, ou clique em **Ver todos** na janela.  
+**O que dá para fazer:** abrir os itens e documentos relacionados; registrar ações como **Ignorar**, **Pedir correção ao cliente**, **Já corrigi**, usar o título do ID quando oferecido e reativar itens ignorados em **Ver todos › ignorados**. Os botões variam conforme a categoria.  
+**Quem pode:** usuários autenticados com acesso ao contrato ativo. A edição do título e algumas ações de tratamento são limitadas ao staff ou ao **Administrador do contrato**.  
+**Cuidado comum:** antes de ignorar uma pendência, confira o documento, o motivo e o ID vigente mostrado na tela.
 
-O grupo `Título diferente do ID` mostra o título atual do documento e o título do índice vigente. Quem pode editar títulos pode usar o título do ID; `Manter o atual` registra um motivo e oculta a pendência até que ela seja reativada.
+### Tarefas
 
-### Pendências abertas
+**Para que serve:** organizar responsáveis, prazos e acompanhamentos ligados a documentos do contrato.  
+**Como chegar:** menu lateral **Tarefas**; clique em **Nova tarefa** para criar ou em uma tarefa para abrir seus detalhes.  
+**O que dá para fazer:** consultar as abas **Minhas**, **Da equipe** (quando disponível) e **Criadas por mim**; filtrar por **Status** e **Prazo** com **Filtrar**; abrir o documento relacionado; criar, editar, concluir ou cancelar tarefas conforme as permissões exibidas.  
+**Quem pode:** participantes ativos podem consultar suas tarefas e criar tarefas dentro das regras do contrato. O **Administrador do contrato** gerencia tarefas e responsáveis do contrato; gestores de equipe podem atuar nas equipes que gerenciam. A aba **Da equipe** aparece apenas para quem pode ver uma equipe.  
+**Cuidado comum:** o selo **Parece feita** indica que surgiu uma emissão depois da tarefa; ainda é necessário concluir a tarefa para fechá-la.
 
-**Título:** `Pendências abertas`.  
-**Para que serve:** consultar os itens que ainda estão em aberto e agrupá-los por categoria.  
-**Quem vê:** staff e participantes ativos do contrato.  
-**O que dá para fazer:** abrir cada categoria para ver os documentos e pendências correspondentes.  
-**Como chegar:** em `Pendências`, use `Ver todos` no grupo desejado.
+## Lista Mestra e documento
 
-### Atrasados
+### Lista Mestra
 
-**Título:** `Atrasados`.  
-**Para que serve:** acompanhar prazos vencidos de análise e de revisões.  
-**Quem vê:** staff e participantes ativos do contrato.  
-**O que dá para fazer:** abrir os documentos listados e conferir vencimento, situação e tempo de atraso.  
-**Como chegar:** abra o grupo `Atraso por faixa` na `Minha mesa` ou a opção `Atrasados` em Pendências.
+**Para que serve:** consultar as emissões em uma tabela, com colunas de distribuição por setor quando configuradas.  
+**Como chegar:** menu lateral **Lista Mestra**.  
+**O que dá para fazer:** buscar por código ou título, filtrar por tipo, disciplina, fase e situação quando disponíveis, exibir documentos cancelados e abrir o painel lateral clicando no código. No painel, consulte **Detalhes** e **Histórico**; use **Abrir pasta completa** para ver a página do documento. Se tiver acesso, clique em **Colunas** para escolher e ordenar as colunas visíveis.  
+**Quem pode:** usuários autenticados com participação ativa no contrato. A configuração de colunas é oferecida ao staff e ao **Administrador do contrato**.  
+**Cuidado comum:** a tabela pode ser larga; role horizontalmente para conferir os setores e demais colunas. O painel lateral não substitui a pasta completa.
 
-### Pendências ignoradas
+### Documento: painel lateral e pasta completa
 
-**Título:** `Pendências ignoradas`.  
-**Para que serve:** rever itens que foram ignorados.  
-**Quem vê:** staff e participantes ativos do contrato.  
-**O que dá para fazer:** consultar o motivo e usar `Reativar pendência` para voltar a acompanhar um item.  
-**Como chegar:** em `Pendências`, clique em `Ver todos › ignorados`.
-
-## Documentos
-
-**Menu e título:** `Documentos` · `Documentos`.  
-**Para que serve:** localizar documentos do contrato e acompanhar sua situação vigente.  
-**Quem vê:** staff e participantes ativos do contrato, qualquer que seja o papel; alterações restritas são liberadas conforme o papel.  
-**O que dá para fazer:** buscar por código ou título, filtrar por categoria ou situação e abrir a pasta do documento. Staff e Administrador do contrato podem cancelar ou reativar documentos quando a ação estiver disponível.  
-**Como chegar:** menu lateral `Documentos`; clique no código de uma linha para abrir a pasta.
-
-### Pasta do documento
-
-**Título:** o código do documento. A página tem as seções `Partes do código`, `Linha do tempo das emissões` e `Ações e Atividade`.  
-**Para que serve:** reunir dados do documento, emissões, análises e histórico de ações.  
-**Quem vê:** staff e participantes ativos do contrato.  
-**O que dá para fazer:** consultar as partes do código e a linha do tempo; abrir `Editar título`; registrar motivo da reabertura quando permitido; e, para staff ou Administrador do contrato, cancelar ou reativar o documento quando aplicável.  
-**Como chegar:** clique no código em `Documentos`, `Lista Mestra`, `Pendências` ou em uma linha de atividade.
-
-### Editar título
-
-**Título:** `Editar título · [código interno]` · cabeçalho `Editar título`.  
-**Para que serve:** corrigir o título cadastrado do documento.  
-**Quem vê:** staff ou Administrador do contrato.  
-**O que dá para fazer:** informar o novo título e o motivo da alteração e salvar.  
-**Como chegar:** na pasta do documento, clique em `Editar título`.
-
-## Lista Mestra
-
-**Menu e título:** `Lista Mestra` · `Lista Mestra`.  
-**Para que serve:** consultar as emissões dos documentos em uma tabela.  
-**Quem vê:** staff e participantes ativos do contrato.  
-**O que dá para fazer:** buscar código ou título; filtrar por tipo, disciplina, fase e situação; exibir documentos cancelados; e abrir a pasta pelo código. A tabela mostra revisão, versão, datas, rótulo cronológico e situação da análise, conforme os dados disponíveis.  
-**Como chegar:** menu lateral `Lista Mestra`.
-
-## Contratos
-
-### Lista de contratos
-
-**Menu e título:** `Contratos` · `Contratos`.  
-**Para que serve:** consultar os contratos cadastrados e seus perfis vigentes, participações e indicadores gerais.  
-**Quem vê:** staff.  
-**O que dá para fazer:** abrir o painel, a Lista Mestra ou os detalhes do contrato; usar `Editar no admin` para abrir o cadastro administrativo.  
-**Como chegar:** menu lateral `Contratos`.
-
-### Detalhe do contrato
-
-**Título:** `[nome do contrato] · Contratos` · seção `Participantes`.  
-**Para que serve:** ver o estado do contrato e as participações ativas por usuário e papel.  
-**Quem vê:** staff.  
-**O que dá para fazer:** consultar participantes e seguir para `Editar no admin`.  
-**Como chegar:** clique em um contrato na lista `Contratos`.
+**Para que serve:** consultar os dados, escopo, situação, emissões e histórico de um documento.  
+**Como chegar:** clique em um código na **Lista Mestra** ou em um documento em **Documentos**, **Pendências**, **Tarefas** ou **Atividade**; no painel lateral, use **Abrir pasta completa**.  
+**O que dá para fazer:** no painel lateral, alternar **Detalhes** e **Histórico**; na pasta completa, acompanhar a linha do tempo, GRDs e ações disponíveis. Pode haver opção **Editar título** ou ação de cancelamento/reativação conforme o acesso.  
+**Quem pode:** participantes ativos e staff podem consultar. Alterar o título ou cancelar/reativar documento requer staff ou **Administrador do contrato**, quando a opção estiver disponível.  
+**Cuidado comum:** a pasta completa mostra o histórico mais amplo; use-a para conferir a revisão e a GRD antes de confirmar uma informação.
 
 ## Importações
 
-### Importar ID
+### Importações
 
-**Menu:** `Importar ID` · **título:** `Importar Índice de Documentos`.  
-**Para que serve:** cadastrar ou atualizar o índice previsto para um contrato. O formato é identificado pelos cabeçalhos e os códigos são interpretados pelo perfil vigente.  
-**Quem vê:** staff.  
-**O que dá para fazer:** selecionar arquivo e contrato, escolher os campos disponíveis, gerar uma prévia e confirmar a aplicação. A página também mostra índices recentes e links para linhas recusadas.  
-**Como chegar:** menu lateral `Importar ID`.
+**Para que serve:** carregar arquivos de referência e atualização no contrato ativo.  
+**Como chegar:** menu lateral **Importações**; escolha uma opção pelos botões **Importar ID**, **Importar situação PW**, **Importar planilha padrão**, **Importar cronograma** ou **Importar elaboração**. Para voltar, use **Voltar às importações** quando aparecer.  
+**O que dá para fazer:** gerar uma prévia, conferir os documentos, vínculos, linhas aceitas e recusadas e então aplicar a importação. **Histórico de importações** abre os lotes já processados; linhas recusadas podem ser abertas pelo aviso ou pelos links da área.  
+**Quem pode:** staff e **Administrador do contrato** ou **Equipe técnica**, conforme o tipo de importação. A opção de situação por planilha padrão é permitida também a esses dois papéis; outras importações seguem as permissões específicas da tela.  
+**Cuidado comum:** confira o contrato ativo e a prévia antes de aplicar. Na **Elaboração da Lista Mestra**, revise especialmente os códigos, empresas e conflitos apresentados.
 
-### Importar situação PW
+### Elaboração da Lista Mestra
 
-**Menu:** `Importar situação PW` · **título:** `Importar situação do PW`.  
-**Para que serve:** importar uma extração de situação para reconstruir emissões e análises.  
-**Quem vê:** staff.  
-**O que dá para fazer:** selecionar o arquivo, contrato e data da extração; gerar uma prévia; conferir os estados explícitos e inferidos; confirmar; e consultar importações recentes.  
-**Como chegar:** menu lateral `Importar situação PW` ou o atalho de importação na `Minha mesa`.
-
-### Atualizar situação (planilha)
-
-**Menu:** `Atualizar situação (planilha)` · **título:** `Importar situação por planilha padrão`.  
-**Para que serve:** aplicar situação documental por uma planilha padrão, inclusive para fontes sem PW.  
-**Quem vê:** staff ou participantes ativos com papel de Administrador do contrato ou Equipe técnica.  
-**O que dá para fazer:** baixar o modelo, selecionar arquivo e contrato, gerar uma prévia e confirmar a aplicação; a página lista planilhas aplicadas recentemente.  
-**Como chegar:** menu lateral quando permitido ou pelo link `Importar situação por planilha padrão` na tela `Importar Índice de Documentos`.
-
-### Importar cronograma
-
-**Menu e título:** `Importar cronograma` · `Importar cronograma`.  
-**Para que serve:** registrar previsões de emissão dos documentos.  
-**Quem vê:** staff.  
-**O que dá para fazer:** selecionar arquivo e contrato, gerar prévia, conferir linhas aceitas ou recusadas e confirmar; também consultar importações recentes.  
-**Como chegar:** menu lateral `Importar cronograma`.
-
-### Linhas recusadas
-
-**Título:** `Linhas recusadas`.  
-**Para que serve:** consultar linhas de ID ou situação que não foram aplicadas.  
-**Quem vê:** staff e qualquer participante ativo do contrato. Apenas staff ou Administrador do contrato pode reprocessar linhas.  
-**O que dá para fazer:** consultar código e motivo; gerar uma prévia de reprocessamento pelo perfil vigente; confirmar; e conferir quais linhas foram aceitas ou continuam recusadas.  
-**Como chegar:** pelo aviso no `Painel`, pelo link na tela de importação de ID ou por um evento em `Atividade`.
-
-### Histórico de importações
-
-**Para que serve:** consultar os lotes de ID, situação do PW ou por planilha padrão e cronograma já aplicados ao contrato, com data, responsável, arquivo e resumo.
-**Quem vê:** staff e qualquer participante ativo do contrato; a tela é somente para consulta. Acesse pelo link nas telas de importação ou em `Linhas recusadas`.
-
-## Atividade
-
-**Menu e título:** `Atividade` · `Atividade`.  
-**Para que serve:** consultar eventos registrados no contrato.  
-**Quem vê:** staff ou Administrador do contrato ativo.  
-**O que dá para fazer:** filtrar por contrato, pessoa, ação, período ou código; baixar os eventos filtrados em `Baixar planilha (CSV)`; abrir detalhes do evento; seguir para o documento ou para as linhas recusadas; e navegar pelas páginas de resultados.  
-**Como chegar:** menu lateral `Atividade` quando o acesso está disponível; na `Minha mesa`, use `Ver toda a atividade` se o link aparecer.
-
-## Resumo executivo
-
-**Título:** `Resumo executivo · [código interno]`.  
-**Para que serve:** apresentar pendências e avanço do contrato em formato compacto.  
-**Quem vê:** usuário autenticado com participação ativa no contrato. O PIN público do Painel não libera esta tela.  
-**O que dá para fazer:** consultar a lista de pendências e os recortes de avanço e usar `Imprimir / salvar PDF`.  
-**Como chegar:** no `Painel` do contrato, clique em `Resumo executivo`.
-
-## Fotos do contrato
-
-**Menu/título da tela:** não há item lateral; a tela tem o cabeçalho `Fotos do contrato`.  
-**Para que serve:** consultar fotos de acompanhamento guardadas para o contrato.  
-**Quem vê:** usuário autenticado com participação ativa no contrato.  
-**O que dá para fazer:** consultar data e autor da foto; staff ou Administrador do contrato também pode usar `Guardar foto de hoje` no Painel.  
-**Como chegar:** no `Painel`, clique em `Fotos`; use `Voltar ao Painel` para retornar.
-
-## Backups do sistema
-
-**Título:** `Backups do sistema`. Não há item de backup no menu lateral.  
-**Para que serve:** consultar cópias de segurança do banco SQLite e os registros de sucesso ou falha.  
-**Quem vê:** staff e superusuário. Preparar uma restauração é reservado ao superusuário.  
-**O que dá para fazer:** consultar data, arquivo, tamanho e registro; staff com acesso de superusuário pode preparar uma restauração, conferir a confirmação de data e receber o comando a executar. A restauração não é acionada diretamente pela tela.  
-**Como chegar:** use `Ver backups` ou `Ver histórico de backups` na `Minha mesa` quando o link for exibido. O endereço da lista é `/backups/`.
-
-## Admin — perfil do contrato
-
-**Menu:** `Admin` · no Django Admin, o cadastro aparece como `Perfil do contrato`.  
-**Para que serve:** configurar como o sistema interpreta e organiza os documentos daquele contrato: caixas e separadores do código, valores válidos, regras documentais e vigência do perfil.  
-**Quem vê:** staff com as permissões correspondentes do Django Admin. A administração do perfil é uma tarefa de configuração; papel de contrato, isoladamente, não concede acesso ao Admin.  
-**O que dá para fazer:** criar ou editar a versão do perfil; consultar `Caixas do código`, `Separadores` e `Exemplo de código`; usar `Testar códigos` e abrir `Feriados`. O cadastro de Contrato também reúne perfis e escopos; as participações ligam usuários a contratos e papéis.  
-**Como chegar:** clique em `Admin` no menu lateral. Para um contrato específico, abra `Contratos` → `Editar no admin`; no cadastro do contrato, abra ou adicione o `Perfil do contrato` associado.
+**Para que serve:** vincular documentos à empresa responsável usando a planilha de elaboração.  
+**Como chegar:** **Importações** → **Importar elaboração**. A página tem o título **Elaboração da Lista Mestra**.  
+**O que dá para fazer:** selecionar o arquivo, clicar em **Gerar prévia**, conferir vínculos, empresas novas, códigos inexistentes e conflitos; depois, usar **Aplicar vínculos da prévia**.  
+**Quem pode:** staff e participantes com papel **Administrador do contrato** ou **Equipe técnica**, conforme a permissão de importação do contrato.  
+**Cuidado comum:** conflitos entre empresas para o mesmo código ou entre a planilha e um vínculo existente devem ser revisados antes de aplicar.
 
 ## GRDs
 
-### Lista de GRDs
+### GRDs
 
-**Menu e título:** `GRDs` · `GRDs`.  
-**Para que serve:** consultar as guias de remessa registradas para o contrato selecionado.  
-**Quem vê:** staff e participantes ativos do contrato.  
-**O que dá para fazer:** consultar data, destinatário e quantidade de documentos; abrir uma GRD; e, para staff, Administrador do contrato ou Equipe técnica, iniciar uma nova remessa.  
-**Como chegar:** menu lateral `GRDs`.
+**Para que serve:** registrar e consultar guias de remessa de documentos, com setores e colunas de cópias configuráveis.  
+**Como chegar:** menu lateral **GRDs**; para iniciar, clique em **Nova GRD**; para ajustar o modelo do contrato, clique em **Configurar GRD**.  
+**O que dá para fazer:** consultar as guias mais recentes, abrir uma guia, iniciar uma remessa com data, setor de destino, destinatário e códigos, revisar a prévia e clicar em **Confirmar GRD**. Na guia, **Imprimir** abre a impressão do navegador, que também pode salvar em PDF.  
+**Quem pode:** participantes ativos podem consultar. Staff, **Administrador do contrato** e **Equipe técnica** podem criar GRDs. Configurar a GRD cabe ao staff ou ao **Administrador do contrato**.  
+**Cuidado comum:** a GRD usa seu nome completo como responsável. Preencha seus dados em **Meu perfil** antes de emitir. Confira também os códigos aceitos e recusados na prévia.
 
-### Nova GRD
+### Configurar GRD
 
-**Título:** `Nova GRD`.  
-**Para que serve:** registrar no sistema uma remessa de documentos do contrato.  
-**Quem vê:** staff, Administrador do contrato ou Equipe técnica com participação ativa no contrato.  
-**O que dá para fazer:** informar data, destinatário e observação; colar um código por linha; conferir os documentos aceitos e recusados na `Prévia`; e confirmar a criação. Cada código aceito inclui a última emissão do documento.  
-**Como chegar:** em `GRDs`, clique em `Nova GRD`.
+**Para que serve:** definir a aparência e os campos usados nas GRDs e setores de distribuição do contrato.  
+**Como chegar:** **GRDs** → **Configurar GRD**.  
+**O que dá para fazer:** informar logo, nome do emitente e título, ajustar o formato do número, definir setores, escolher campos do cabeçalho e configurar colunas e quantidades de cópias; salvar em **Salvar configuração**.  
+**Quem pode:** staff ou **Administrador do contrato**.  
+**Cuidado comum:** os setores configurados também aparecem como colunas de distribuição na Lista Mestra. Combine os nomes com a equipe antes de alterá-los.
 
-### Detalhe da GRD
+## Painel
 
-**Título:** `[rótulo da GRD]`.  
-**Para que serve:** consultar e imprimir os dados e documentos incluídos na remessa.  
-**Quem vê:** staff e participantes ativos do contrato.  
-**O que dá para fazer:** consultar rótulo, data, destinatário, observação, autor e itens; abrir a pasta de um documento; e usar `Imprimir` para imprimir ou salvar em PDF pelo navegador.  
-**Como chegar:** clique no rótulo de uma GRD na lista ou em um link de GRD na linha do tempo da pasta do documento.
+### Painel do contrato
 
-## Primeiros passos
+**Para que serve:** acompanhar o avanço e a distribuição dos documentos previstos, com filtros e recortes do contrato.  
+**Como chegar:** clique em **Painel · [código interno]** no menu lateral ou em **Painel** nos atalhos do contrato.  
+**O que dá para fazer:** consultar os cartões e gráficos, usar **Filtros**, agrupar barras, abrir alertas de linhas recusadas quando houver e clicar em **Imprimir** para imprimir ou salvar o painel. **Fotos** e **Guardar foto de hoje** aparecem conforme o acesso.  
+**Quem pode:** participantes ativos do contrato podem abrir o painel; o acesso público por PIN, quando habilitado, é limitado ao painel. Guardar foto fica disponível ao staff e ao **Administrador do contrato**.  
+**Cuidado comum:** o avanço depende do perfil vigente e dos dados importados. Confira no rodapé as datas das últimas importações de PW e ID.
 
-1. Crie a primeira conta administrativa com `createsuperuser` seguindo os comandos de desenvolvimento em [plataforma/README.md](../plataforma/README.md).
-2. Entre no Django Admin, crie os usuários da equipe e marque como staff quem precisa administrar a plataforma. Em `Participação`, associe cada usuário ao contrato e ao papel correspondente.
-3. No Django Admin, crie um registro em `Contratos`. Abra esse cadastro, adicione um `Perfil do contrato` ativo e informe início de vigência e definição compatível com o padrão documental do contrato.
-4. Abra `Importar ID`, escolha o contrato e o arquivo do índice, revise a prévia e confirme a importação.
-5. Abra `Importar situação PW`, escolha o contrato e a data da extração, revise a prévia e confirme. Consulte `Linhas recusadas` para tratar as linhas que não forem aplicadas.
-6. Acesse `Painel · [código interno]` pela `Minha mesa` ou pelo menu lateral e confira o avanço calculado a partir do perfil e dos dados importados.
+## Atividade
+
+### Atividade
+
+**Para que serve:** consultar o histórico de alterações e importações do contrato.  
+**Como chegar:** menu lateral **Atividade**; também é possível abrir por **Ver toda a atividade** na **Minha mesa**, quando o atalho aparecer.  
+**O que dá para fazer:** filtrar por contrato, pessoa, ação, período ou código do documento; abrir os detalhes de um evento; seguir para o documento ou para linhas recusadas; baixar **Baixar planilha (Excel)**; navegar pelas páginas.  
+**Quem pode:** staff e **Administrador do contrato** ativo.  
+**Cuidado comum:** confira contrato e período dos filtros antes de baixar a planilha; o arquivo contém apenas os eventos filtrados.
+
+## Contrato (administração)
+
+### Contratos e detalhes do contrato
+
+**Para que serve:** administrar os contratos cadastrados e consultar participantes, calendário e escopos.  
+**Como chegar:** menu lateral **Contratos** (visível ao staff); na lista, clique em **Abrir** para ver os detalhes, ou em **Editar no admin** para abrir o cadastro administrativo.  
+**O que dá para fazer:** na lista, abrir o Painel, a Lista Mestra ou o detalhe; no detalhe, consultar **Dados**, **Participantes**, **Calendário** e **Escopos e classes**. Quem administra o contrato pode alterar seus dados, região, participantes, feriados e escopos.  
+**Quem pode:** a lista **Contratos** e o menu **Admin** são restritos a staff. O detalhe pode ser aberto por staff ou por participante ativo com papel **Administrador do contrato**; as alterações também exigem esse acesso.  
+**Cuidado comum:** a região do contrato alimenta o calendário de feriados; confirme município e UF antes de usar prazos que dependem de dias úteis.
+
+### Primeiros passos do admin do contrato
+
+1. Em **Contratos** → **Abrir**, confira em **Dados** o nome, cliente e **Região** (município e UF); use **Salvar dados** se precisar corrigir.
+2. Em **Escopos e classes**, cadastre cada escopo e associe as classes correspondentes. Isso organiza a distribuição dos documentos; confira as classes de cada escopo antes de salvar.
+3. Em **GRDs** → **Configurar GRD**, carregue o logo e configure nome do emitente, número, cabeçalho e setores. Os setores também se tornam colunas da Lista Mestra.
+4. Na **Lista Mestra**, abra **Colunas** para escolher quais informações e setores ficam visíveis e ordenar a leitura.
+5. Cadastre as **equipes** no **Admin** e defina gestores e membros; a aba **Da equipe** e a distribuição de tarefas dependem dessa configuração.
+6. Em **Contratos** → **Abrir** → **Participantes**, adicione as pessoas com o papel e a função corretos. Desative participações que não devem mais acessar o contrato.
+
+## Meu perfil
+
+### Meu perfil
+
+**Para que serve:** manter seu nome e seus dados de contato, que identificam você nas atividades da Plataforma.  
+**Como chegar:** clique no seu nome na barra superior; o nome também aparece na mensagem para completar o perfil.  
+**O que dá para fazer:** preencher nome, sobrenome e e-mail em **Dados pessoais**, depois usar **Salvar perfil**; consultar seu perfil de acesso e contratos; usar **Trocar senha**.  
+**Quem pode:** qualquer usuário autenticado pode editar o próprio perfil.  
+**Cuidado comum:** informe nome e sobrenome completos: seu nome aparece nas GRDs e na Atividade.
