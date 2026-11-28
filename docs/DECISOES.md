@@ -1662,3 +1662,76 @@ Aprovado, Não Conforme, Inconsistente, Erro de Assinatura, Cancelado, Revisão 
   vários contratos), mas às vezes é um contrato só.
 - Ao clicar no contrato, o sistema passa a trabalhar só com os dados dele e abre a **segunda home**, o Início do
   contrato (o que hoje é a Minha mesa). Isso combina com a D-147 (importar sem escolher contrato).
+
+## D-153 · Destino do produto: gerenciador de engenharia à prova de erro humano
+
+*Origem: AZ1 · 2026-11-28 · base para o roadmap novo (D-146)*
+
+- Começou como Lista Mestra melhorada, porque as macros do Excel ficaram pesadas e não davam conta das regras. O
+  motivo de fundo é **evitar erro humano**: quem opera o controle muitas vezes é uma pessoa pouco experiente.
+- Destino: um gerenciador de engenharia e de documentos do contrato, com Lista Mestra, GRD e controle documental,
+  e um motor que calcula sozinho (revisão nova supera a anterior, situação vem de importação ou de ajuste manual).
+  O alvo é **zerar o erro documental**.
+- Para quem: primeiro o **operacional** (o dono, a assistente e os controladores de outros contratos). Depois a
+  chefia, que precisa do diagnóstico do contrato em poucos cliques e de forma visual (gráficos), sem tabela dinâmica.
+  O Excel continua como saída (exportar), não como ferramenta de trabalho.
+- Funções que tiram trabalho manual: relatório mensal de avanço físico para a medição (critério 40% na emissão e
+  60% na aprovação, **data de corte** configurável, ex.: dia 1 do mês até o dia 5 do seguinte), com e-mail padrão.
+- Ferramentas do dia a dia dentro do sistema, para a pessoa não precisar procurar na internet (ex.: juntar e
+  converter PDF).
+- Mais à frente, quando virar produto: IA com os documentos contratuais da obra (edital, PSP, matriz de risco,
+  prazos) para responder com confiabilidade e executar tarefas (gerar e-mail, montar tabela). Fica para depois.
+
+## D-154 · Próxima frente: entrada por contrato
+
+*Origem: AZ2 · 2026-11-28 · confirma a D-152*
+
+- Primeiro vem a home de escolha do contrato (D-152). Em seguida, as importações sem escolher contrato (D-147) e a
+  tela do contrato completa (D-139).
+
+## D-155 · GRD: impressa primeiro; o destino é a Plataforma num servidor com link de aceite
+
+*Origem: AZ3 · 2026-11-28 · detalha a D-141*
+
+- Agora: GRD impressa.
+- Destino certo: a Plataforma publicada num servidor na internet (não instalada pela TI nem como programa de
+  desktop). A GRD gera um link curto. Quem recebe abre, preenche e salva, e o aceite volta gravado para a
+  Plataforma, "como um Google Forms".
+
+## D-156 · Cabeçalho da GRD: o que é automático e o que é digitado, configurável por contrato
+
+*Origem: AZ4 · 2026-11-28 · detalha a D-141*
+
+- Automático: a obra (vem do contrato em que se está), o trecho (montado pelas partes do código dos documentos da
+  remessa), a quantidade de documentos e o número (sempre o próximo).
+- Digitado: o destinatário (A/C). A assinatura é feita à mão.
+- "Módulo" não existe neste contrato; ficou no modelo por cópia. Por isso os campos do cabeçalho são
+  **configuráveis por contrato**: cada campo pode ser ligado ou desligado, ser texto digitado ou ser puxado de uma
+  fonte (contrato ou uma parte do código). O dono deixou com o Claude a decisão de como implementar.
+
+## D-157 · Sai o "Resumo executivo"; imprimir o Painel sai igual à tela
+
+*Origem: AZ5 · 2026-11-28 · confirma a D-150*
+
+## D-158 · Quem elaborou o documento (projetista) e, depois, controle dos contratos dos terceiros
+
+*Origem: AZ6 · 2026-11-28 · detalha a D-151*
+
+- Agora: trazer a coluna **ELABORAÇÃO** da Lista Mestra (coluna P da .xlsm) e mostrar em cada documento qual
+  empresa o elaborou.
+- Depois, um Marco novo: cadastro das projetistas contratadas, com o contrato de cada uma (documentos e disciplinas
+  do escopo), atrasos e cobranças ("o documento da empresa X está atrasado", "o cliente mudou a situação, enviar para
+  revisão", "em revisão há N dias"), medição espelhada na nossa (se o cliente paga 40%, pagamos 40% do combinado) e
+  saldo contratual. Hoje esse controle não é feito.
+
+## D-159 · Nº Circular e Emissão saem; documento de retorno opcional; colunas da Lista Mestra configuráveis
+
+*Origem: AY5 · 2026-11-28*
+
+- O Nº Circular e o número de emissão da .xlsm são só o código do e-mail do PW concatenado com a data. Não precisam
+  ser considerados.
+- O retorno oficial do cliente no Metrô é o **memorando de remessa (MR)**, com código no formato
+  `<analista>-MR-<número>-<ano>`, e um MR pode cobrir vários documentos. Guardar isso é opcional e depende do
+  contrato: outros clientes só mandam e-mail, sem código.
+- Diretriz: a Lista Mestra fica **personalizável por contrato**. O admin pode criar uma coluna de controle (como
+  "documento de retorno") ou deixar de mostrar uma que não usa.
