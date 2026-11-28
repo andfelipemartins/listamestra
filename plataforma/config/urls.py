@@ -30,6 +30,7 @@ urlpatterns = [
         login_required(auth_views.LogoutView.as_view()),
         name="logout",
     ),
+    path("contas/", include("contas.urls")),
     path("importacoes/id/", ImportarIDView.as_view(), name="importar_id"),
     path("importacoes/", ImportacoesView.as_view(), name="importacoes_home"),
     path("importacoes/situacao-pw/", ImportarSituacaoPWView.as_view(), name="importar_situacao_pw"),

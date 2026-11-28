@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Trocar senha{% endblock %}
+{% block content %}
+<div class="page-heading"><div><span class="eyebrow">CONTA</span><h1>Trocar senha</h1><p>Defina uma nova senha para sua conta.</p></div></div>
+<section class="panel">
+  <form method="post">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    {% for field in form %}<p><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}{% if field.help_text %}<span>{{ field.help_text|safe }}</span>{% endif %}</p>{% endfor %}
+    <button class="button button-primary" type="submit">Salvar nova senha</button>
+  </form>
+</section>
+{% endblock %}

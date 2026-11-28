@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Meu perfil{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <div><span class="eyebrow">CONTA</span><h1>Meu perfil</h1><p>Atualize seu nome e seus dados de contato.</p></div>
+</div>
+{% if messages %}<ul class="messages">{% for message in messages %}<li class="{{ message.tags }}">{{ message }}</li>{% endfor %}</ul>{% endif %}
+<section class="panel">
+  <h2>Dados pessoais</h2>
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    <p><label for="{{ form.first_name.id_for_label }}">{{ form.first_name.label }}</label>{{ form.first_name }}{{ form.first_name.errors }}</p>
+    <p><label for="{{ form.last_name.id_for_label }}">{{ form.last_name.label }}</label>{{ form.last_name }}{{ form.last_name.errors }}</p>
+    <p><label for="{{ form.email.id_for_label }}">{{ form.email.label }}</label>{{ form.email }}{{ form.email.errors }}</p>
+    <button class="button button-primary" type="submit">Salvar perfil</button>
+  </form>
+</section>
+<section class="panel">
+  <h2>Acesso</h2>
+  <p><strong>Perfil:</strong> {{ user.get_perfil_display }}</p>
+  <p><strong>Usuário:</strong> {{ user.username }}</p>
+  <a class="button button-quiet" href="{% url 'senha_alterar' %}">Trocar senha</a>
+</section>
+<section class="panel">
+  <h2>Contratos</h2>
+  {% if participacoes %}
+    <div class="table-wrap"><table>
+      <thead><tr><th>Contrato</th><th>Papel</th><th>Situação</th></tr></thead>
+      <tbody>{% for participacao in participacoes %}
+        <tr><td>{{ participacao.contrato.codigo_interno }} · {{ participacao.contrato.nome }}</td><td>{{ participacao.get_papel_display }}</td><td>{% if participacao.ativo %}Ativo{% else %}Inativo{% endif %}</td></tr>
+      {% endfor %}</tbody>
+    </table></div>
+  {% else %}<p>Você ainda não está associado a nenhum contrato.</p>{% endif %}
+</section>
+{% endblock %}

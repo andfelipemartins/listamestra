@@ -10,8 +10,11 @@
     .account-contrato { display:flex; min-width:0; flex-direction:column; align-items:flex-end; max-width:220px; font-size:12px; }
     .account-contrato strong,.account-contrato span { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .account-contrato span { color:var(--text-secondary); font-size:11px; }
+    .account-name { color:var(--text-primary); }
+    .profile-notice { padding:9px 32px; border-bottom:1px solid var(--info-text); background:var(--info-surface); color:var(--text-primary); font-size:12px; line-height:1.5; }
+    .profile-notice a { font-weight:650; }
     @media(max-width:700px) { .account-contrato { max-width:100px; } .account-contrato span { display:none; } }
-    @media(max-width:480px) { .account-contrato { max-width:64px; } }
+    @media(max-width:480px) { .account-contrato { max-width:64px; } .profile-notice { padding:8px 16px; } }
   </style>
   {% block extra_head %}{% endblock %}
   <script src="https://unpkg.com/htmx.org@2.0.3" defer></script>
@@ -22,13 +25,18 @@
     {% if user.is_authenticated %}
     {% contrato_ativo request as contrato_atual %}
     <div class="account">
-      <div class="account-copy"><strong>{{ user.get_full_name|default:user.username }}</strong><span>{{ user.get_perfil_display }}</span></div>
+      <div class="account-copy"><strong><a class="account-name" href="{% url 'meu_perfil' %}">{{ user.get_full_name|default:user.username }}</a></strong><span>{{ user.get_perfil_display }}</span></div>
       {% if contrato_atual %}<div class="account-contrato" title="{{ contrato_atual.codigo_interno }} · {{ contrato_atual.nome }}"><strong>{{ contrato_atual.codigo_interno }}</strong><span>{{ contrato_atual.nome }}</span></div>{% endif %}
       <a class="button button-quiet" href="{% url 'contratos_escolher' %}">Trocar contrato</a>
       <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="button button-quiet" type="submit">Sair</button></form>
     </div>
     {% endif %}
   </header>
+  {% if user.is_authenticated %}
+    {% if not user.first_name or not user.last_name %}
+    <div class="profile-notice">Complete seu nome em <a href="{% url 'meu_perfil' %}">Meu perfil</a>: ele aparece nas GRDs e na Atividade.</div>
+    {% endif %}
+  {% endif %}
   <div class="app-shell">
     <aside class="sidebar sidebar--fixed" aria-label="Navegação principal">
       <span class="nav-label">Menu</span>
