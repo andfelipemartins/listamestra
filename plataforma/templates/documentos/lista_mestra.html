@@ -74,7 +74,7 @@
     <div class="panel-heading"><div><h2>{{ total_filtrado }} {% if total_filtrado == 1 %}emissão{% else %}emissões{% endif %}</h2><p>Página {{ pagina.number }} de {{ pagina.paginator.num_pages|default:1 }} · até 100 linhas por página.</p></div></div>
     <div class="table-wrap lista-mestra-tabela" tabindex="0" role="region" aria-label="Tabela da Lista Mestra; use a rolagem horizontal para ver todas as colunas">
       <table>
-        <thead><tr><th class="lista-mestra-codigo">Código</th>{% for segmento in segmentos_codigo %}<th class="lista-mestra-coluna-curta">{{ segmento.rotulo|default:segmento.nome }}</th>{% endfor %}<th class="lista-mestra-titulo">Título</th><th class="lista-mestra-texto-longo">Elabora&#231;&#227;o</th><th class="lista-mestra-texto-longo">Disciplina</th><th class="lista-mestra-coluna-curta">Revisão</th><th class="lista-mestra-coluna-curta">Versão</th><th class="lista-mestra-coluna-curta">Fase</th><th class="lista-mestra-coluna-curta">Data de emissão</th><th class="lista-mestra-coluna-curta">Rótulo cronológico</th><th>Situação da análise</th><th class="lista-mestra-coluna-curta">Data da análise</th><th class="lista-mestra-texto-longo">Documento de retorno</th><th class="lista-mestra-texto-longo">Observação</th></tr></thead>
+        <thead><tr><th class="lista-mestra-codigo">Código</th>{% for segmento in segmentos_codigo %}<th class="lista-mestra-coluna-curta">{{ segmento.rotulo|default:segmento.nome }}</th>{% endfor %}<th class="lista-mestra-titulo">Título</th><th class="lista-mestra-texto-longo">Elabora&#231;&#227;o</th><th class="lista-mestra-texto-longo">Disciplina</th><th class="lista-mestra-coluna-curta">Revisão</th><th class="lista-mestra-coluna-curta">Versão</th><th class="lista-mestra-coluna-curta">Fase</th><th class="lista-mestra-coluna-curta">Data de emissão</th><th class="lista-mestra-coluna-curta">Rótulo cronológico</th><th class="lista-mestra-coluna-curta">GRD</th><th>Situação da análise</th><th class="lista-mestra-coluna-curta">Data da análise</th><th class="lista-mestra-texto-longo">Documento de retorno</th><th class="lista-mestra-texto-longo">Observação</th></tr></thead>
         <tbody>
           {% for linha in pagina.object_list %}
           <tr>
@@ -88,12 +88,13 @@
             <td class="lista-mestra-coluna-curta">{{ linha.fase_rotulo }}</td>
             <td class="lista-mestra-coluna-curta">{{ linha.emissao.data_emissao|date:"d/m/Y" }}</td>
             <td class="lista-mestra-coluna-curta">{{ linha.rotulo_cronologico }}</td>
+            <td class="lista-mestra-coluna-curta">{% if linha.grds %}{% for grd in linha.grds %}{% if not forloop.first %}<br>{% endif %}<span title="{{ grd.rotulo }}">{{ grd.rotulo }}</span>{% endfor %}{% elif linha.emissao.grd_anterior %}<span title="GRD anterior ao sistema: {{ linha.emissao.grd_anterior }}">{{ linha.emissao.grd_anterior }} <small>(ant.)</small></span>{% else %}—{% endif %}</td>
             <td>{{ linha.situacao }}</td>
             <td class="lista-mestra-coluna-curta">{% if linha.data_analise %}{{ linha.data_analise|date:"d/m/Y" }}{% else %}—{% endif %}</td>
             <td class="lista-mestra-celula-truncada lista-mestra-texto-longo" title="{{ linha.documento_retorno|default:'—' }}">{{ linha.documento_retorno|default:"—" }}</td>
             <td class="lista-mestra-celula-truncada lista-mestra-texto-longo" title="{{ linha.observacao|default:'—' }}">{{ linha.observacao|default:"—" }}</td>
           </tr>
-          {% empty %}<tr><td colspan="{{ segmentos_codigo|length|add:13 }}" class="painel-sem-dados">Nenhuma emissão corresponde aos filtros.</td></tr>{% endfor %}
+          {% empty %}<tr><td colspan="{{ segmentos_codigo|length|add:14 }}" class="painel-sem-dados">Nenhuma emissão corresponde aos filtros.</td></tr>{% endfor %}
         </tbody>
       </table>
     </div>

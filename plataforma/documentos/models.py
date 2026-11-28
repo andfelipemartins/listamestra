@@ -205,6 +205,12 @@ class Emissao(models.Model):
     data_emissao = models.DateField("data de emissão")
     origem = models.CharField("origem", max_length=16, choices=Origem.choices)
     observacao = models.TextField("observação", blank=True)
+    grd_anterior = models.CharField(
+        "GRD anterior ao sistema",
+        max_length=200,
+        blank=True,
+        default="",
+    )
     motivo_reabertura = models.CharField(
         "motivo da reabertura",
         max_length=20,

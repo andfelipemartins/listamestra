@@ -13,10 +13,10 @@
     <article class="metric-card"><span>Situações inválidas</span><strong>{{ previa.situacoes_invalidas }}</strong></article>
     <article class="metric-card"><span>Mudanças de situação</span><strong>{{ previa.mudancas_situacao }}</strong></article>
   </div>
-  <p>Revisão vazia seleciona a última revisão. Data vazia usa Data de retorno, se preenchida, ou a data de importação. Se Data e Data de retorno forem diferentes, vale Data e a linha mostra um aviso. Observação pode ser atualizada; GRD e Data de envio aparecem como “ignorados nesta versão” quando preenchidos.</p>
+  <p>Revisão vazia seleciona a última revisão. Data vazia usa Data de retorno, se preenchida, ou a data de importação. Se Data e Data de retorno forem diferentes, vale Data e a linha mostra um aviso. GRD é registrada como anterior ao sistema; Data de envio aparece como ignorada nesta versão.</p>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Linha</th><th>Código</th><th>Revisão</th><th>Situação</th><th>Data</th><th>Mudança de situação</th><th>Resultado</th><th>Campos ignorados nesta versão</th></tr></thead>
+      <thead><tr><th>Linha</th><th>Código</th><th>Revisão</th><th>Situação</th><th>Data</th><th>GRD anterior ao sistema</th><th>Mudança de situação</th><th>Resultado</th><th>Campos ignorados nesta versão</th></tr></thead>
       <tbody>
         {% for linha in previa.linhas %}
         <tr>
@@ -25,12 +25,13 @@
           <td>{{ linha.revisao|default:"Última" }}</td>
           <td>{{ linha.situacao|default:"—" }}</td>
           <td>{{ linha.data_analise|date:"d/m/Y"|default:"—" }}</td>
+          <td>{{ linha.grd_anterior|default:"—" }}</td>
           <td>{% if linha.situacao_depois and linha.situacao_antes != linha.situacao_depois %}{{ linha.situacao_antes|default:"Sem situação anterior" }} → {{ linha.situacao_depois }}{% else %}—{% endif %}</td>
           <td>{% if linha.valida %}Válida{% else %}{{ linha.mensagem }}{% endif %}{% if linha.aviso %}<br><strong>Aviso:</strong> {{ linha.aviso }}{% endif %}</td>
           <td>{% for campo in linha.campos_ignorados %}{{ campo.nome }}: {{ campo.valor }}{% if not forloop.last %}<br>{% endif %}{% empty %}—{% endfor %}</td>
         </tr>
         {% empty %}
-        <tr><td colspan="8">Nenhuma linha preenchida foi encontrada.</td></tr>
+        <tr><td colspan="9">Nenhuma linha preenchida foi encontrada.</td></tr>
         {% endfor %}
       </tbody>
     </table>

@@ -37,6 +37,12 @@
           <dt>Última revisão</dt>
           <dd>{{ ultima_revisao }}</dd>
         </div>
+        {% if grds_ultima_revisao or grd_anterior_ultima_revisao %}
+        <div class="documento-painel-dado documento-painel-dado--largo">
+          <dt>GRD da última revisão</dt>
+          <dd>{% if grds_ultima_revisao %}{% for grd in grds_ultima_revisao %}{% if not forloop.first %} · {% endif %}<a href="{% url 'grds:detalhe' contrato.pk grd.pk %}">{{ grd.rotulo }}</a>{% endfor %}{% endif %}{% if grd_anterior_ultima_revisao %}{% if grds_ultima_revisao %}<br>{% endif %}{{ grd_anterior_ultima_revisao }} <small>(anterior ao sistema)</small>{% endif %}</dd>
+        </div>
+        {% endif %}
         <div class="documento-painel-dado documento-painel-dado--largo">
           <dt>Título</dt>
           <dd>{{ documento.titulo|default:"—" }}</dd>

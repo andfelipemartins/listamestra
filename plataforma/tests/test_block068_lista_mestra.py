@@ -11,6 +11,7 @@ from contas.models import Usuario
 from contratos.models import Contrato, Participacao, PerfilContrato
 from documentos.models import Analise, Documento, Emissao
 from documentos.servicos import carregar_lista_mestra
+from grds.models import Grd, GrdItem
 
 
 PERFIL_METRO = Path(__file__).resolve().parents[2] / "core" / "perfil" / "exemplos" / "metro.yaml"
@@ -220,6 +221,50 @@ def test_lista_mestra_tem_uma_linha_por_emissao_e_rotulo_cronologico(
     assert do_desenho[1]["data_analise"] == date(2026, 2, 10)
     assert do_desenho[1]["documento_retorno"] == "RV-22"
     assert do_desenho[1]["observacao"] == "Observação da análise"
+
+
+@pytest.mark.django_db
+def test_lista_e_pasta_mostram_grds_do_sistema_e_anteriores(
+    client, contrato, perfil_modelo, usuario
+):
+    documento = _documento(
+        contrato,
+        "DE-15.25.00.00-6A1-1011",
+        "Documento com GRD",
+        "P7",
+    )
+    anterior = _emissao(documento, "1", date(2026, 5, 1))
+    anterior.grd_anterior = "0012/2024"
+    anterior.save(update_fields=("grd_anterior",))
+    atual = _emissao(documento, "2", date(2026, 6, 1))
+    atual.grd_anterior = "0013/2024"
+    atual.save(update_fields=("grd_anterior",))
+    grd = Grd.objects.create(
+        contrato=contrato,
+        numero=42,
+        data=date(2026, 6, 2),
+        destinatario="Cliente",
+    )
+    GrdItem.objects.create(grd=grd, emissao=atual)
+    client.force_login(usuario)
+
+    resposta_pasta = client.get(reverse("documento_pasta", args=(contrato.pk, documento.pk)))
+    resposta_lista = client.get(reverse("lista_mestra"), {"contrato": contrato.pk})
+    html_pasta = resposta_pasta.content.decode()
+    html_lista = resposta_lista.content.decode()
+
+    assert resposta_pasta.status_code == 200
+    assert "GRD do sistema:" in html_pasta
+    assert grd.rotulo() in html_pasta
+    assert "GRD: 0013/2024" in html_pasta
+    assert "anterior ao sistema" in html_pasta
+    assert reverse("grds:detalhe", args=(contrato.pk, grd.pk)) in html_pasta
+    assert resposta_lista.status_code == 200
+    assert "<th class=\"lista-mestra-coluna-curta\">GRD</th>" in html_lista
+    assert 'title="GRD anterior ao sistema: 0012/2024"' in html_lista
+    assert "0012/2024 <small>(ant.)</small>" in html_lista
+    assert grd.rotulo() in html_lista
+    assert "0013/2024 <small>(ant.)</small>" not in html_lista
 
 
 @pytest.mark.django_db

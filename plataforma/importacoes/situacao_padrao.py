@@ -31,7 +31,6 @@ CABECALHOS = {
     "data_retorno": "Data de retorno",
 }
 CAMPOS_SEM_DESTINO = {
-    "grd": "GRD",
     "data_envio": "Data de envio",
 }
 
@@ -49,6 +48,7 @@ class LinhaSituacaoPadrao:
     revisao: str
     situacao: str
     data_analise: date | None
+    grd_anterior: str = ""
     documento_id: int | None = None
     emissao_id: int | None = None
     observacao: str = ""
@@ -94,8 +94,7 @@ class PreviaSituacaoPadrao:
     @property
     def mudancas_situacao(self) -> int:
         return sum(
-            linha.valida
-            and linha.situacao
+            bool(linha.valida and linha.situacao)
             and _normalizar(linha.situacao_antes) != _normalizar(linha.situacao_depois)
             for linha in self.linhas
         )
@@ -114,7 +113,7 @@ def gerar_modelo_situacao_padrao() -> bytes:
     instrucoes.append(["Planilha padrão de situação"])
     instrucoes.append(["Preencha o código do documento. As demais colunas são opcionais."])
     instrucoes.append(["Revisão vazia usa a última revisão; Data vazia usa a data de retorno, se preenchida, ou a data da importação."])
-    instrucoes.append(["Se Data e Data de retorno forem diferentes, vale Data e a prévia avisa. GRD e Data de envio são aceitas, mas ignoradas."])
+    instrucoes.append(["Se Data e Data de retorno forem diferentes, vale Data e a prévia avisa. A GRD é guardada como anterior ao sistema; Data de envio é aceita, mas ignorada."])
     conteudo = BytesIO()
     workbook.save(conteudo)
     workbook.close()
@@ -144,6 +143,7 @@ def gerar_previa_situacao_padrao(
         codigo = _texto(_valor_coluna(valores, cabecalho, "codigo"))
         revisao_informada = _texto(_valor_coluna(valores, cabecalho, "revisao")).upper()
         situacao_bruta = _texto(_valor_coluna(valores, cabecalho, "situacao"))
+        grd_anterior = _texto(_valor_coluna(valores, cabecalho, "grd"))
         data_bruta = _valor_coluna(valores, cabecalho, "data")
         data_retorno_bruta = _valor_coluna(valores, cabecalho, "data_retorno")
         observacao_bruta = _valor_coluna(valores, cabecalho, "observacao")
@@ -159,6 +159,7 @@ def gerar_previa_situacao_padrao(
             "revisao": revisao_informada,
             "situacao": situacao_bruta,
             "data_analise": None,
+            "grd_anterior": grd_anterior,
             "campos_ignorados": dados_ignorados,
         }
         if not codigo:
@@ -352,6 +353,12 @@ def aplicar_previa_situacao_padrao(
             ).first()
             if emissao is None:
                 raise ValueError("Uma revisão da prévia não pertence mais ao documento. Gere outra prévia.")
+
+            if linha.grd_anterior and emissao.grd_anterior != linha.grd_anterior:
+                emissao.grd_anterior = linha.grd_anterior
+                emissao._history_user = usuario
+                emissao._change_reason = motivo_historico
+                emissao.save(update_fields=("grd_anterior",))
 
             analises = list(emissao.analises.all().order_by("data_analise", "registrado_em", "pk"))
             analise_alvo = None

@@ -9,10 +9,14 @@ from django.utils import timezone
 
 from contas.models import Usuario
 from contratos.models import Contrato, EscopoContrato, Participacao, PerfilContrato
+from core.perfil import perfil_de_dict
 from documentos.admin import DocumentoAdmin
 from documentos.models import Analise, Documento, Emissao, EmpresaElaboradora
 from importacoes.models import IndiceDocumentos, ItemPrevisto
 from documentos.servicos import editar_titulo_documento
+from importacoes.situacao_padrao import aplicar_previa_situacao_padrao, gerar_previa_situacao_padrao
+from importacoes.views import _dados_existentes_situacao_padrao
+from tests.test_situacao_padrao import criar_excel
 
 
 PERFIL_METRO = Path(__file__).resolve().parents[2] / "core" / "perfil" / "exemplos" / "metro.yaml"
@@ -187,6 +191,49 @@ def test_historico_do_painel_ordena_revisao_e_edicao_do_mais_novo(
     assert "Situação registrada: Em análise" in historico_html
     assert "criou a emissão" in historico_html
     assert historico_html.index("Título atualizado") < historico_html.index("criou a emissão")
+
+
+@pytest.mark.django_db
+def test_painel_mostra_importacao_da_grd_anterior_e_grd_da_ultima_revisao(
+    client, contrato, perfil_modelo, documento, usuario_admin
+):
+    emissao = Emissao.objects.create(
+        documento=documento,
+        revisao="1",
+        fase=Emissao.Fase.PRELIMINAR,
+        data_emissao=date(2026, 11, 20),
+        origem=Emissao.Origem.CLIENTE,
+    )
+    arquivo = criar_excel([{"Código": CODIGO, "GRD": "ANT-77"}], ["Código", "GRD"])
+    previa = gerar_previa_situacao_padrao(
+        arquivo,
+        nome_arquivo="grd-anterior.xlsx",
+        contrato_id=contrato.pk,
+        perfil_id=perfil_modelo.pk,
+        perfil=perfil_de_dict(perfil_modelo.definicao),
+        documentos_existentes=_dados_existentes_situacao_padrao(contrato),
+        data_importacao=date(2026, 11, 26),
+    )
+    aplicar_previa_situacao_padrao(
+        previa,
+        contrato=contrato,
+        perfil_modelo=perfil_modelo,
+        usuario=usuario_admin,
+    )
+    client.force_login(usuario_admin)
+
+    resposta = client.get(reverse("documento_painel", args=(contrato.pk, documento.pk)))
+
+    html = resposta.content.decode()
+    historico_html = html.split('id="documento-painel-conteudo-historico"', maxsplit=1)[1]
+    assert resposta.status_code == 200
+    assert "GRD da última revisão" in html
+    assert "ANT-77" in html
+    assert "anterior ao sistema" in html
+    assert "importou situação pela planilha padrão" in historico_html
+    assert "grd-anterior.xlsx" in historico_html
+    emissao.refresh_from_db()
+    assert emissao.grd_anterior == "ANT-77"
 
 
 @pytest.mark.django_db

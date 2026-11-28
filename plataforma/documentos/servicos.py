@@ -116,6 +116,12 @@ def carregar_lista_mestra(
                 }
             )
 
+    from grds.servicos import grds_por_emissoes
+
+    grds_por_emissao = grds_por_emissoes([linha["emissao"] for linha in linhas])
+    for linha in linhas:
+        linha["grds"] = grds_por_emissao.get(linha["emissao"].pk, [])
+
     tipos = _opcoes_lista_mestra(linhas, "tipo")
     disciplinas = _opcoes_lista_mestra(linhas, "disciplina")
     fases = [
@@ -662,6 +668,11 @@ def carregar_painel_documento(usuario, contrato_id, documento_id):
     )
     contexto["escopos"] = _escopos_documento(documento)
     contexto["ultima_revisao"] = _rotulo_ultima_emissao(documento, contexto["perfil"])
+    ultima_linha_tempo = contexto["linha_tempo"][-1] if contexto["linha_tempo"] else None
+    contexto["grds_ultima_revisao"] = ultima_linha_tempo["grds"] if ultima_linha_tempo else []
+    contexto["grd_anterior_ultima_revisao"] = (
+        ultima_linha_tempo["emissao"].grd_anterior if ultima_linha_tempo else ""
+    )
     contexto["historico"] = sorted(
         contexto["atividades"],
         key=lambda item: (item["data_hora"], item["titulo"].casefold()),

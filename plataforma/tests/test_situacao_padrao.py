@@ -13,9 +13,11 @@ from openpyxl import Workbook, load_workbook
 from core.perfil import perfil_de_dict
 from core.perfil.codigo import interpretar
 from core.perfil.painel import classificar
+from acoes.models import AcaoPendencia
 from contas.models import Usuario
 from contratos.models import Contrato, Participacao, PerfilContrato
 from documentos.models import Analise, Documento, Emissao
+from grds.models import Grd
 from importacoes.models import ImportacaoSituacao
 from importacoes.situacao_padrao import (
     aplicar_previa_situacao_padrao,
@@ -134,7 +136,8 @@ def test_modelo_tem_cabecalhos_e_aba_de_instrucoes():
     assert list(workbook["Situação"].values)[0] == tuple(CABECALHOS)
     instrucoes = " ".join(str(celula) for linha in workbook["Instruções"].values for celula in linha)
     assert "Data de retorno" in instrucoes
-    assert "Data de envio são aceitas, mas ignoradas" in instrucoes
+    assert "A GRD é guardada como anterior ao sistema" in instrucoes
+    assert "Data de envio é aceita, mas ignorada" in instrucoes
     workbook.close()
 
 
@@ -226,10 +229,10 @@ def test_coluna_opcional_ausente_preserva_observacao(contrato):
 
 
 @pytest.mark.django_db
-def test_campos_sem_destino_sao_mostrados_como_ignorados(contrato):
+def test_grd_vai_para_a_emissao_e_data_de_envio_permanece_ignorada(contrato):
     perfil_modelo = criar_perfil(contrato)
     codigo = "DE-15.25.00.00-6A1-1008"
-    criar_documento(
+    documento, emissoes = criar_documento(
         contrato,
         perfil_modelo,
         codigo,
@@ -253,11 +256,75 @@ def test_campos_sem_destino_sao_mostrados_como_ignorados(contrato):
     )
 
     assert resultado.linhas_validas == 1
+    assert resultado.linhas[0].grd_anterior == "GRD-123"
     assert {campo.nome for campo in resultado.linhas[0].campos_ignorados} == {
-        "GRD",
         "Data de envio",
     }
     assert resultado.linhas[0].data_analise == date(2026, 11, 25)
+
+    aplicar_previa_situacao_padrao(resultado, contrato=contrato, perfil_modelo=perfil_modelo)
+
+    emissoes[0].refresh_from_db()
+    assert emissoes[0].grd_anterior == "GRD-123"
+    assert not AcaoPendencia.objects.filter(documento=documento).exists()
+
+
+@pytest.mark.django_db
+def test_reimportar_grd_anterior_preserva_um_unico_valor_e_nao_duplica_historico(contrato):
+    perfil_modelo = criar_perfil(contrato)
+    codigo = "DE-15.25.00.00-6A1-1010"
+    _, emissoes = criar_documento(
+        contrato,
+        perfil_modelo,
+        codigo,
+        [("1", date(2025, 1, 2), "Em Análise", date(2025, 1, 3))],
+    )
+    arquivo = criar_excel([{"Código": codigo, "GRD": "0007/2024"}], ["Código", "GRD"])
+
+    for _ in range(2):
+        lote = previa(arquivo, "situacoes.xlsx", contrato, perfil_modelo)
+        aplicar_previa_situacao_padrao(lote, contrato=contrato, perfil_modelo=perfil_modelo)
+
+    emissoes[0].refresh_from_db()
+    assert emissoes[0].grd_anterior == "0007/2024"
+    assert emissoes[0].history.count() == 2
+    assert ImportacaoSituacao.objects.filter(contrato=contrato).count() == 2
+    assert Grd.objects.filter(contrato=contrato).count() == 0
+
+
+@pytest.mark.django_db
+def test_previa_http_mostra_a_grd_que_sera_importada(contrato):
+    perfil_modelo = criar_perfil(contrato)
+    codigo = "DE-15.25.00.00-6A1-1012"
+    criar_documento(
+        contrato,
+        perfil_modelo,
+        codigo,
+        [("1", date(2025, 1, 2), "Em Análise", date(2025, 1, 3))],
+    )
+    usuario = get_user_model().objects.create_user(username="previa-grd", password="senha")
+    Participacao.objects.create(usuario=usuario, contrato=contrato, papel=Usuario.Perfil.EQUIPE)
+    client = Client()
+    client.force_login(usuario)
+    ativar_contrato(client, contrato)
+
+    resposta = client.post(
+        reverse("importar_situacao_padrao"),
+        {
+            "acao": "prever",
+            "arquivo": SimpleUploadedFile(
+                "grd-anterior.xlsx",
+                criar_excel([{"Código": codigo, "GRD": "ANT-88"}], ["Código", "GRD"]).getvalue(),
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ),
+        },
+        HTTP_HX_REQUEST="true",
+    )
+
+    assert resposta.status_code == 200
+    assert b"ANT-88" in resposta.content
+    assert b"GRD anterior ao sistema" in resposta.content
+    assert b"Campos ignorados nesta vers\xc3\xa3o" in resposta.content
 
 
 @pytest.mark.django_db
