@@ -17,6 +17,7 @@ class Grd(models.Model):
     data = models.DateField("data")
     destinatario = models.CharField("destinatário", max_length=200)
     observacao = models.TextField("observação", blank=True, default="")
+    setor = models.CharField("setor de destino", max_length=80, blank=True, default="")
     campos_cabecalho = models.JSONField("campos do cabeçalho", default=dict, blank=True)
     formatos_copias = models.JSONField("colunas de cópias", default=list, blank=True)
     emitido_por_nome = models.CharField("nome de quem emitiu", max_length=200, blank=True, default="")
@@ -69,6 +70,9 @@ class GrdConfiguracao(models.Model):
     )
     formatos_copias = models.JSONField(
         "colunas de cópias", default=list, blank=True
+    )
+    setores_distribuicao = models.JSONField(
+        "setores de distribuição", default=list, blank=True
     )
 
     class Meta:

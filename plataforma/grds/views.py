@@ -18,6 +18,7 @@ from .servicos import (
     criar_grd,
     dados_cabecalho_previa,
     garantir_configuracao_grd,
+    listar_setores_distribuicao,
     listar_grds,
     pode_configurar_grd,
     pode_criar_grd,
@@ -113,14 +114,23 @@ class ListaGrdsView(LoginRequiredMixin, View):
         contrato = resolver_contrato(request.user, contrato_id)
         if contrato:
             request.session["contrato_ativo_id"] = contrato.pk
-            garantir_configuracao_grd(contrato)
+            configuracao = garantir_configuracao_grd(contrato)
+            setores = listar_setores_distribuicao(configuracao)
+        else:
+            setores = []
+        setor_selecionado = request.GET.get("setor", "")
+        opcoes_setor = {setor["nome"] for setor in setores}
+        if setor_selecionado not in opcoes_setor and setor_selecionado != "__sem_setor__":
+            setor_selecionado = ""
         return render(
             request,
             self.template_name,
             {
                 "contratos": contratos,
                 "contrato": contrato,
-                "grds": listar_grds(contrato),
+                "grds": listar_grds(contrato, setor_selecionado or None),
+                "setores_distribuicao": setores,
+                "setor_selecionado": setor_selecionado,
                 "pode_criar": pode_criar_grd(request.user, contrato),
                 "pode_configurar": pode_configurar_grd(request.user, contrato),
             },
@@ -200,6 +210,7 @@ class NovaGrdView(LoginRequiredMixin, View):
                             dados["texto_codigos"],
                             valores_digitados=digitados,
                             copias_por_emissao=copias,
+                            setor_destino=dados["setor_destino"],
                         )
                     except DocumentosIndisponiveis as excecao:
                         erro = str(excecao)
@@ -223,7 +234,11 @@ class NovaGrdView(LoginRequiredMixin, View):
                     erro = str(excecao)
             if previa is not None:
                 cabecalho = dados_cabecalho_previa(
-                    contrato, previa, dados["data"], digitados
+                    contrato,
+                    previa,
+                    dados["data"],
+                    digitados,
+                    setor_destino=dados["setor_destino"],
                 )
                 copias, erro_copias = _copias_post(
                     request,
@@ -271,12 +286,22 @@ class DetalheGrdView(LoginRequiredMixin, View):
             {"rotulo": "Quantidade de documentos", "valor": str(len(itens))},
             {"rotulo": "Número", "valor": grd.rotulo()},
         ]
+        valores_cabecalho = grd.campos_cabecalho or {}
+        automaticos.append(
+            {
+                "rotulo": "Setor de destino",
+                "valor": valores_cabecalho.get(
+                    "setor_destino", grd.setor or "Cliente / externo"
+                ),
+            }
+        )
         campos_configurados = [
             {
                 "rotulo": campo.rotulo,
-                "valor": grd.campos_cabecalho.get(campo.chave, ""),
+                "valor": valores_cabecalho.get(campo.chave, ""),
             }
             for campo in configuracao.campos.filter(habilitado=True)
+            if campo.chave != "setor_destino"
         ]
         for item in itens:
             item.copias_impressao = [

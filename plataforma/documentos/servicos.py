@@ -70,8 +70,16 @@ def carregar_lista_mestra(
             "fase_selecionada": "",
             "situacao_selecionada": "",
             "mostrar_cancelados": bool(mostrar_cancelados),
+            "setores_distribuicao": [],
         }
 
+    from grds.models import GrdConfiguracao
+    from grds.servicos import dados_grds_lista_mestra, listar_setores_distribuicao
+
+    configuracao_grd = GrdConfiguracao.objects.filter(contrato=contrato).only(
+        "setores_distribuicao"
+    ).first()
+    setores_distribuicao = listar_setores_distribuicao(configuracao_grd)
     perfil_modelo, perfil = _perfil_vigente(contrato)
     campos_codigo = [
         campo
@@ -80,6 +88,7 @@ def carregar_lista_mestra(
     ]
     documentos = _documentos_com_historico(contrato, perfil_modelo)
     linhas = []
+    ultima_emissao_por_documento = {}
     for documento in documentos:
         if documento.cancelado_em and not mostrar_cancelados:
             continue
@@ -88,6 +97,8 @@ def carregar_lista_mestra(
             documento.emissoes.all(),
             key=lambda emissao: (emissao.data_emissao, emissao.pk),
         )
+        if emissoes:
+            ultima_emissao_por_documento[documento.pk] = emissoes[-1]
         rotulos = rotulo_cronologico(emissoes)
         for emissao, rotulo in zip(emissoes, rotulos):
             analise = next(iter(emissao.analises.all()), None)
@@ -116,11 +127,36 @@ def carregar_lista_mestra(
                 }
             )
 
-    from grds.servicos import grds_por_emissoes
-
-    grds_por_emissao = grds_por_emissoes([linha["emissao"] for linha in linhas])
+    grds_por_emissao, grds_emissao_setor, grds_documento_setor = (
+        dados_grds_lista_mestra(
+            [linha["emissao"] for linha in linhas], setores_distribuicao
+        )
+    )
     for linha in linhas:
         linha["grds"] = grds_por_emissao.get(linha["emissao"].pk, [])
+        ultima_emissao = ultima_emissao_por_documento.get(linha["documento"].pk)
+        distribuicao_setores = []
+        for setor in setores_distribuicao:
+            nome_setor = setor["nome"]
+            grd_item = grds_emissao_setor.get((linha["emissao"].pk, nome_setor))
+            em_campo_item = grds_documento_setor.get(
+                (linha["documento"].pk, nome_setor)
+            )
+            distribuicao_setores.append(
+                {
+                    "nome": nome_setor,
+                    "grd_item": grd_item,
+                    "data": grd_item.grd.data if grd_item else None,
+                    "em_campo": em_campo_item.emissao if em_campo_item else None,
+                    "desatualizado": bool(
+                        em_campo_item
+                        and ultima_emissao
+                        and em_campo_item.emissao_id != ultima_emissao.pk
+                    ),
+                    "revisao_emitida": ultima_emissao.revisao if ultima_emissao else "",
+                }
+            )
+        linha["distribuicao_setores"] = distribuicao_setores
 
     tipos = _opcoes_lista_mestra(linhas, "tipo")
     disciplinas = _opcoes_lista_mestra(linhas, "disciplina")
@@ -170,6 +206,7 @@ def carregar_lista_mestra(
         "fase_selecionada": fase_selecionada,
         "situacao_selecionada": situacao_selecionada,
         "mostrar_cancelados": bool(mostrar_cancelados),
+        "setores_distribuicao": setores_distribuicao,
     }
 
 

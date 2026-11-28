@@ -7,7 +7,12 @@ from django.forms import inlineformset_factory
 from contratos.models import Contrato
 
 from .models import GrdCampoCabecalho, GrdConfiguracao
-from .servicos import FORMATOS_COPIA_PADRAO, SEGMENTOS_CODIGO
+from .servicos import (
+    FORMATOS_COPIA_PADRAO,
+    SEGMENTOS_CODIGO,
+    SETORES_DISTRIBUICAO_PADRAO,
+    listar_setores_distribuicao,
+)
 
 
 FORMATOS_COPIA_CHOICES = tuple((item, item) for item in GrdConfiguracao.FORMATOS_COPIA)
@@ -18,6 +23,11 @@ class GrdForm(forms.Form):
     contrato = forms.ModelChoiceField(queryset=Contrato.objects.none(), label="Contrato")
     data = forms.DateField(label="Data", widget=forms.DateInput(attrs={"type": "date"}))
     destinatario = forms.CharField(label="Destinatário", max_length=200)
+    setor_destino = forms.ChoiceField(
+        label="Setor de destino",
+        required=False,
+        choices=(("", "Cliente / externo"),),
+    )
     observacao = forms.CharField(
         label="Observação",
         required=False,
@@ -33,6 +43,13 @@ class GrdForm(forms.Form):
     ):
         super().__init__(*args, initial=initial, **kwargs)
         self.fields["contrato"].queryset = contratos
+        setores = listar_setores_distribuicao(configuracao) if configuracao else [
+            dict(setor) for setor in SETORES_DISTRIBUICAO_PADRAO
+        ]
+        self.fields["setor_destino"].choices = (
+            ("", "Cliente / externo"),
+            *((setor["nome"], setor["nome"]) for setor in setores),
+        )
         self.campos_digitados = []
         self.campos_digitados_render = []
         if configuracao:
@@ -58,6 +75,12 @@ class GrdConfiguracaoForm(forms.ModelForm):
         choices=FORMATOS_COPIA_CHOICES,
         widget=forms.CheckboxSelectMultiple,
     )
+    setores_distribuicao_texto = forms.CharField(
+        label="Setores de distribuição",
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 5}),
+        help_text="Informe um setor por linha. A ordem das linhas define a ordem na Lista Mestra.",
+    )
 
     class Meta:
         model = GrdConfiguracao
@@ -73,6 +96,30 @@ class GrdConfiguracaoForm(forms.ModelForm):
         self.fields["formatos_copias"].initial = (
             self.instance.formatos_copias or FORMATOS_COPIA_PADRAO
         )
+        setores = listar_setores_distribuicao(self.instance)
+        self.fields["setores_distribuicao_texto"].initial = "\n".join(
+            setor["nome"] for setor in setores
+        )
+
+    def clean_setores_distribuicao_texto(self):
+        nomes = [
+            linha.strip()
+            for linha in self.cleaned_data["setores_distribuicao_texto"].splitlines()
+            if linha.strip()
+        ]
+        if not nomes:
+            return [dict(setor) for setor in SETORES_DISTRIBUICAO_PADRAO]
+        if len(nomes) > 30:
+            raise ValidationError("Informe no máximo 30 setores.")
+        if any(len(nome) > 80 for nome in nomes):
+            raise ValidationError("Cada nome de setor pode ter no máximo 80 caracteres.")
+        normalizados = [nome.casefold() for nome in nomes]
+        if len(normalizados) != len(set(normalizados)):
+            raise ValidationError("Não repita o nome de um setor.")
+        return [
+            {"nome": nome, "ordem": ordem}
+            for ordem, nome in enumerate(nomes, start=1)
+        ]
 
     def clean_formato_numero(self):
         formato = self.cleaned_data["formato_numero"].strip()
@@ -109,6 +156,9 @@ class GrdConfiguracaoForm(forms.ModelForm):
     def save(self, commit=True):
         configuracao = super().save(commit=False)
         configuracao.formatos_copias = self.cleaned_data["formatos_copias"]
+        configuracao.setores_distribuicao = self.cleaned_data[
+            "setores_distribuicao_texto"
+        ]
         if commit:
             configuracao.save()
         return configuracao

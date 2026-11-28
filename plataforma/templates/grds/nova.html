@@ -53,6 +53,7 @@
     <input type="hidden" name="contrato" value="{{ form.contrato.value }}">
     <input type="hidden" name="data" value="{{ form.data.value }}">
     <input type="hidden" name="destinatario" value="{{ form.destinatario.value }}">
+    <input type="hidden" name="setor_destino" value="{{ form.setor_destino.value|default_if_none:'' }}">
     <input type="hidden" name="observacao" value="{{ form.observacao.value }}">
     <textarea name="texto_codigos" hidden>{{ form.texto_codigos.value }}</textarea>
     {% for campo in form.campos_digitados_render %}<input type="hidden" name="campo_{{ campo.pk }}" value="{{ campo.form.value|default_if_none:'' }}">{% endfor %}
@@ -68,6 +69,7 @@
       <label>{{ form.contrato.label }}{{ form.contrato }}{{ form.contrato.errors }}</label>
       <label>{{ form.data.label }}{{ form.data }}{{ form.data.errors }}</label>
       <label>{{ form.destinatario.label }}{{ form.destinatario }}{{ form.destinatario.errors }}</label>
+      <label>{{ form.setor_destino.label }}{{ form.setor_destino }}{{ form.setor_destino.errors }}</label>
       <label>{{ form.observacao.label }}{{ form.observacao }}{{ form.observacao.errors }}</label>
       {% for campo in form.campos_digitados_render %}
       <label>{{ campo.form.label }}{{ campo.form }}{{ campo.form.errors }}</label>

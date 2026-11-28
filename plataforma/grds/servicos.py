@@ -25,6 +25,33 @@ SEGMENTOS_CODIGO = (
     ("sequencial", "Sequencial"),
 )
 FORMATOS_COPIA_PADRAO = ["A1", "A3", "A4", "Digital"]
+SETORES_DISTRIBUICAO_PADRAO = (
+    {"nome": "Produção", "ordem": 1},
+    {"nome": "Topografia", "ordem": 2},
+    {"nome": "Qualidade", "ordem": 3},
+)
+
+
+def listar_setores_distribuicao(configuracao):
+    setores = getattr(configuracao, "setores_distribuicao", None) or []
+    normalizados = []
+    for indice, setor in enumerate(setores, start=1):
+        if isinstance(setor, str):
+            nome, ordem = setor.strip(), indice
+        elif isinstance(setor, dict):
+            nome = str(setor.get("nome", "")).strip()
+            ordem = setor.get("ordem", indice)
+        else:
+            continue
+        if nome:
+            try:
+                ordem = int(ordem)
+            except (TypeError, ValueError):
+                ordem = indice
+            normalizados.append({"nome": nome, "ordem": ordem})
+    if not normalizados:
+        normalizados = [dict(setor) for setor in SETORES_DISTRIBUICAO_PADRAO]
+    return sorted(normalizados, key=lambda setor: (setor["ordem"], setor["nome"].casefold()))
 
 
 def garantir_configuracao_grd(contrato):
@@ -102,7 +129,14 @@ def _valor_codigo(codigo, segmentos):
 
 
 def montar_campos_cabecalho(
-    contrato, aceitos, valores_digitados=None, *, configuracao=None, numero=None, data=None
+    contrato,
+    aceitos,
+    valores_digitados=None,
+    *,
+    configuracao=None,
+    numero=None,
+    data=None,
+    setor_destino="",
 ):
     configuracao = configuracao or garantir_configuracao_grd(contrato)
     valores_digitados = valores_digitados or {}
@@ -117,6 +151,14 @@ def montar_campos_cabecalho(
             else "",
         },
     ]
+    if listar_setores_distribuicao(configuracao):
+        campos.append(
+            {
+                "chave": "setor_destino",
+                "rotulo": "Setor de destino",
+                "valor": setor_destino or "Cliente / externo",
+            }
+        )
     codigos = [
         item.get("documento").identificador_base
         for item in aceitos
@@ -140,7 +182,9 @@ def montar_campos_cabecalho(
     return campos
 
 
-def dados_cabecalho_previa(contrato, previa, data, valores_digitados=None):
+def dados_cabecalho_previa(
+    contrato, previa, data, valores_digitados=None, *, setor_destino=""
+):
     configuracao = garantir_configuracao_grd(contrato)
     numero = proximo_numero_grd(contrato)
     campos = montar_campos_cabecalho(
@@ -150,6 +194,7 @@ def dados_cabecalho_previa(contrato, previa, data, valores_digitados=None):
         configuracao=configuracao,
         numero=numero,
         data=data,
+        setor_destino=setor_destino,
     )
     return {
         "campos": campos,
@@ -278,6 +323,7 @@ def criar_grd(
     *,
     valores_digitados=None,
     copias_por_emissao=None,
+    setor_destino="",
 ):
     with transaction.atomic():
         contrato_bloqueado = Contrato.objects.select_for_update().get(pk=contrato.pk)
@@ -290,6 +336,12 @@ def criar_grd(
             }
 
         configuracao = garantir_configuracao_grd(contrato_bloqueado)
+        setores_validos = {
+            setor["nome"] for setor in listar_setores_distribuicao(configuracao)
+        }
+        setor_destino = (setor_destino or "").strip()
+        if setor_destino and setor_destino not in setores_validos:
+            raise ValueError("O setor de destino não está configurado para este contrato.")
         numero = proximo_numero_grd(contrato_bloqueado)
         campos_cabecalho = montar_campos_cabecalho(
             contrato_bloqueado,
@@ -298,6 +350,7 @@ def criar_grd(
             configuracao=configuracao,
             numero=numero,
             data=data,
+            setor_destino=setor_destino,
         )
         nome_completo = usuario.get_full_name().strip() if usuario else ""
         grd = Grd.objects.create(
@@ -307,6 +360,7 @@ def criar_grd(
             data=data,
             destinatario=(destinatario or "").strip(),
             observacao=(observacao or "").strip(),
+            setor=setor_destino,
             campos_cabecalho={campo["chave"]: campo["valor"] for campo in campos_cabecalho},
             formatos_copias=configuracao.formatos_copias or [],
             emitido_por_nome=nome_completo,
@@ -326,9 +380,14 @@ def criar_grd(
     return {"grd": grd, "erro": "", **previa}
 
 
-def listar_grds(contrato):
+def listar_grds(contrato, setor=None):
+    grds = Grd.objects.filter(contrato=contrato)
+    if setor == "__sem_setor__":
+        grds = grds.filter(setor="")
+    elif setor:
+        grds = grds.filter(setor=setor)
     return (
-        Grd.objects.filter(contrato=contrato)
+        grds
         .select_related("contrato", "criado_por")
         .annotate(quantidade_itens=Count("itens"))
         .order_by("-criado_em", "-numero")
@@ -371,3 +430,36 @@ def grds_por_emissoes(emissoes):
     for item in itens:
         por_emissao[item.emissao_id].append(item.grd)
     return por_emissao
+
+
+def dados_grds_lista_mestra(emissoes, setores):
+    emissao_ids = [emissao.pk for emissao in emissoes if emissao.pk]
+    por_emissao = defaultdict(list)
+    por_emissao_setor = {}
+    por_documento_setor = {}
+    if not emissao_ids:
+        return por_emissao, por_emissao_setor, por_documento_setor
+
+    nomes_setores = {setor["nome"] for setor in setores}
+    itens = (
+        GrdItem.objects.filter(emissao_id__in=emissao_ids)
+        .select_related("grd", "grd__contrato", "grd__criado_por", "emissao")
+        .order_by("-grd__criado_em", "-grd__numero", "-grd_id")
+    )
+    for item in itens:
+        grd = item.grd
+        por_emissao[item.emissao_id].append(grd)
+        if grd.setor not in nomes_setores:
+            continue
+        chave_emissao_setor = (item.emissao_id, grd.setor)
+        chave_documento_setor = (item.emissao.documento_id, grd.setor)
+        por_emissao_setor.setdefault(chave_emissao_setor, item)
+        item_atual = por_documento_setor.get(chave_documento_setor)
+        chave_recencia = (grd.data, grd.criado_em, grd.pk)
+        if item_atual is None or chave_recencia > (
+            item_atual.grd.data,
+            item_atual.grd.criado_em,
+            item_atual.grd.pk,
+        ):
+            por_documento_setor[chave_documento_setor] = item
+    return por_emissao, por_emissao_setor, por_documento_setor

@@ -38,7 +38,11 @@
       </div>
     </section>
     <section>
-      <div class="panel-heading"><div><h2>Campos do cabeçalho</h2><p>Campos automáticos de número, data e quantidade de documentos sempre aparecem.</p></div></div>
+      <div class="panel-heading"><div><h2>Setores de distribuição</h2><p>Esses setores ficam disponíveis nas GRDs e viram colunas na Lista Mestra.</p></div></div>
+      <label>{{ form.setores_distribuicao_texto.label }}{{ form.setores_distribuicao_texto }}{{ form.setores_distribuicao_texto.errors }}<small>{{ form.setores_distribuicao_texto.help_text }}</small></label>
+    </section>
+    <section>
+      <div class="panel-heading"><div><h2>Campos do cabeçalho</h2><p>Campos automáticos de número, data, setor e quantidade de documentos sempre aparecem.</p></div></div>
       {{ formset.management_form }}
       {% for erro in formset.non_form_errors %}<p class="field-error">{{ erro }}</p>{% endfor %}
       {% for campo in formset.forms %}

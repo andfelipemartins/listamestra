@@ -10,6 +10,11 @@
   .lista-mestra-tabela th,
   .lista-mestra-tabela td { padding: 4px 8px; font-size: 12px; line-height: 1.2; vertical-align: middle; white-space: nowrap; }
   .lista-mestra-tabela th { position: sticky; top: 0; z-index: 2; }
+  .lista-mestra-tabela thead tr:nth-child(2) th { top: 28px; z-index: 2; }
+  .lista-mestra-tabela .lista-mestra-setor-coluna { border-left: 1px solid var(--border); }
+  .lista-mestra-tabela .lista-mestra-setor-grupo { background: var(--surface-raised); color: var(--text-primary); text-align: center; }
+  .lista-mestra-setores-ocultos .lista-mestra-setor-coluna { display: none; }
+  .lista-mestra-aviso-revisao { display: inline-block; padding: 3px 6px; border-radius: 999px; background: var(--warning-surface); color: var(--warning-text); font-weight: 700; }
   .lista-mestra-coluna-curta { width: 1%; }
   .lista-mestra-codigo { position: sticky; left: 0; z-index: 1; min-width: 220px; background: var(--surface); }
   .lista-mestra-tabela th.lista-mestra-codigo { z-index: 3; background: var(--surface-raised); }
@@ -72,9 +77,18 @@
 
   <section class="panel" aria-label="Emissões da Lista Mestra">
     <div class="panel-heading"><div><h2>{{ total_filtrado }} {% if total_filtrado == 1 %}emissão{% else %}emissões{% endif %}</h2><p>Página {{ pagina.number }} de {{ pagina.paginator.num_pages|default:1 }} · até 100 linhas por página.</p></div></div>
+    <div class="painel-filtros-acoes"><button class="button button-quiet" id="lista-mestra-alternar-setores" type="button" aria-expanded="false" aria-controls="lista-mestra-tabela">Exibir colunas por setor</button></div>
     <div class="table-wrap lista-mestra-tabela" tabindex="0" role="region" aria-label="Tabela da Lista Mestra; use a rolagem horizontal para ver todas as colunas">
-      <table>
-        <thead><tr><th class="lista-mestra-codigo">Código</th>{% for segmento in segmentos_codigo %}<th class="lista-mestra-coluna-curta">{{ segmento.rotulo|default:segmento.nome }}</th>{% endfor %}<th class="lista-mestra-titulo">Título</th><th class="lista-mestra-texto-longo">Elabora&#231;&#227;o</th><th class="lista-mestra-texto-longo">Disciplina</th><th class="lista-mestra-coluna-curta">Revisão</th><th class="lista-mestra-coluna-curta">Versão</th><th class="lista-mestra-coluna-curta">Fase</th><th class="lista-mestra-coluna-curta">Data de emissão</th><th class="lista-mestra-coluna-curta">Rótulo cronológico</th><th class="lista-mestra-coluna-curta">GRD</th><th>Situação da análise</th><th class="lista-mestra-coluna-curta">Data da análise</th><th class="lista-mestra-texto-longo">Documento de retorno</th><th class="lista-mestra-texto-longo">Observação</th></tr></thead>
+      <table id="lista-mestra-tabela" class="lista-mestra-setores-ocultos">
+        <thead>
+          <tr>
+            <th class="lista-mestra-codigo" rowspan="2">Código</th>
+            {% for segmento in segmentos_codigo %}<th class="lista-mestra-coluna-curta" rowspan="2">{{ segmento.rotulo|default:segmento.nome }}</th>{% endfor %}
+            <th class="lista-mestra-titulo" rowspan="2">Título</th><th class="lista-mestra-texto-longo" rowspan="2">Elabora&#231;&#227;o</th><th class="lista-mestra-texto-longo" rowspan="2">Disciplina</th><th class="lista-mestra-coluna-curta" rowspan="2">Revisão</th><th class="lista-mestra-coluna-curta" rowspan="2">Versão</th><th class="lista-mestra-coluna-curta" rowspan="2">Fase</th><th class="lista-mestra-coluna-curta" rowspan="2">Data de emissão</th><th class="lista-mestra-coluna-curta" rowspan="2">Rótulo cronológico</th><th class="lista-mestra-coluna-curta">GRD</th><th rowspan="2">Situação da análise</th><th class="lista-mestra-coluna-curta" rowspan="2">Data da análise</th><th class="lista-mestra-texto-longo" rowspan="2">Documento de retorno</th><th class="lista-mestra-texto-longo" rowspan="2">Observação</th>
+            {% for setor in setores_distribuicao %}<th class="lista-mestra-setor-coluna lista-mestra-setor-grupo" colspan="3">{{ setor.nome }}</th>{% endfor %}
+          </tr>
+          <tr><th class="lista-mestra-coluna-curta"></th>{% for setor in setores_distribuicao %}<th class="lista-mestra-setor-coluna lista-mestra-coluna-curta">GRD</th><th class="lista-mestra-setor-coluna lista-mestra-coluna-curta">Data envio</th><th class="lista-mestra-setor-coluna lista-mestra-coluna-curta">Em campo</th>{% endfor %}</tr>
+        </thead>
         <tbody>
           {% for linha in pagina.object_list %}
           <tr>
@@ -93,8 +107,13 @@
             <td class="lista-mestra-coluna-curta">{% if linha.data_analise %}{{ linha.data_analise|date:"d/m/Y" }}{% else %}—{% endif %}</td>
             <td class="lista-mestra-celula-truncada lista-mestra-texto-longo" title="{{ linha.documento_retorno|default:'—' }}">{{ linha.documento_retorno|default:"—" }}</td>
             <td class="lista-mestra-celula-truncada lista-mestra-texto-longo" title="{{ linha.observacao|default:'—' }}">{{ linha.observacao|default:"—" }}</td>
+            {% for setor in linha.distribuicao_setores %}
+            <td class="lista-mestra-setor-coluna lista-mestra-coluna-curta">{% if setor.grd_item %}<a href="{% url 'grds:detalhe' contrato.pk setor.grd_item.grd.pk %}" title="{{ setor.grd_item.grd.rotulo }}">{{ setor.grd_item.grd.rotulo }}</a>{% endif %}</td>
+            <td class="lista-mestra-setor-coluna lista-mestra-coluna-curta">{% if setor.data %}{{ setor.data|date:"d/m/Y" }}{% endif %}</td>
+            <td class="lista-mestra-setor-coluna lista-mestra-coluna-curta">{% if setor.em_campo %}{% if setor.desatualizado %}<span class="lista-mestra-aviso-revisao">rev. {{ setor.em_campo.revisao }} em campo, há rev. {{ setor.revisao_emitida }}</span>{% else %}{{ setor.em_campo.revisao }}{% endif %}{% endif %}</td>
+            {% endfor %}
           </tr>
-          {% empty %}<tr><td colspan="{{ segmentos_codigo|length|add:14 }}" class="painel-sem-dados">Nenhuma emissão corresponde aos filtros.</td></tr>{% endfor %}
+          {% empty %}<tr><td colspan="100" class="painel-sem-dados">Nenhuma emissão corresponde aos filtros.</td></tr>{% endfor %}
         </tbody>
       </table>
     </div>
@@ -109,5 +128,26 @@
     </nav>
     {% endif %}
   </section>
+  <script>
+    (() => {
+      const tabela = document.getElementById("lista-mestra-tabela");
+      const botao = document.getElementById("lista-mestra-alternar-setores");
+      if (!tabela || !botao) return;
+      const chave = `sclme-lista-mestra-setores-{{ contrato.pk|escapejs }}`;
+      let visiveis = false;
+      try { visiveis = localStorage.getItem(chave) === "1"; } catch (erro) {}
+      const atualizar = () => {
+        tabela.classList.toggle("lista-mestra-setores-ocultos", !visiveis);
+        botao.setAttribute("aria-expanded", String(visiveis));
+        botao.textContent = visiveis ? "Recolher colunas por setor" : "Exibir colunas por setor";
+      };
+      atualizar();
+      botao.addEventListener("click", () => {
+        visiveis = !visiveis;
+        try { localStorage.setItem(chave, visiveis ? "1" : "0"); } catch (erro) {}
+        atualizar();
+      });
+    })();
+  </script>
 {% endif %}
 {% endblock %}

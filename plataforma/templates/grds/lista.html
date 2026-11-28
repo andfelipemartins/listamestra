@@ -19,15 +19,27 @@
       <button class="button button-quiet" type="submit">Abrir contrato</button>
     </form>
     {% endif %}
+    <form class="painel-filtros-acoes" method="get">
+      <input type="hidden" name="contrato" value="{{ contrato.pk }}">
+      <label class="painel-filtro">Setor de destino
+        <select name="setor">
+          <option value="">Todos os setores</option>
+          <option value="__sem_setor__" {% if setor_selecionado == "__sem_setor__" %}selected{% endif %}>Cliente / externo</option>
+          {% for setor in setores_distribuicao %}<option value="{{ setor.nome }}" {% if setor_selecionado == setor.nome %}selected{% endif %}>{{ setor.nome }}</option>{% endfor %}
+        </select>
+      </label>
+      <button class="button button-quiet" type="submit">Filtrar</button>
+    </form>
     {% if grds %}
     <div class="table-wrap">
       <table>
-        <thead><tr><th>GRD</th><th>Data</th><th>Destinatário</th><th>Itens</th><th>Criada por</th></tr></thead>
+        <thead><tr><th>GRD</th><th>Data</th><th>Setor de destino</th><th>Destinatário</th><th>Itens</th><th>Criada por</th></tr></thead>
         <tbody>
           {% for grd in grds %}
           <tr>
             <td><a href="{% url 'grds:detalhe' contrato.pk grd.pk %}"><strong>{{ grd.rotulo }}</strong></a></td>
             <td>{{ grd.data|date:"d/m/Y" }}</td>
+            <td>{{ grd.setor|default:"Cliente / externo" }}</td>
             <td>{{ grd.destinatario }}</td>
             <td>{{ grd.quantidade_itens }}</td>
             <td>{{ grd.criado_por.get_full_name|default:grd.criado_por.username|default:"Sistema" }}</td>
