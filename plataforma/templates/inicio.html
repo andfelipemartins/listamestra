@@ -25,6 +25,35 @@
   {% else %}
     {% if perfil_erro %}<div class="notice" style="margin-bottom:16px">{{ perfil_erro }}</div>{% endif %}
 
+    <article class="mesa-card" aria-labelledby="mesa-minhas-tarefas" style="margin-bottom:20px">
+      <header class="mesa-card-cabecalho">
+        <div>
+          <h2 id="mesa-minhas-tarefas">Minhas tarefas</h2>
+          <p>{{ tarefas_minhas_total }} aberta{{ tarefas_minhas_total|pluralize }} atribuída{{ tarefas_minhas_total|pluralize:'s' }} a você.</p>
+        </div>
+        <a href="{{ tarefas_url }}">Ver todas <span aria-hidden="true">→</span></a>
+      </header>
+      {% if tarefas_minhas %}
+        <ul class="mesa-documento-lista">
+          {% for tarefa in tarefas_minhas %}
+            <li>
+              <div class="mesa-documento">
+                <span class="mesa-selo mesa-selo--{% if tarefa.atrasada %}atrasado{% else %}analise{% endif %}">{% if tarefa.atrasada %}Atrasada{% else %}Prazo {{ tarefa.prazo|date:"d/m/Y" }}{% endif %}</span>
+                <a href="{% url 'tarefas:detalhe' tarefa.pk %}"><strong>{{ tarefa.titulo }}</strong></a>
+                {% if tarefa.documento %}<a href="{% url 'documento_pasta' contrato.pk tarefa.documento.pk %}">{{ tarefa.documento.identificador_base }}</a>{% endif %}
+                {% if tarefa.parece_feita %}<span class="mesa-selo mesa-selo--analise">Parece feita</span>{% endif %}
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="mesa-vazio">Você não tem tarefas abertas.</p>
+      {% endif %}
+      {% if tarefas_equipe_resumo %}
+        <p class="mesa-vencimento-resumo">Equipe: {{ tarefas_equipe_resumo.abertas }} abertas, {{ tarefas_equipe_resumo.atrasadas }} atrasadas.</p>
+      {% endif %}
+    </article>
+
     <section class="mesa-indicadores" aria-label="Resumo do contrato">
       {% for indicador in indicadores_inicio %}
         <div class="mesa-indicador-wrapper">

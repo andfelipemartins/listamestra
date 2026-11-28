@@ -107,6 +107,7 @@ INSTALLED_APPS = [
     "acoes.apps.AcoesConfig",
     "backups.apps.BackupsConfig",
     "grds.apps.GrdsConfig",
+    "tarefas.apps.TarefasConfig",
 ]
 
 MIDDLEWARE = [

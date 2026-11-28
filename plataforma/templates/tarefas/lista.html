@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Tarefas · {{ contrato.codigo_interno }}{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <div>
+    <span class="eyebrow">{{ contrato.codigo_interno }} · {{ contrato.nome }}</span>
+    <h1>Tarefas</h1>
+    <p>Acompanhe responsáveis, prazos e tarefas ligadas aos documentos deste contrato.</p>
+  </div>
+  <a class="button button-primary" href="{% url 'tarefas:criar' %}">Nova tarefa</a>
+</section>
+
+<nav class="tab-nav" aria-label="Listas de tarefas">
+  <a class="{% if aba == 'minhas' %}active{% endif %}" href="?aba=minhas">Minhas</a>
+  {% if pode_ver_equipe %}<a class="{% if aba == 'equipe' %}active{% endif %}" href="?aba=equipe">Da equipe</a>{% endif %}
+  <a class="{% if aba == 'criadas' %}active{% endif %}" href="?aba=criadas">Criadas por mim</a>
+</nav>
+
+<form class="painel-filtros-form" method="get">
+  <input type="hidden" name="aba" value="{{ aba }}">
+  <div class="painel-filtros-grade">
+    <div class="atividade-filtro">
+      <label for="tarefa-status">Status</label>
+      <select id="tarefa-status" name="status">
+        <option value="">Todos</option>
+        {% for valor, rotulo in status_opcoes %}<option value="{{ valor }}" {% if status_selecionado == valor %}selected{% endif %}>{{ rotulo }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="atividade-filtro">
+      <label for="tarefa-prazo">Prazo</label>
+      <select id="tarefa-prazo" name="prazo">
+        <option value="" {% if not prazo_selecionado %}selected{% endif %}>Todos</option>
+        <option value="atrasadas" {% if prazo_selecionado == 'atrasadas' %}selected{% endif %}>Atrasadas</option>
+        <option value="hoje" {% if prazo_selecionado == 'hoje' %}selected{% endif %}>Vencem hoje</option>
+        <option value="futuras" {% if prazo_selecionado == 'futuras' %}selected{% endif %}>Próximas</option>
+      </select>
+    </div>
+  </div>
+  <div class="painel-filtros-acoes"><button class="button button-primary" type="submit">Filtrar</button><a class="button button-quiet" href="?aba={{ aba }}">Limpar</a></div>
+</form>
+
+<section class="panel" aria-label="Tarefas">
+  {% if tarefas %}
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Tarefa</th><th>Responsável</th><th>Prazo</th><th>Status</th><th>Documento</th></tr></thead>
+        <tbody>
+          {% for tarefa in tarefas %}
+          <tr>
+            <td><a href="{% url 'tarefas:detalhe' tarefa.pk %}"><strong>{{ tarefa.titulo }}</strong></a>{% if tarefa.parece_feita %}<br><span class="mesa-selo mesa-selo--analise">Parece feita</span>{% endif %}</td>
+            <td>{{ tarefa.responsavel.get_full_name|default:tarefa.responsavel.username }}</td>
+            <td>{% if tarefa.atrasada %}<span class="mesa-selo mesa-selo--atrasado">Atrasada</span> {% endif %}{{ tarefa.prazo|date:"d/m/Y" }}</td>
+            <td>{{ tarefa.get_status_display }}</td>
+            <td>{% if tarefa.documento %}<a href="{% url 'documento_pasta' contrato.pk tarefa.documento.pk %}">{{ tarefa.documento.identificador_base }}</a>{% else %}—{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="mesa-vazio">Nenhuma tarefa corresponde aos filtros.</p>
+  {% endif %}
+</section>
+{% endblock %}

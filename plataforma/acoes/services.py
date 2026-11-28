@@ -283,8 +283,21 @@ def carregar_resumo_inicio(usuario, contrato_id=None, *, hoje=None):
         None,
     )
     mostrar_atividade = _pode_ver_atividade(usuario, mesa.get("contrato")) if mesa.get("contrato") else False
+    from tarefas.servicos import carregar_resumo_tarefas
+
+    resumo_tarefas = (
+        carregar_resumo_tarefas(usuario, mesa["contrato"], hoje=hoje)
+        if mesa.get("contrato")
+        else {
+            "tarefas_minhas": [],
+            "tarefas_minhas_total": 0,
+            "tarefas_equipe_resumo": None,
+            "tarefas_url": reverse("tarefas:lista"),
+        }
+    )
     return {
         **mesa,
+        **resumo_tarefas,
         "cards_janelas": cards_janelas,
         "cards_pacotes": _cards_pacotes_analise(mesa),
         "resumo_atrasos": resumo_atrasos,

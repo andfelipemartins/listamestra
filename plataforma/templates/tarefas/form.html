@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}{% if criando %}Nova tarefa{% else %}{{ tarefa.titulo }}{% endif %} · {{ contrato.codigo_interno }}{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <div>
+    <span class="eyebrow">{{ contrato.codigo_interno }} · {{ contrato.nome }}</span>
+    <h1>{% if criando %}Nova tarefa{% else %}{{ tarefa.titulo }}{% endif %}</h1>
+    {% if tarefa %}<p>{{ tarefa.get_status_display }} · criada por {{ tarefa.criada_por.get_full_name|default:tarefa.criada_por.username }} em {{ tarefa.criada_em|date:"d/m/Y H:i" }}</p>{% endif %}
+  </div>
+  <a class="button button-quiet" href="{% url 'tarefas:lista' %}">Voltar para tarefas</a>
+</section>
+
+<section class="panel">
+  {% if form %}
+    <form method="post">
+      {% csrf_token %}
+      {{ form.non_field_errors }}
+      {% for field in form %}
+      <div class="form-field">
+        {{ field.label_tag }}
+        {{ field }}
+        {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
+        {{ field.errors }}
+      </div>
+      {% endfor %}
+      <div class="panel-actions"><button class="button button-primary" type="submit">{% if criando %}Criar tarefa{% else %}Salvar alterações{% endif %}</button></div>
+    </form>
+  {% else %}
+    <p>{{ tarefa.descricao|default:"Sem descrição."|linebreaksbr }}</p>
+    <p><strong>Responsável:</strong> {{ tarefa.responsavel.get_full_name|default:tarefa.responsavel.username }}</p>
+    <p><strong>Prazo:</strong> {% if tarefa.atrasada %}<span class="mesa-selo mesa-selo--atrasado">Atrasada</span> {% endif %}{{ tarefa.prazo|date:"d/m/Y" }}</p>
+  {% endif %}
+  {% if tarefa.documento %}
+    <p><strong>Documento:</strong> <a href="{% url 'documento_pasta' contrato.pk tarefa.documento.pk %}">{{ tarefa.documento.identificador_base }} — {{ tarefa.documento.titulo|default:"Sem título" }}</a></p>
+    {% if tarefa.parece_feita %}<p><span class="mesa-selo mesa-selo--analise">Parece feita</span> Uma emissão foi criada depois desta tarefa. A tarefa continua aberta até o responsável concluí-la.</p>{% endif %}
+  {% endif %}
+  {% if tarefa and tarefa.status == 'aberta' %}
+    <div class="panel-actions">
+      {% if pode_concluir %}<form method="post" action="{% url 'tarefas:concluir' tarefa.pk %}">{% csrf_token %}<button class="button button-primary" type="submit">Concluir tarefa</button></form>{% endif %}
+      {% if pode_cancelar %}<form method="post" action="{% url 'tarefas:cancelar' tarefa.pk %}">{% csrf_token %}<button class="button button-quiet" type="submit">Cancelar tarefa</button></form>{% endif %}
+    </div>
+  {% endif %}
+</section>
+
+{% if historico %}
+<section class="panel">
+  <div class="panel-heading"><div><h2>Histórico da tarefa</h2><p>Criação, alterações e mudanças de status registradas.</p></div></div>
+  <ul class="activity-list">
+    {% for registro in historico %}
+      <li><strong>{{ registro.history_change_reason|default:"Tarefa atualizada" }}</strong> · {{ registro.history_user.get_full_name|default:registro.history_user.username|default:"Sistema" }} · {{ registro.history_date|date:"d/m/Y H:i" }}</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% endblock %}

@@ -46,5 +46,6 @@ urlpatterns = [
     path("documentos/", include("documentos.urls")),
     path("backups/", include("backups.urls")),
     path("grds/", include("grds.urls")),
+    path("tarefas/", include("tarefas.urls")),
     path("", InicioView.as_view(), name="inicio"),
 ]
