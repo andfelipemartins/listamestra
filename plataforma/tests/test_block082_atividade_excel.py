@@ -1,7 +1,7 @@
-import csv
-from datetime import timedelta
-from io import StringIO
+from datetime import datetime, timedelta
+from io import BytesIO
 
+from openpyxl import load_workbook
 import pytest
 from django.contrib.auth import get_user_model
 from django.urls import reverse
@@ -50,27 +50,29 @@ def _documento(contrato, codigo, usuario, *, data_hora=None):
     return documento
 
 
-def _csv(response):
-    texto = response.content.decode("utf-8-sig")
-    leitor = csv.DictReader(StringIO(texto, newline=""), delimiter=";")
-    return texto, leitor.fieldnames, list(leitor)
+def _excel(response):
+    workbook = load_workbook(BytesIO(response.content), data_only=False)
+    planilha = workbook["Atividade"]
+    return workbook, planilha
 
 
 @pytest.mark.django_db
-def test_baixa_csv_com_bom_cabecalho_separador_data_e_nome_seguro(client):
+def test_baixa_excel_formatado_com_datas_reais_e_nome_seguro(client):
     contrato = _contrato()
     usuario = _usuario(contrato, primeiro_nome="José", sobrenome="Álvares")
     _documento(contrato, "DE-15.25.00.00-6A1-1001", usuario)
     client.force_login(usuario)
 
     resposta = client.get(
-        reverse("atividade"), {"contrato": contrato.pk, "formato": "csv"}
+        reverse("atividade"), {"contrato": contrato.pk, "formato": "xlsx"}
     )
 
-    texto, cabecalho, linhas = _csv(resposta)
+    workbook, planilha = _excel(resposta)
     assert resposta.status_code == 200
-    assert resposta.content.startswith(b"\xef\xbb\xbf")
-    assert cabecalho == [
+    assert resposta["Content-Type"] == (
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    assert [celula.value for celula in planilha[1]] == [
         "Data e hora",
         "Pessoa",
         "Ação",
@@ -78,18 +80,29 @@ def test_baixa_csv_com_bom_cabecalho_separador_data_e_nome_seguro(client):
         "Código do documento",
         "Resumo",
     ]
-    assert ";" in texto
-    assert linhas[0]["Data e hora"] == timezone.localtime().strftime("%d/%m/%Y %H:%M")
-    assert linhas[0]["Pessoa"] == "José Álvares"
-    assert linhas[0]["Código do documento"] == "DE-15.25.00.00-6A1-1001"
+    assert planilha.max_row == 2
+    assert planilha.freeze_panes == "A2"
+    assert planilha.auto_filter.ref == "A1:F2"
+    assert isinstance(planilha["A2"].value, datetime)
+    assert planilha["A2"].value.strftime("%d/%m/%Y %H:%M") == timezone.localtime().strftime(
+        "%d/%m/%Y %H:%M"
+    )
+    assert planilha["A2"].number_format == "dd/mm/yyyy hh:mm"
+    assert planilha["B2"].value == "José Álvares"
+    assert planilha["E2"].value == "DE-15.25.00.00-6A1-1001"
+    assert planilha["A1"].font.bold
+    assert planilha["A1"].fill.fill_type == "solid"
+    assert all(planilha.column_dimensions[letra].width for letra in "ABCDEF")
+    assert planilha.column_dimensions["F"].width <= 80
     nome_arquivo = (
-        f'attachment; filename="atividade-ct-abloco-02-{timezone.localdate().isoformat()}.csv"'
+        f'attachment; filename="atividade-ct-abloco-02-{timezone.localdate().isoformat()}.xlsx"'
     )
     assert resposta["Content-Disposition"] == nome_arquivo
+    workbook.close()
 
 
 @pytest.mark.django_db
-def test_csv_reaproveita_filtros_de_pessoa_codigo_e_periodo(client):
+def test_excel_reaproveita_filtros_de_pessoa_codigo_e_periodo(client):
     contrato = _contrato("CT-FILTROS")
     pessoa = _usuario(contrato, "ana", primeiro_nome="Ana")
     outra_pessoa = _usuario(contrato, "bia", primeiro_nome="Bia")
@@ -110,7 +123,7 @@ def test_csv_reaproveita_filtros_de_pessoa_codigo_e_periodo(client):
         reverse("atividade"),
         {
             "contrato": contrato.pk,
-            "formato": "csv",
+            "formato": "xlsx",
             "pessoa": pessoa.pk,
             "codigo": "1001",
             "de": timezone.localdate().isoformat(),
@@ -118,13 +131,14 @@ def test_csv_reaproveita_filtros_de_pessoa_codigo_e_periodo(client):
         },
     )
 
-    _, _, linhas = _csv(resposta)
-    assert [linha["Código do documento"] for linha in linhas] == [codigo_incluido]
-    assert linhas[0]["Pessoa"] == "Ana Silva"
+    _, planilha = _excel(resposta)
+    assert planilha.max_row - 1 == 1
+    assert [linha[4] for linha in planilha.iter_rows(min_row=2, values_only=True)] == [codigo_incluido]
+    assert planilha["B2"].value == "Ana Silva"
 
 
 @pytest.mark.django_db
-def test_csv_exporta_todos_os_eventos_sem_limite_da_paginacao(client):
+def test_excel_exporta_todos_os_eventos_sem_limite_da_paginacao(client):
     contrato = _contrato("CT-MUITOS")
     usuario = _usuario(contrato)
     for numero in range(60):
@@ -132,28 +146,28 @@ def test_csv_exporta_todos_os_eventos_sem_limite_da_paginacao(client):
     client.force_login(usuario)
 
     resposta = client.get(
-        reverse("atividade"), {"contrato": contrato.pk, "formato": "csv"}
+        reverse("atividade"), {"contrato": contrato.pk, "formato": "xlsx"}
     )
 
-    _, _, linhas = _csv(resposta)
-    assert len(linhas) == 60
+    _, planilha = _excel(resposta)
+    assert planilha.max_row - 1 == 60
 
 
 @pytest.mark.django_db
-def test_nao_participante_recebe_403_no_csv(client):
+def test_nao_participante_recebe_403_na_exportacao_excel(client):
     contrato = _contrato("CT-PRIVADO")
     usuario = _usuario(None, "externo")
     client.force_login(usuario)
 
     resposta = client.get(
-        reverse("atividade"), {"contrato": contrato.pk, "formato": "csv"}
+        reverse("atividade"), {"contrato": contrato.pk, "formato": "xlsx"}
     )
 
     assert resposta.status_code == 403
 
 
 @pytest.mark.django_db
-def test_staff_baixa_csv_de_outro_contrato(client):
+def test_staff_baixa_excel_de_outro_contrato(client):
     contrato = _contrato("CT-OUTRO")
     autor = _usuario(contrato)
     codigo = "DE-15.25.00.00-6A1-3001"
@@ -162,16 +176,16 @@ def test_staff_baixa_csv_de_outro_contrato(client):
     client.force_login(staff)
 
     resposta = client.get(
-        reverse("atividade"), {"contrato": contrato.pk, "formato": "csv"}
+        reverse("atividade"), {"contrato": contrato.pk, "formato": "xlsx"}
     )
 
-    _, _, linhas = _csv(resposta)
+    _, planilha = _excel(resposta)
     assert resposta.status_code == 200
-    assert [linha["Código do documento"] for linha in linhas] == [codigo]
+    assert [linha[4] for linha in planilha.iter_rows(min_row=2, values_only=True)] == [codigo]
 
 
 @pytest.mark.django_db
-def test_link_csv_preserva_filtros_atuais(client):
+def test_link_excel_preserva_filtros_atuais(client):
     contrato = _contrato("CT-LINK")
     usuario = _usuario(contrato)
     client.force_login(usuario)
@@ -190,10 +204,29 @@ def test_link_csv_preserva_filtros_atuais(client):
 
     html = resposta.content.decode()
     assert resposta.status_code == 200
-    assert "Baixar planilha (CSV)" in html
+    assert "Baixar planilha (Excel)" in html
     assert (
         f'href="{reverse("atividade")}?contrato={contrato.pk}&amp;pessoa={usuario.pk}'
         in html
     )
-    assert "formato=csv" in html
+    assert "formato=xlsx" in html
     assert "codigo=1001" in html
+
+
+@pytest.mark.django_db
+def test_parametro_csv_legado_baixa_excel(client):
+    contrato = _contrato("CT-LEGADO")
+    usuario = _usuario(contrato)
+    client.force_login(usuario)
+
+    resposta = client.get(
+        reverse("atividade"), {"contrato": contrato.pk, "formato": "csv"}
+    )
+
+    assert resposta.status_code == 200
+    assert resposta["Content-Type"].startswith(
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    assert resposta["Content-Disposition"].endswith(".xlsx\"")
+    _, planilha = _excel(resposta)
+    assert planilha.title == "Atividade"

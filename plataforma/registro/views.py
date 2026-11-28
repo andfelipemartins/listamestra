@@ -1,7 +1,8 @@
-import csv
 from datetime import date
-from io import StringIO
+from io import BytesIO
 
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
@@ -47,8 +48,8 @@ class AtividadeView(LoginRequiredMixin, View):
             "codigo": request.GET.get("codigo", "").strip(),
         }
         eventos_filtrados = _filtrar(eventos, filtros)
-        if request.GET.get("formato") == "csv":
-            return _resposta_csv(contrato, eventos_filtrados)
+        if request.GET.get("formato") in {"xlsx", "csv"}:
+            return _resposta_excel(contrato, eventos_filtrados)
 
         chave_evento = request.GET.get("evento", "")
         evento_detalhe = next(
@@ -121,36 +122,64 @@ class AtividadeView(LoginRequiredMixin, View):
             "proxima_url": proxima_url,
             "evento_detalhe": evento_detalhe,
             "url_lista": _url_sem_parametro(request.GET, "evento"),
-            "url_csv": _url_csv(request.GET),
+            "url_excel": _url_excel(request.GET),
             "total_filtrado": len(eventos_filtrados),
         }
         return render(request, self.template_name, contexto)
 
 
-def _resposta_csv(contrato, eventos):
-    arquivo = StringIO(newline="")
-    escritor = csv.writer(arquivo, delimiter=";", lineterminator="\r\n")
-    escritor.writerow(
-        ("Data e hora", "Pessoa", "Ação", "Evento", "Código do documento", "Resumo")
+def _resposta_excel(contrato, eventos):
+    workbook = Workbook()
+    planilha = workbook.active
+    planilha.title = "Atividade"
+    cabecalho = (
+        "Data e hora",
+        "Pessoa",
+        "Ação",
+        "Evento",
+        "Código do documento",
+        "Resumo",
     )
+    planilha.append(cabecalho)
+    for celula in planilha[1]:
+        celula.font = Font(bold=True, color="FFFFFF")
+        celula.fill = PatternFill(fill_type="solid", fgColor="1F4E78")
+
     for evento in eventos:
-        data_hora_local = timezone.localtime(evento["data_hora"])
-        escritor.writerow(
-            (
-                data_hora_local.strftime("%d/%m/%Y %H:%M"),
-                evento["usuario_nome"],
-                evento["acao_rotulo"],
-                evento["entidade"],
-                evento.get("codigo", ""),
-                evento["resumo"],
-            )
+        data_hora_local = timezone.localtime(evento["data_hora"]).replace(tzinfo=None)
+        valores = (
+            data_hora_local,
+            evento["usuario_nome"],
+            evento["acao_rotulo"],
+            evento["entidade"],
+            evento.get("codigo", ""),
+            evento["resumo"],
         )
+        planilha.append(valores)
+        planilha.cell(planilha.max_row, 1).number_format = "dd/mm/yyyy hh:mm"
+        for celula in planilha[planilha.max_row][1:]:
+            celula.data_type = "s"
+
+    limites_largura = (22, 40, 24, 30, 48, 80)
+    for coluna, limite in enumerate(limites_largura, start=1):
+        maior_conteudo = max(
+            len(str(planilha.cell(linha, coluna).value or ""))
+            for linha in range(1, planilha.max_row + 1)
+        )
+        planilha.column_dimensions[planilha.cell(1, coluna).column_letter].width = min(
+            maior_conteudo + 2, limite
+        )
+    planilha.freeze_panes = "A2"
+    planilha.auto_filter.ref = planilha.dimensions
+
+    arquivo = BytesIO()
+    workbook.save(arquivo)
 
     identificador = slugify(contrato.codigo_interno) or f"contrato-{contrato.pk}"
-    nome_arquivo = f"atividade-{identificador}-{timezone.localdate().isoformat()}.csv"
+    nome_arquivo = f"atividade-{identificador}-{timezone.localdate().isoformat()}.xlsx"
     resposta = HttpResponse(
-        arquivo.getvalue().encode("utf-8-sig"),
-        content_type="text/csv; charset=utf-8",
+        arquivo.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
     resposta["Content-Disposition"] = f'attachment; filename="{nome_arquivo}"'
     return resposta
@@ -231,9 +260,9 @@ def _url_sem_parametro(parametros, remover, nome=None, valor=None):
     return f"{reverse('atividade')}?{consulta.urlencode()}" if consulta else reverse("atividade")
 
 
-def _url_csv(parametros):
+def _url_excel(parametros):
     consulta = parametros.copy()
     consulta.pop("evento", None)
     consulta.pop("pagina", None)
-    consulta["formato"] = "csv"
+    consulta["formato"] = "xlsx"
     return f"{reverse('atividade')}?{consulta.urlencode()}"
