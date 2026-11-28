@@ -8,7 +8,14 @@ from django.db.models import Count, Q
 from core.perfil import ErroPerfil, perfil_de_dict
 from core.perfil.painel import classificar
 from contratos.models import PerfilContrato
-from documentos.models import Analise, CodigoDocumento, Documento, Emissao
+from documentos.models import (
+    Analise,
+    CodigoDocumento,
+    ColunaPersonalizada,
+    Documento,
+    Emissao,
+    ValorColunaPersonalizada,
+)
 from importacoes.models import (
     ImportacaoCronograma,
     ImportacaoID,
@@ -68,6 +75,13 @@ def carregar_eventos(contrato, usuario=None):
                 )
             )
     documentos_ids = set(documentos_por_id) | documentos_existentes_ids
+    eventos.extend(
+        _eventos_colunas_personalizadas(
+            contrato,
+            documentos_por_id=documentos_por_id,
+            documentos_existentes_ids=documentos_existentes_ids,
+        )
+    )
     eventos.extend(
         _eventos_tarefas(
             contrato,
@@ -211,6 +225,128 @@ def carregar_eventos(contrato, usuario=None):
         key=lambda evento: (evento["data_hora"], evento["chave"]),
         reverse=True,
     )
+
+
+def _eventos_colunas_personalizadas(
+    contrato, *, documentos_por_id, documentos_existentes_ids
+):
+    colunas_ids = set(
+        ColunaPersonalizada.objects.filter(contrato=contrato).values_list("pk", flat=True)
+    )
+    historicos_colunas = list(
+        ColunaPersonalizada.history.filter(contrato_id=contrato.pk)
+        .select_related("history_user")
+        .order_by("history_date", "history_id")
+    )
+    nomes_colunas = {}
+    eventos = []
+    for registro in historicos_colunas:
+        nomes_colunas[registro.id] = registro.nome
+        eventos.append(_evento_coluna_personalizada(registro, contrato))
+
+    historicos_valores = list(
+        ValorColunaPersonalizada.history.filter(
+            documento_id__in=documentos_existentes_ids,
+            coluna_id__in=colunas_ids,
+        )
+        .select_related("history_user")
+        .order_by("history_date", "history_id")
+    )
+    valores_anteriores = {}
+    for registro in historicos_valores:
+        anterior = valores_anteriores.get(registro.id)
+        codigo = documentos_por_id.get(registro.documento_id, "")
+        nome_coluna = nomes_colunas.get(registro.coluna_id, "Campo do contrato")
+        valor_atual = registro.valor or "—"
+        if anterior is None:
+            acao_rotulo = "Campo preenchido"
+            descricao = f"preencheu {nome_coluna}"
+        else:
+            acao_rotulo = "Campo alterado"
+            descricao = f"alterou {nome_coluna} de {anterior or '—'} para {valor_atual}"
+        resumo = f"{_nome_usuario(registro.history_user)} {descricao}"
+        if codigo:
+            resumo += f" em {codigo}"
+        if registro.history_change_reason:
+            resumo += f" · Motivo: {registro.history_change_reason}"
+        evento = {
+            "chave": f"historico-valorcolunapersonalizada-{registro.history_id}",
+            "data_hora": _localizar(registro.history_date),
+            "acao": "alterou",
+            "acao_rotulo": acao_rotulo,
+            "entidade": "campo personalizado",
+            "tipo_importacao": "",
+            "codigo": codigo,
+            "usuario": registro.history_user,
+            "usuario_id": getattr(registro.history_user, "pk", None),
+            "usuario_nome": _nome_usuario(registro.history_user),
+            "resumo": resumo,
+            "documento_id": registro.documento_id,
+            "detalhes": [],
+            "registro_id": registro.pk,
+            "contrato_id": contrato.pk,
+            "validas": None,
+            "recusadas": None,
+            "link_recusadas": False,
+            "history_change_reason": registro.history_change_reason,
+            "agrupar_no_evento": False,
+        }
+        if anterior is not None:
+            evento["detalhes"] = [
+                {"campo": nome_coluna, "antes": anterior or "—", "depois": valor_atual}
+            ]
+        else:
+            evento["detalhes"] = [
+                {"campo": nome_coluna, "antes": "", "depois": valor_atual}
+            ]
+        if registro.emissao_id:
+            evento["emissao_id"] = registro.emissao_id
+        eventos.append(evento)
+        valores_anteriores[registro.id] = registro.valor
+    return eventos
+
+
+def _evento_coluna_personalizada(registro, contrato):
+    nome = registro.nome
+    if registro.history_type == "+":
+        acao = "criou"
+        acao_rotulo = "Coluna criada"
+        resumo = f"{_nome_usuario(registro.history_user)} criou a coluna {nome}"
+    elif registro.history_type == "-":
+        acao = "excluiu"
+        acao_rotulo = "Coluna excluída"
+        resumo = f"{_nome_usuario(registro.history_user)} excluiu a coluna {nome}"
+    else:
+        anterior = registro.prev_record
+        desativada = bool(anterior and anterior.ativa and not registro.ativa)
+        acao = "alterou"
+        acao_rotulo = "Coluna desativada" if desativada else "Coluna alterada"
+        verbo = "desativou" if desativada else "alterou"
+        resumo = f"{_nome_usuario(registro.history_user)} {verbo} a coluna {nome}"
+    if registro.history_change_reason:
+        resumo += f" · Motivo: {registro.history_change_reason}"
+    return {
+        "chave": f"historico-colunapersonalizada-{registro.history_id}",
+        "data_hora": _localizar(registro.history_date),
+        "acao": acao,
+        "acao_rotulo": acao_rotulo,
+        "entidade": "coluna personalizada",
+        "tipo_importacao": "",
+        "codigo": "",
+        "usuario": registro.history_user,
+        "usuario_id": getattr(registro.history_user, "pk", None),
+        "usuario_nome": _nome_usuario(registro.history_user),
+        "resumo": resumo,
+        "documento_id": None,
+        "detalhes": [],
+        "registro_id": registro.pk,
+        "contrato_id": contrato.pk,
+        "validas": None,
+        "recusadas": None,
+        "link_recusadas": False,
+        "history_change_reason": registro.history_change_reason,
+        "agrupar_no_evento": False,
+    }
 
 
 def _eventos_tarefas(contrato, *, usuario, documentos_por_id, documentos_existentes_ids):
