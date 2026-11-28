@@ -15,6 +15,7 @@ from .servicos import (
     carregar_edicao_titulo,
     carregar_lista_documentos,
     carregar_lista_mestra,
+    carregar_painel_documento,
     carregar_pasta_documento,
     editar_titulo_documento,
     reativar_documentos,
@@ -241,6 +242,14 @@ class DocumentoPastaView(LoginRequiredMixin, View):
         else:
             messages.success(request, "Motivo da reabertura atualizado.")
         return redirect("documento_pasta", contrato_id=contrato_id, documento_id=documento_id)
+
+
+class DocumentoPainelView(LoginRequiredMixin, View):
+    template_name = "documentos/_painel_lateral.html"
+
+    def get(self, request, contrato_id, documento_id):
+        contexto = carregar_painel_documento(request.user, contrato_id, documento_id)
+        return render(request, self.template_name, contexto)
 
 
 class EditarTituloDocumentoView(LoginRequiredMixin, View):

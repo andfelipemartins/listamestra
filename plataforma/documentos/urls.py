@@ -2,6 +2,7 @@ from django.urls import path
 
 from .views import (
     CancelarDocumentosView,
+    DocumentoPainelView,
     DocumentoPastaView,
     DocumentosListaView,
     EditarTituloDocumentoView,
@@ -27,6 +28,11 @@ urlpatterns = [
         "editar-titulo/<int:contrato_id>/<int:documento_id>/",
         EditarTituloDocumentoView.as_view(),
         name="documento_editar_titulo",
+    ),
+    path(
+        "<int:contrato_id>/<int:documento_id>/painel/",
+        DocumentoPainelView.as_view(),
+        name="documento_painel",
     ),
     path(
         "<int:contrato_id>/<int:documento_id>/",

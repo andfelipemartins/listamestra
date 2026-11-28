@@ -27,6 +27,7 @@
   @media (max-width: 900px) { .lista-mestra-filtros-grade { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 560px) { .lista-mestra-filtros-grade { grid-template-columns: 1fr; } .lista-mestra-tabela { max-height: 65vh; } }
 </style>
+{% include "documentos/_painel_documento_assets.html" %}
 {% endblock %}
 {% block content %}
 <section class="page-heading">
@@ -77,7 +78,7 @@
         <tbody>
           {% for linha in pagina.object_list %}
           <tr>
-            <td class="lista-mestra-codigo"><a href="{% url 'documento_pasta' contrato.pk linha.documento.pk %}"><strong>{{ linha.codigo }}</strong></a></td>
+            <td class="lista-mestra-codigo"><a href="{% url 'documento_pasta' contrato.pk linha.documento.pk %}" data-painel-url="{% url 'documento_painel' contrato.pk linha.documento.pk %}" aria-haspopup="dialog"><strong>{{ linha.codigo }}</strong></a></td>
             {% for valor in linha.segmentos %}<td class="lista-mestra-coluna-curta">{{ valor|default:"—" }}</td>{% endfor %}
             <td class="lista-mestra-celula-truncada lista-mestra-titulo" title="{{ linha.documento.titulo|default:'—' }}">{{ linha.documento.titulo|default:"—" }}</td>
             <td class="lista-mestra-celula-truncada lista-mestra-texto-longo" title="{{ linha.documento.elaborado_por|default:'-' }}">{{ linha.documento.elaborado_por|default:"-" }}</td>

@@ -1,0 +1,115 @@
+<style>
+  .documento-painel-raiz { position: fixed; inset: 0; z-index: 1000; display: flex; justify-content: flex-end; background: rgb(8 14 24 / 48%); }
+  .documento-painel { display: flex; width: min(620px, 94vw); height: 100vh; height: 100dvh; flex-direction: column; overflow: hidden; border-left: 1px solid var(--border); background: var(--surface); color: var(--text-primary); box-shadow: -18px 0 48px rgb(0 0 0 / 22%); animation: documento-painel-entrar 180ms ease-out; }
+  .documento-painel-cabecalho { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding: 22px 24px 16px; border-bottom: 1px solid var(--border); background: var(--surface-raised); }
+  .documento-painel-cabecalho h1 { margin: 6px 0 0; overflow-wrap: anywhere; font-size: 18px; line-height: 1.35; }
+  .documento-painel-fechar { display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text-primary); font-size: 25px; line-height: 1; cursor: pointer; }
+  .documento-painel-abas { display: flex; gap: 6px; padding: 0 24px; border-bottom: 1px solid var(--border); background: var(--surface-raised); }
+  .documento-painel-aba { padding: 12px 14px 10px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--text-secondary); font: inherit; font-size: 13px; cursor: pointer; }
+  .documento-painel-aba[aria-selected="true"] { border-bottom-color: var(--accent, var(--selection-text)); color: var(--text-primary); font-weight: 700; }
+  .documento-painel-conteudo { flex: 1; overflow: auto; padding: 22px 24px 30px; }
+  .documento-painel-conteudo[hidden] { display: none; }
+  .documento-painel-dados { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 0; }
+  .documento-painel-dado { min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-raised); }
+  .documento-painel-dado--largo { grid-column: 1 / -1; }
+  .documento-painel-dado dt, .documento-painel-parte span { color: var(--text-secondary); font-size: 11px; }
+  .documento-painel-dado dd { margin: 5px 0 0; overflow-wrap: anywhere; font-size: 13px; }
+  .documento-painel-partes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 10px 0 0; padding: 0; list-style: none; }
+  .documento-painel-parte { display: grid; min-width: 0; gap: 4px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+  .documento-painel-parte strong { overflow-wrap: anywhere; font-size: 13px; }
+  .documento-painel-parte small { color: var(--text-secondary); font-size: 11px; }
+  .documento-painel-link { display: inline-flex; margin-top: 18px; }
+  .documento-painel-historico { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+  .documento-painel-evento { position: relative; padding: 0 0 20px 20px; border-left: 1px solid var(--border); }
+  .documento-painel-evento::before { position: absolute; top: 4px; left: -5px; width: 9px; height: 9px; border-radius: 50%; background: var(--selection-text); content: ""; }
+  .documento-painel-evento time { display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 11px; }
+  .documento-painel-evento strong { font-size: 12px; }
+  .documento-painel-evento p { margin: 4px 0 0; overflow-wrap: anywhere; font-size: 13px; line-height: 1.5; }
+  .documento-painel-vazio { padding: 18px; border: 1px dashed var(--border); border-radius: 8px; color: var(--text-secondary); font-size: 13px; }
+  @keyframes documento-painel-entrar { from { transform: translateX(18px); opacity: .7; } to { transform: translateX(0); opacity: 1; } }
+  @media (max-width: 640px) {
+    .documento-painel { width: 100vw; border-left: 0; }
+    .documento-painel-cabecalho { padding: 18px 16px 14px; }
+    .documento-painel-abas { padding: 0 16px; }
+    .documento-painel-conteudo { padding: 18px 16px 26px; }
+    .documento-painel-dados, .documento-painel-partes { grid-template-columns: 1fr; }
+    .documento-painel-dado--largo { grid-column: auto; }
+  }
+</style>
+<script>
+  (() => {
+    let painelAberto = null;
+    let focoAnterior = null;
+
+    const fecharPainel = () => {
+      if (!painelAberto) return;
+      painelAberto.remove();
+      painelAberto = null;
+      document.body.style.overflow = "";
+      if (focoAnterior?.isConnected) focoAnterior.focus();
+    };
+
+    document.addEventListener("click", async (evento) => {
+      const fechar = evento.target.closest("[data-painel-fechar]");
+      if (fechar && painelAberto?.contains(fechar)) {
+        evento.preventDefault();
+        fecharPainel();
+        return;
+      }
+
+      if (painelAberto && evento.target === painelAberto) {
+        fecharPainel();
+        return;
+      }
+
+      const aba = evento.target.closest("[data-painel-aba]");
+      if (aba && painelAberto?.contains(aba)) {
+        const nome = aba.dataset.painelAba;
+        painelAberto.querySelectorAll("[data-painel-aba]").forEach((botao) => {
+          botao.setAttribute("aria-selected", String(botao === aba));
+          botao.tabIndex = botao === aba ? 0 : -1;
+        });
+        painelAberto.querySelectorAll("[data-painel-conteudo]").forEach((conteudo) => {
+          conteudo.hidden = conteudo.dataset.painelConteudo !== nome;
+        });
+        return;
+      }
+
+      const link = evento.target.closest("a[data-painel-url]");
+      if (!link || evento.defaultPrevented || evento.button !== 0 || evento.metaKey || evento.ctrlKey || evento.shiftKey || evento.altKey) return;
+      evento.preventDefault();
+      try {
+        const resposta = await fetch(link.dataset.painelUrl, {
+          credentials: "same-origin",
+          headers: { "X-Requested-With": "XMLHttpRequest", Accept: "text/html" },
+        });
+        if (!resposta.ok || resposta.redirected) {
+          window.location.assign(link.href);
+          return;
+        }
+        const fragmento = document.createElement("template");
+        fragmento.innerHTML = await resposta.text();
+        const novoPainel = fragmento.content.querySelector("[data-painel-raiz]");
+        if (!novoPainel) {
+          window.location.assign(link.href);
+          return;
+        }
+        fecharPainel();
+        focoAnterior = link;
+        painelAberto = novoPainel;
+        document.body.appendChild(novoPainel);
+        document.body.style.overflow = "hidden";
+        novoPainel.querySelector("[data-painel-fechar]")?.focus();
+      } catch {
+        window.location.assign(link.href);
+      }
+    });
+
+    document.addEventListener("keydown", (evento) => {
+      if (evento.key === "Escape" && painelAberto) {
+        evento.preventDefault();
+        fecharPainel();
+      }
+    });
+  })();
+</script>

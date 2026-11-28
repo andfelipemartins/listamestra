@@ -20,6 +20,7 @@
   #reativar-selecionados[hidden] { display: none; }
   @media (max-width: 767px) { .documentos-filtros-topo { grid-template-columns: 1fr; } }
 </style>
+{% include "documentos/_painel_documento_assets.html" %}
 {% endblock %}
 {% block content %}
 {% if messages %}
@@ -145,7 +146,7 @@
           {% for linha in pagina.object_list %}
           <tr>
             {% if pode_cancelar_documentos %}<td><input type="checkbox" name="documento" value="{{ linha.documento.pk }}" data-cancelado-sistema="{{ linha.cancelado_sistema|yesno:'true,false' }}" form="form-cancelar-selecionados" aria-label="Selecionar {{ linha.codigo }}"></td>{% endif %}
-            <td><a href="{% url 'documento_pasta' contrato.pk linha.documento.pk %}"><strong>{{ linha.codigo }}</strong></a></td>
+            <td><a href="{% url 'documento_pasta' contrato.pk linha.documento.pk %}" data-painel-url="{% url 'documento_painel' contrato.pk linha.documento.pk %}" aria-haspopup="dialog"><strong>{{ linha.codigo }}</strong></a></td>
             <td>{{ linha.titulo }}</td>
             <td>{{ linha.categoria }}</td>
             <td>{{ linha.situacao_rotulo }}</td>

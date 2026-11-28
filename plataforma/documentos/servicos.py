@@ -27,7 +27,7 @@ from painel.prazos import (
 from registro.servicos import carregar_eventos
 
 from .models import Analise, CodigoDocumento, Documento, Emissao
-from importacoes.models import PrevisaoEmissao
+from importacoes.models import ItemPrevisto, PrevisaoEmissao
 
 
 TAMANHO_PAGINA = 50
@@ -654,6 +654,39 @@ def carregar_pasta_documento(usuario, contrato_id, documento_id, *, hoje=None):
     }
 
 
+def carregar_painel_documento(usuario, contrato_id, documento_id):
+    contexto = carregar_pasta_documento(usuario, contrato_id, documento_id)
+    documento = contexto["documento"]
+    contexto["codigo_base_sem_separadores"] = (
+        contexto["codigo"].replace(".", "").replace("-", "")
+    )
+    contexto["escopos"] = _escopos_documento(documento)
+    contexto["ultima_revisao"] = _rotulo_ultima_emissao(documento, contexto["perfil"])
+    contexto["historico"] = sorted(
+        contexto["atividades"],
+        key=lambda item: (item["data_hora"], item["titulo"].casefold()),
+        reverse=True,
+    )
+    return contexto
+
+
+def _escopos_documento(documento):
+    itens = (
+        ItemPrevisto.objects.filter(documento=documento, indice__vigente=True)
+        .select_related("indice")
+        .prefetch_related("indice__escopos")
+        .order_by("-indice__importado_em", "-indice_id")
+    )
+    return sorted(
+        {
+            escopo.nome
+            for item in itens
+            for escopo in item.indice.escopos.all()
+        },
+        key=str.casefold,
+    )
+
+
 def carregar_edicao_titulo(usuario, contrato_id, documento_id):
     contrato, documento = _documento_para_edicao_titulo(
         usuario,
@@ -1127,6 +1160,7 @@ def _atividades_documento(contrato, documento, codigo):
         )
 
     codigo_base = documento.identificador_base
+    eventos_documento = []
     for evento in carregar_eventos(contrato):
         codigos = evento.get("codigos") or ()
         if isinstance(codigos, str):
@@ -1138,12 +1172,46 @@ def _atividades_documento(contrato, documento, codigo):
             valor.strip() for valor in codigo_evento.split(",")
         }:
             continue
+        eventos_documento.append(evento)
+
+    ids_historicos_analises = {
+        int(evento["chave"].rsplit("-", 1)[1])
+        for evento in eventos_documento
+        if evento.get("entidade") == "análise"
+        and evento.get("chave", "").startswith("historico-analise-")
+    }
+    situacoes_historicas = {
+        registro.history_id: (registro.etapa, registro.situacao)
+        for registro in Analise.history.filter(history_id__in=ids_historicos_analises).only(
+            "history_id", "etapa", "situacao"
+        )
+    }
+
+    for evento in eventos_documento:
+        resumo = evento.get("resumo", "")
+        if evento.get("acao_rotulo") == "Título alterado" and evento.get("history_change_reason"):
+            resumo = f'{resumo} · Motivo: {evento["history_change_reason"]}'
+        elif evento.get("detalhes"):
+            alteracoes = "; ".join(
+                f'{item["campo"].capitalize()}: {item["antes"] or "—"} → {item["depois"] or "—"}'
+                for item in evento["detalhes"]
+            )
+            resumo = f"{resumo} · Alterações: {alteracoes}"
+        elif evento.get("entidade") == "análise" and evento.get("acao") == "criou":
+            try:
+                id_historico = int(evento["chave"].rsplit("-", 1)[1])
+            except (KeyError, ValueError):
+                id_historico = None
+            analise = situacoes_historicas.get(id_historico)
+            if analise:
+                etapa, situacao = analise
+                resumo = f"{resumo} · Etapa: {etapa} · Situação registrada: {situacao}"
         atividades.append(
             {
                 "data_hora": evento["data_hora"],
                 "tipo": "atividade",
                 "titulo": evento.get("entidade", "Atividade"),
-                "resumo": evento.get("resumo", ""),
+                "resumo": resumo,
                 "usuario": evento.get("usuario_nome", "Sistema"),
                 "resolvida_em": None,
             }

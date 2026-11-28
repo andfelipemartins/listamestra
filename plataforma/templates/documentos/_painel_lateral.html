@@ -1,0 +1,80 @@
+<div class="documento-painel-raiz" data-painel-raiz>
+  <aside class="documento-painel" role="dialog" aria-modal="true" aria-labelledby="documento-painel-titulo">
+    <header class="documento-painel-cabecalho">
+      <div>
+        <span class="eyebrow">{{ contrato.codigo_interno }} · DOCUMENTO</span>
+        <h1 id="documento-painel-titulo">{{ codigo }}</h1>
+      </div>
+      <button class="documento-painel-fechar" type="button" data-painel-fechar aria-label="Fechar painel">×</button>
+    </header>
+
+    <nav class="documento-painel-abas" role="tablist" aria-label="Informações do documento">
+      <button class="documento-painel-aba" id="documento-painel-aba-detalhes" type="button" role="tab" aria-controls="documento-painel-conteudo-detalhes" aria-selected="true" tabindex="0" data-painel-aba="detalhes">Detalhes</button>
+      <button class="documento-painel-aba" id="documento-painel-aba-historico" type="button" role="tab" aria-controls="documento-painel-conteudo-historico" aria-selected="false" tabindex="-1" data-painel-aba="historico">Histórico</button>
+    </nav>
+
+    <section class="documento-painel-conteudo" id="documento-painel-conteudo-detalhes" role="tabpanel" aria-labelledby="documento-painel-aba-detalhes" data-painel-conteudo="detalhes">
+      <dl class="documento-painel-dados">
+        <div class="documento-painel-dado documento-painel-dado--largo">
+          <dt>Código completo</dt>
+          <dd>{{ codigo }}</dd>
+        </div>
+        <div class="documento-painel-dado documento-painel-dado--largo">
+          <dt>Partes do código e significados do perfil</dt>
+          <dd>
+            <ul class="documento-painel-partes">
+              {% for parte in partes_codigo %}
+              <li class="documento-painel-parte"><span>{{ parte.rotulo }}</span><strong>{{ parte.valor }}</strong><small>{{ parte.significado }}</small></li>
+              {% empty %}<li class="documento-painel-vazio">O perfil não define partes para este código.</li>{% endfor %}
+            </ul>
+          </dd>
+        </div>
+        <div class="documento-painel-dado">
+          <dt>Código base sem pontos e traço</dt>
+          <dd>{{ codigo_base_sem_separadores }}</dd>
+        </div>
+        <div class="documento-painel-dado">
+          <dt>Última revisão</dt>
+          <dd>{{ ultima_revisao }}</dd>
+        </div>
+        <div class="documento-painel-dado documento-painel-dado--largo">
+          <dt>Título</dt>
+          <dd>{{ documento.titulo|default:"—" }}</dd>
+        </div>
+        <div class="documento-painel-dado">
+          <dt>Contrato</dt>
+          <dd>{{ contrato.codigo_interno }} · {{ contrato.nome }}</dd>
+        </div>
+        <div class="documento-painel-dado">
+          <dt>Escopo</dt>
+          <dd>{{ escopos|join:", "|default:"—" }}</dd>
+        </div>
+        <div class="documento-painel-dado">
+          <dt>Elaborado por</dt>
+          <dd>{{ documento.elaborado_por|default:"—" }}</dd>
+        </div>
+        <div class="documento-painel-dado">
+          <dt>Situação</dt>
+          <dd>{{ situacao_rotulo }}{% if situacao %} · {{ situacao }}{% endif %}</dd>
+        </div>
+      </dl>
+      <a class="button button-primary documento-painel-link" href="{% url 'documento_pasta' contrato.pk documento.pk %}">Abrir pasta completa</a>
+    </section>
+
+    <section class="documento-painel-conteudo" id="documento-painel-conteudo-historico" role="tabpanel" aria-labelledby="documento-painel-aba-historico" data-painel-conteudo="historico" hidden>
+      {% if historico %}
+      <ol class="documento-painel-historico">
+        {% for evento in historico %}
+        <li class="documento-painel-evento">
+          <time datetime="{{ evento.data_hora|date:'c' }}">{{ evento.data_hora|date:"d/m/Y H:i" }}</time>
+          <strong>{{ evento.usuario|default:"Sistema" }}</strong>
+          <p>{{ evento.resumo|default:evento.titulo }}</p>
+        </li>
+        {% endfor %}
+      </ol>
+      {% else %}
+      <p class="documento-painel-vazio">Ainda não há eventos registrados para este documento.</p>
+      {% endif %}
+    </section>
+  </aside>
+</div>

@@ -65,8 +65,8 @@ class DocumentoAdmin(admin.ModelAdmin):
     )
     search_fields = ("identificador_base", "titulo", "codigos__codigo", "contrato__nome", "elaborado_por__nome")
     inlines = (CodigoDocumentoInline, EmissaoInline)
-    readonly_fields = ("criado_em", "cancelado_por", "cancelado_em", "observacao_reativacao")
-    fields = (
+    readonly_fields = (
+        "nota_edicao_controlada",
         "contrato",
         "identificador_base",
         "tipo",
@@ -84,6 +84,29 @@ class DocumentoAdmin(admin.ModelAdmin):
         "observacao_reativacao",
         "criado_em",
     )
+    fields = (
+        "nota_edicao_controlada",
+        "contrato",
+        "identificador_base",
+        "tipo",
+        "titulo",
+        "disciplina",
+        "elaborado_por",
+        "trecho",
+        "atributos",
+        "fora_do_id",
+        "ativo",
+        "cancelado_em",
+        "cancelado_por",
+        "motivo_cancelamento",
+        "motivo_cancelamento_obs",
+        "observacao_reativacao",
+        "criado_em",
+    )
+
+    @admin.display(description="Edição controlada")
+    def nota_edicao_controlada(self, obj):
+        return "Edite os dados pela pasta do documento e informe o motivo da alteração."
 
 
 @admin.register(CodigoDocumento)
