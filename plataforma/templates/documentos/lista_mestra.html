@@ -45,31 +45,29 @@
   <div class="panel"><h2>Nenhum contrato disponível</h2><p class="painel-sem-dados">Você ainda não participa de um contrato ativo.</p></div>
 {% else %}
   <section class="panel" aria-labelledby="lista-mestra-filtros-titulo">
-    <div class="panel-heading"><div><h2 id="lista-mestra-filtros-titulo">{{ contrato.codigo_interno }} · {{ contrato.nome }}</h2><p>Busque pelo código ou título e filtre as emissões. Os filtros ficam na URL.</p></div></div>
+    <div class="panel-heading"><div><h2 id="lista-mestra-filtros-titulo">{{ contrato.codigo_interno }} · {{ contrato.nome }}</h2><p>Busque pelo código{% if buscar_titulo %} ou título{% endif %} e filtre as emissões. Os filtros ficam na URL.</p></div></div>
     <form class="lista-mestra-filtros" method="get">
       {% if contratos|length > 1 %}
       <div class="lista-mestra-filtros-grade">
         <label class="painel-filtro">Contrato
           <select name="contrato" onchange="this.form.submit()">{% for opcao in contratos %}<option value="{{ opcao.pk }}" {% if opcao.pk == contrato.pk %}selected{% endif %}>{{ opcao.codigo_interno }} · {{ opcao.nome }}</option>{% endfor %}</select>
         </label>
-        <label class="painel-filtro">Buscar por código ou título<input type="search" name="q" value="{{ busca }}" placeholder="Digite parte do código ou título"></label>
-        <label class="painel-filtro">Tipo<select name="tipo"><option value="">Todos</option>{% for opcao in tipos %}<option value="{{ opcao.valor }}" {% if tipo_selecionado == opcao.valor %}selected{% endif %}>{{ opcao.rotulo }}</option>{% endfor %}</select></label>
-        <label class="painel-filtro">Disciplina<select name="disciplina"><option value="">Todas</option>{% for opcao in disciplinas %}<option value="{{ opcao.valor }}" {% if disciplina_selecionada == opcao.valor %}selected{% endif %}>{{ opcao.rotulo }}</option>{% endfor %}</select></label>
-        <label class="painel-filtro">Fase<select name="fase"><option value="">Todas</option>{% for opcao in fases %}<option value="{{ opcao.valor }}" {% if fase_selecionada == opcao.valor %}selected{% endif %}>{{ opcao.rotulo }}</option>{% endfor %}</select></label>
+        <label class="painel-filtro">Buscar por código{% if buscar_titulo %} ou título{% endif %}<input type="search" name="q" value="{{ busca }}" placeholder="Digite parte do código{% if buscar_titulo %} ou título{% endif %}"></label>
+        {% if exibir_filtro_tipo %}<label class="painel-filtro">Tipo<select name="tipo"><option value="">Todos</option>{% for opcao in tipos %}<option value="{{ opcao.valor }}" {% if tipo_selecionado == opcao.valor %}selected{% endif %}>{{ opcao.rotulo }}</option>{% endfor %}</select></label>{% endif %}
+        {% if exibir_filtro_disciplina %}<label class="painel-filtro">Disciplina<select name="disciplina"><option value="">Todas</option>{% for opcao in disciplinas %}<option value="{{ opcao.valor }}" {% if disciplina_selecionada == opcao.valor %}selected{% endif %}>{{ opcao.rotulo }}</option>{% endfor %}</select></label>{% endif %}
+        {% if exibir_filtro_fase %}<label class="painel-filtro">Fase<select name="fase"><option value="">Todas</option>{% for opcao in fases %}<option value="{{ opcao.valor }}" {% if fase_selecionada == opcao.valor %}selected{% endif %}>{{ opcao.rotulo }}</option>{% endfor %}</select></label>{% endif %}
       </div>
       {% else %}
       <input type="hidden" name="contrato" value="{{ contrato.pk }}">
       <div class="lista-mestra-filtros-grade">
-        <label class="painel-filtro">Buscar por código ou título<input type="search" name="q" value="{{ busca }}" placeholder="Digite parte do código ou título"></label>
-        <label class="painel-filtro">Tipo<select name="tipo"><option value="">Todos</option>{% for opcao in tipos %}<option value="{{ opcao.valor }}" {% if tipo_selecionado == opcao.valor %}selected{% endif %}>{{ opcao.rotulo }}</option>{% endfor %}</select></label>
-        <label class="painel-filtro">Disciplina<select name="disciplina"><option value="">Todas</option>{% for opcao in disciplinas %}<option value="{{ opcao.valor }}" {% if disciplina_selecionada == opcao.valor %}selected{% endif %}>{{ opcao.rotulo }}</option>{% endfor %}</select></label>
-        <label class="painel-filtro">Fase<select name="fase"><option value="">Todas</option>{% for opcao in fases %}<option value="{{ opcao.valor }}" {% if fase_selecionada == opcao.valor %}selected{% endif %}>{{ opcao.rotulo }}</option>{% endfor %}</select></label>
-        <label class="painel-filtro">Situação<select name="situacao"><option value="">Todas</option>{% for opcao in situacoes %}<option value="{{ opcao.valor }}" {% if situacao_selecionada == opcao.valor %}selected{% endif %}>{{ opcao.rotulo }}</option>{% endfor %}</select></label>
+        <label class="painel-filtro">Buscar por código{% if buscar_titulo %} ou título{% endif %}<input type="search" name="q" value="{{ busca }}" placeholder="Digite parte do código{% if buscar_titulo %} ou título{% endif %}"></label>
+        {% if exibir_filtro_tipo %}<label class="painel-filtro">Tipo<select name="tipo"><option value="">Todos</option>{% for opcao in tipos %}<option value="{{ opcao.valor }}" {% if tipo_selecionado == opcao.valor %}selected{% endif %}>{{ opcao.rotulo }}</option>{% endfor %}</select></label>{% endif %}
+        {% if exibir_filtro_disciplina %}<label class="painel-filtro">Disciplina<select name="disciplina"><option value="">Todas</option>{% for opcao in disciplinas %}<option value="{{ opcao.valor }}" {% if disciplina_selecionada == opcao.valor %}selected{% endif %}>{{ opcao.rotulo }}</option>{% endfor %}</select></label>{% endif %}
+        {% if exibir_filtro_fase %}<label class="painel-filtro">Fase<select name="fase"><option value="">Todas</option>{% for opcao in fases %}<option value="{{ opcao.valor }}" {% if fase_selecionada == opcao.valor %}selected{% endif %}>{{ opcao.rotulo }}</option>{% endfor %}</select></label>{% endif %}
+        {% if exibir_filtro_situacao %}<label class="painel-filtro">Situação<select name="situacao"><option value="">Todas</option>{% for opcao in situacoes %}<option value="{{ opcao.valor }}" {% if situacao_selecionada == opcao.valor %}selected{% endif %}>{{ opcao.rotulo }}</option>{% endfor %}</select></label>{% endif %}
       </div>
       {% endif %}
-      {% if contratos|length > 1 %}
-      <label class="painel-filtro">Situação<select name="situacao"><option value="">Todas</option>{% for opcao in situacoes %}<option value="{{ opcao.valor }}" {% if situacao_selecionada == opcao.valor %}selected{% endif %}>{{ opcao.rotulo }}</option>{% endfor %}</select></label>
-      {% endif %}
+      {% if contratos|length > 1 and exibir_filtro_situacao %}<label class="painel-filtro">Situação<select name="situacao"><option value="">Todas</option>{% for opcao in situacoes %}<option value="{{ opcao.valor }}" {% if situacao_selecionada == opcao.valor %}selected{% endif %}>{{ opcao.rotulo }}</option>{% endfor %}</select></label>{% endif %}
       <label class="lista-mestra-cancelados"><input type="checkbox" name="mostrar_cancelados" value="1" {% if mostrar_cancelados %}checked{% endif %}> Mostrar documentos cancelados</label>
       <div class="painel-filtros-acoes"><button class="button button-primary" type="submit">Filtrar</button><a class="button button-quiet" href="{% url 'lista_mestra' %}?contrato={{ contrato.pk }}">Limpar</a></div>
     </form>
@@ -77,40 +75,61 @@
 
   <section class="panel" aria-label="Emissões da Lista Mestra">
     <div class="panel-heading"><div><h2>{{ total_filtrado }} {% if total_filtrado == 1 %}emissão{% else %}emissões{% endif %}</h2><p>Página {{ pagina.number }} de {{ pagina.paginator.num_pages|default:1 }} · até 100 linhas por página.</p></div></div>
-    <div class="painel-filtros-acoes"><button class="button button-quiet" id="lista-mestra-alternar-setores" type="button" aria-expanded="false" aria-controls="lista-mestra-tabela">Exibir colunas por setor</button></div>
+    <div class="painel-filtros-acoes">
+      {% if pode_configurar_colunas %}<a class="button button-quiet" href="{% url 'lista_mestra_colunas' %}?contrato={{ contrato.pk }}">Colunas</a>{% endif %}
+      {% if 'distribuicao_setor' in chaves_visiveis %}<button class="button button-quiet" id="lista-mestra-alternar-setores" type="button" aria-expanded="false" aria-controls="lista-mestra-tabela">Exibir colunas por setor</button>{% endif %}
+    </div>
     <div class="table-wrap lista-mestra-tabela" tabindex="0" role="region" aria-label="Tabela da Lista Mestra; use a rolagem horizontal para ver todas as colunas">
-      <table id="lista-mestra-tabela" class="lista-mestra-setores-ocultos">
+      <table id="lista-mestra-tabela"{% if 'distribuicao_setor' in chaves_visiveis %} class="lista-mestra-setores-ocultos" aria-label="Lista Mestra com o grupo Distribuição por setor"{% endif %}>
+        {% if 'distribuicao_setor' in chaves_visiveis %}<caption class="sr-only">Distribuição por setor</caption>{% endif %}
         <thead>
+          {% if 'distribuicao_setor' in chaves_visiveis %}
           <tr>
             <th class="lista-mestra-codigo" rowspan="2">Código</th>
-            {% for segmento in segmentos_codigo %}<th class="lista-mestra-coluna-curta" rowspan="2">{{ segmento.rotulo|default:segmento.nome }}</th>{% endfor %}
-            <th class="lista-mestra-titulo" rowspan="2">Título</th><th class="lista-mestra-texto-longo" rowspan="2">Elabora&#231;&#227;o</th><th class="lista-mestra-texto-longo" rowspan="2">Disciplina</th><th class="lista-mestra-coluna-curta" rowspan="2">Revisão</th><th class="lista-mestra-coluna-curta" rowspan="2">Versão</th><th class="lista-mestra-coluna-curta" rowspan="2">Fase</th><th class="lista-mestra-coluna-curta" rowspan="2">Data de emissão</th><th class="lista-mestra-coluna-curta" rowspan="2">Rótulo cronológico</th><th class="lista-mestra-coluna-curta">GRD</th><th rowspan="2">Situação da análise</th><th class="lista-mestra-coluna-curta" rowspan="2">Data da análise</th><th class="lista-mestra-texto-longo" rowspan="2">Documento de retorno</th><th class="lista-mestra-texto-longo" rowspan="2">Observação</th>
-            {% for setor in setores_distribuicao %}<th class="lista-mestra-setor-coluna lista-mestra-setor-grupo" colspan="3">{{ setor.nome }}</th>{% endfor %}
+            {% for coluna in colunas_visiveis %}
+              {% if coluna.tipo == "distribuicao_setor" %}
+                {% for setor in setores_distribuicao %}<th class="lista-mestra-setor-coluna lista-mestra-setor-grupo" colspan="3">{{ setor.nome }}</th>{% endfor %}
+              {% else %}
+                <th{% if coluna.chave == "titulo" %} class="lista-mestra-titulo"{% elif coluna.tipo == "segmento" or coluna.chave == "revisao" or coluna.chave == "versao" or coluna.chave == "fase" or coluna.chave == "data_emissao" or coluna.chave == "rotulo_cronologico" or coluna.chave == "grd" or coluna.chave == "data_analise" %} class="lista-mestra-coluna-curta"{% elif coluna.chave == "elaboracao" or coluna.chave == "disciplina" or coluna.chave == "documento_retorno" or coluna.chave == "observacao" %} class="lista-mestra-texto-longo"{% endif %}{% if coluna.chave != "grd" %} rowspan="2"{% endif %}>{% if coluna.chave == "elaboracao" %}Elabora&#231;&#227;o{% else %}{{ coluna.rotulo }}{% endif %}</th>
+              {% endif %}
+            {% endfor %}
           </tr>
-          <tr><th class="lista-mestra-coluna-curta"></th>{% for setor in setores_distribuicao %}<th class="lista-mestra-setor-coluna lista-mestra-coluna-curta">GRD</th><th class="lista-mestra-setor-coluna lista-mestra-coluna-curta">Data envio</th><th class="lista-mestra-setor-coluna lista-mestra-coluna-curta">Em campo</th>{% endfor %}</tr>
+          <tr>
+            {% for coluna in colunas_visiveis %}
+              {% if coluna.tipo == "distribuicao_setor" %}
+                {% for setor in setores_distribuicao %}<th class="lista-mestra-setor-coluna lista-mestra-coluna-curta">GRD</th><th class="lista-mestra-setor-coluna lista-mestra-coluna-curta">Data envio</th><th class="lista-mestra-setor-coluna lista-mestra-coluna-curta">Em campo</th>{% endfor %}
+              {% elif coluna.chave == "grd" %}<th class="lista-mestra-coluna-curta"></th>{% endif %}
+            {% endfor %}
+          </tr>
+          {% else %}
+          <tr>
+            <th class="lista-mestra-codigo">Código</th>
+            {% for coluna in colunas_visiveis %}
+              <th{% if coluna.chave == "titulo" %} class="lista-mestra-titulo"{% elif coluna.tipo == "segmento" or coluna.chave == "revisao" or coluna.chave == "versao" or coluna.chave == "fase" or coluna.chave == "data_emissao" or coluna.chave == "rotulo_cronologico" or coluna.chave == "grd" or coluna.chave == "data_analise" %} class="lista-mestra-coluna-curta"{% elif coluna.chave == "elaboracao" or coluna.chave == "disciplina" or coluna.chave == "documento_retorno" or coluna.chave == "observacao" %} class="lista-mestra-texto-longo"{% endif %}>{% if coluna.chave == "elaboracao" %}Elabora&#231;&#227;o{% else %}{{ coluna.rotulo }}{% endif %}</th>
+            {% endfor %}
+          </tr>
+          {% endif %}
         </thead>
         <tbody>
           {% for linha in pagina.object_list %}
           <tr>
             <td class="lista-mestra-codigo"><a href="{% url 'documento_pasta' contrato.pk linha.documento.pk %}" data-painel-url="{% url 'documento_painel' contrato.pk linha.documento.pk %}" aria-haspopup="dialog"><strong>{{ linha.codigo }}</strong></a></td>
-            {% for valor in linha.segmentos %}<td class="lista-mestra-coluna-curta">{{ valor|default:"—" }}</td>{% endfor %}
-            <td class="lista-mestra-celula-truncada lista-mestra-titulo" title="{{ linha.documento.titulo|default:'—' }}">{{ linha.documento.titulo|default:"—" }}</td>
-            <td class="lista-mestra-celula-truncada lista-mestra-texto-longo" title="{{ linha.documento.elaborado_por|default:'-' }}">{{ linha.documento.elaborado_por|default:"-" }}</td>
-            <td class="lista-mestra-celula-truncada lista-mestra-texto-longo" title="{{ linha.disciplina|default:'—' }}">{{ linha.disciplina|default:"—" }}</td>
-            <td class="lista-mestra-coluna-curta">{{ linha.emissao.revisao }}</td>
-            <td class="lista-mestra-coluna-curta">{{ linha.emissao.versao|default_if_none:"—" }}</td>
-            <td class="lista-mestra-coluna-curta">{{ linha.fase_rotulo }}</td>
-            <td class="lista-mestra-coluna-curta">{{ linha.emissao.data_emissao|date:"d/m/Y" }}</td>
-            <td class="lista-mestra-coluna-curta">{{ linha.rotulo_cronologico }}</td>
-            <td class="lista-mestra-coluna-curta">{% if linha.grds %}{% for grd in linha.grds %}{% if not forloop.first %}<br>{% endif %}<span title="{{ grd.rotulo }}">{{ grd.rotulo }}</span>{% endfor %}{% elif linha.emissao.grd_anterior %}<span title="GRD anterior ao sistema: {{ linha.emissao.grd_anterior }}">{{ linha.emissao.grd_anterior }} <small>(ant.)</small></span>{% else %}—{% endif %}</td>
-            <td>{{ linha.situacao }}</td>
-            <td class="lista-mestra-coluna-curta">{% if linha.data_analise %}{{ linha.data_analise|date:"d/m/Y" }}{% else %}—{% endif %}</td>
-            <td class="lista-mestra-celula-truncada lista-mestra-texto-longo" title="{{ linha.documento_retorno|default:'—' }}">{{ linha.documento_retorno|default:"—" }}</td>
-            <td class="lista-mestra-celula-truncada lista-mestra-texto-longo" title="{{ linha.observacao|default:'—' }}">{{ linha.observacao|default:"—" }}</td>
-            {% for setor in linha.distribuicao_setores %}
-            <td class="lista-mestra-setor-coluna lista-mestra-coluna-curta">{% if setor.grd_item %}<a href="{% url 'grds:detalhe' contrato.pk setor.grd_item.grd.pk %}" title="{{ setor.grd_item.grd.rotulo }}">{{ setor.grd_item.grd.rotulo }}</a>{% endif %}</td>
-            <td class="lista-mestra-setor-coluna lista-mestra-coluna-curta">{% if setor.data %}{{ setor.data|date:"d/m/Y" }}{% endif %}</td>
-            <td class="lista-mestra-setor-coluna lista-mestra-coluna-curta">{% if setor.em_campo %}{% if setor.desatualizado %}<span class="lista-mestra-aviso-revisao">rev. {{ setor.em_campo.revisao }} em campo, há rev. {{ setor.revisao_emitida }}</span>{% else %}{{ setor.em_campo.revisao }}{% endif %}{% endif %}</td>
+            {% for celula in linha.celulas_lista_mestra %}
+              {% if celula.coluna.tipo == "distribuicao_setor" %}
+                {% for setor in celula.valor %}
+                  <td class="lista-mestra-setor-coluna lista-mestra-coluna-curta">{% if setor.grd_item %}<a href="{% url 'grds:detalhe' contrato.pk setor.grd_item.grd.pk %}" title="{{ setor.grd_item.grd.rotulo }}">{{ setor.grd_item.grd.rotulo }}</a>{% endif %}</td>
+                  <td class="lista-mestra-setor-coluna lista-mestra-coluna-curta">{% if setor.data %}{{ setor.data|date:"d/m/Y" }}{% endif %}</td>
+                  <td class="lista-mestra-setor-coluna lista-mestra-coluna-curta">{% if setor.em_campo %}{% if setor.desatualizado %}<span class="lista-mestra-aviso-revisao">rev. {{ setor.em_campo.revisao }} em campo, há rev. {{ setor.revisao_emitida }}</span>{% else %}{{ setor.em_campo.revisao }}{% endif %}{% endif %}</td>
+                {% endfor %}
+              {% else %}
+                <td{% if celula.coluna.tipo == "segmento" or celula.coluna.chave == "revisao" or celula.coluna.chave == "versao" or celula.coluna.chave == "fase" or celula.coluna.chave == "data_emissao" or celula.coluna.chave == "rotulo_cronologico" or celula.coluna.chave == "grd" or celula.coluna.chave == "data_analise" %} class="lista-mestra-coluna-curta"{% elif celula.coluna.chave == "titulo" %} class="lista-mestra-celula-truncada lista-mestra-titulo"{% elif celula.coluna.chave == "elaboracao" or celula.coluna.chave == "disciplina" or celula.coluna.chave == "documento_retorno" or celula.coluna.chave == "observacao" %} class="lista-mestra-celula-truncada lista-mestra-texto-longo"{% endif %}{% if celula.titulo %} title="{{ celula.titulo }}"{% endif %}>
+                  {% if celula.coluna.tipo == "segmento" %}{{ celula.valor|default:"—" }}
+                  {% elif celula.coluna.chave == "data_emissao" or celula.coluna.chave == "data_analise" %}{% if celula.valor %}{{ celula.valor|date:"d/m/Y" }}{% else %}—{% endif %}
+                  {% elif celula.coluna.chave == "grd" %}{% if celula.valor %}{% for grd in celula.valor %}{% if not forloop.first %}<br>{% endif %}<span title="{{ grd.rotulo }}">{{ grd.rotulo }}</span>{% endfor %}{% elif linha.emissao.grd_anterior %}<span title="GRD anterior ao sistema: {{ linha.emissao.grd_anterior }}">{{ linha.emissao.grd_anterior }} <small>(ant.)</small></span>{% else %}—{% endif %}
+                  {% elif celula.coluna.chave == "versao" %}{{ celula.valor|default_if_none:"—" }}
+                  {% else %}{{ celula.valor|default:"—" }}{% endif %}
+                </td>
+              {% endif %}
             {% endfor %}
           </tr>
           {% empty %}<tr><td colspan="100" class="painel-sem-dados">Nenhuma emissão corresponde aos filtros.</td></tr>{% endfor %}
@@ -128,6 +147,7 @@
     </nav>
     {% endif %}
   </section>
+  {% if 'distribuicao_setor' in chaves_visiveis %}
   <script>
     (() => {
       const tabela = document.getElementById("lista-mestra-tabela");
@@ -149,5 +169,6 @@
       });
     })();
   </script>
+  {% endif %}
 {% endif %}
 {% endblock %}

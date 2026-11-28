@@ -6,12 +6,16 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views import View
 
+from acoes.views import _contrato_da_requisicao
+
+from .forms import ColunasListaMestraForm
 from .servicos import (
     DocumentosIndisponiveis,
     atualizar_motivo_reabertura,
     cancelar_documentos,
     carregar_confirmacao_cancelamento,
     carregar_confirmacao_reativacao,
+    carregar_editor_colunas_lista_mestra,
     carregar_edicao_titulo,
     carregar_lista_documentos,
     carregar_lista_mestra,
@@ -19,6 +23,8 @@ from .servicos import (
     carregar_pasta_documento,
     editar_titulo_documento,
     reativar_documentos,
+    salvar_colunas_lista_mestra,
+    voltar_colunas_lista_mestra_ao_padrao,
 )
 
 
@@ -79,6 +85,62 @@ class ListaMestraView(LoginRequiredMixin, View):
         query_sem_pagina.pop("pagina", None)
         contexto["query_sem_pagina"] = query_sem_pagina.urlencode()
         return render(request, self.template_name, contexto)
+
+
+class ColunasListaMestraView(LoginRequiredMixin, View):
+    template_name = "documentos/colunas_lista_mestra.html"
+
+    def get(self, request):
+        contrato_id = _contrato_da_requisicao(request)
+        if contrato_id is None:
+            return redirect("contratos_escolher")
+        contexto = carregar_editor_colunas_lista_mestra(request.user, contrato_id)
+        contexto["form"] = self._formulario(contexto)
+        contexto["url_lista"] = _url_lista_mestra(contexto["contrato"].pk)
+        return render(request, self.template_name, contexto)
+
+    def post(self, request):
+        contrato_id = _contrato_da_requisicao(request, incluir_post=True)
+        if contrato_id is None:
+            return redirect("contratos_escolher")
+        contexto = carregar_editor_colunas_lista_mestra(request.user, contrato_id)
+        if request.POST.get("acao") == "padrao":
+            voltar_colunas_lista_mestra_ao_padrao(request.user, contrato_id)
+            messages.success(request, "As colunas voltaram ao padrão da Lista Mestra.")
+            return redirect(_url_lista_mestra(contexto["contrato"].pk))
+
+        form = ColunasListaMestraForm(
+            colunas=contexto["colunas_editor"],
+            selecionadas=[
+                chave for chave in contexto["chaves_visiveis"] if chave != "codigo"
+            ],
+            ordem=contexto["ordem_editor"],
+            data=request.POST,
+        )
+        if form.is_valid():
+            salvar_colunas_lista_mestra(
+                request.user,
+                contrato_id,
+                form.cleaned_data["visiveis"],
+                form.cleaned_data["ordem"],
+            )
+            messages.success(request, "Colunas da Lista Mestra salvas.")
+            return redirect(_url_lista_mestra(contexto["contrato"].pk))
+
+        contexto["form"] = form
+        contexto["url_lista"] = _url_lista_mestra(contexto["contrato"].pk)
+        return render(request, self.template_name, contexto, status=400)
+
+    @staticmethod
+    def _formulario(contexto, data=None):
+        return ColunasListaMestraForm(
+            colunas=contexto["colunas_editor"],
+            selecionadas=[
+                chave for chave in contexto["chaves_visiveis"] if chave != "codigo"
+            ],
+            ordem=contexto["ordem_editor"],
+            data=data,
+        )
 
 
 class CancelarDocumentosView(LoginRequiredMixin, View):
@@ -293,3 +355,7 @@ def _url_lista(contrato_id, consulta):
     parametros = QueryDict(consulta or "", mutable=True)
     parametros["contrato"] = str(contrato_id)
     return f"{reverse('documentos_lista')}?{parametros.urlencode()}"
+
+
+def _url_lista_mestra(contrato_id):
+    return f"{reverse('lista_mestra')}?contrato={contrato_id}"

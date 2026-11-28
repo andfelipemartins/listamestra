@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Colunas da Lista Mestra{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <div><span class="eyebrow">{{ contrato.codigo_interno }} · {{ contrato.nome }}</span><h1>Colunas da Lista Mestra</h1><p>Escolha as colunas visíveis e ajuste a ordem de leitura.</p></div>
+  <a class="button button-quiet" href="{{ url_lista }}">Voltar à Lista Mestra</a>
+</section>
+
+<section class="panel" aria-labelledby="colunas-lista-mestra-titulo">
+  <div class="panel-heading"><div><h2 id="colunas-lista-mestra-titulo">Colunas disponíveis</h2><p>Use as caixas para mostrar ou ocultar colunas. As setas alteram a ordem da tabela.</p></div></div>
+  {% if form.errors %}<div class="notice notice-error">Revise as colunas selecionadas e tente novamente.</div>{% endif %}
+  <form method="post" id="form-colunas-lista-mestra">
+    {% csrf_token %}
+    <input type="hidden" name="contrato" value="{{ contrato.pk }}">
+    {{ form.ordem }}
+    <ul id="lista-colunas-lista-mestra" class="lista-colunas-configuracao" aria-label="Ordem das colunas">
+      <li class="lista-coluna-configuracao" data-chave="codigo">
+        <span class="lista-coluna-controles"><input type="checkbox" checked disabled aria-label="Código sempre visível"></span>
+        <span class="lista-coluna-rotulos"><strong>Código</strong><small>Obrigatória · fixa à esquerda</small></span>
+      </li>
+      {% for checkbox in form.visiveis %}
+      <li class="lista-coluna-configuracao" data-chave="{{ checkbox.data.value }}">
+        <span class="lista-coluna-controles">
+          <button class="button button-quiet" type="button" data-mover="-1" aria-label="Mover {{ checkbox.choice_label }} para cima">↑</button>
+          <button class="button button-quiet" type="button" data-mover="1" aria-label="Mover {{ checkbox.choice_label }} para baixo">↓</button>
+        </span>
+        <label class="lista-coluna-rotulos">{{ checkbox.tag }}<strong>{{ checkbox.choice_label }}</strong></label>
+      </li>
+      {% endfor %}
+    </ul>
+    {% if form.visiveis.errors %}<div class="notice notice-error">{{ form.visiveis.errors }}</div>{% endif %}
+    <div class="painel-filtros-acoes">
+      <button class="button button-primary" type="submit" name="acao" value="salvar">Salvar colunas</button>
+      <button class="button button-quiet" type="submit" name="acao" value="padrao">Voltar ao padrão</button>
+      <a class="button button-quiet" href="{{ url_lista }}">Cancelar</a>
+    </div>
+  </form>
+</section>
+<style>
+  .lista-colunas-configuracao { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+  .lista-coluna-configuracao { display: flex; align-items: center; gap: 12px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+  .lista-coluna-controles { display: flex; gap: 4px; align-items: center; }
+  .lista-coluna-controles button { min-width: 36px; padding: 6px; }
+  .lista-coluna-rotulos { display: flex; flex: 1; align-items: center; gap: 10px; }
+  .lista-coluna-rotulos small { color: var(--text-secondary); }
+</style>
+<script>
+  (() => {
+    const lista = document.getElementById("lista-colunas-lista-mestra");
+    const ordem = document.getElementById("id_ordem");
+    if (!lista || !ordem) return;
+    const itens = () => Array.from(lista.querySelectorAll("[data-chave]")).filter(item => item.dataset.chave !== "codigo");
+    const atualizar = () => {
+      const linhas = itens();
+      ordem.value = linhas.map(item => item.dataset.chave).join("\n");
+      linhas.forEach((item, indice) => {
+        item.querySelector('[data-mover="-1"]').disabled = indice === 0;
+        item.querySelector('[data-mover="1"]').disabled = indice === linhas.length - 1;
+      });
+    };
+    lista.addEventListener("click", evento => {
+      const botao = evento.target.closest("[data-mover]");
+      if (!botao) return;
+      const item = botao.closest("[data-chave]");
+      const linhas = itens();
+      const indice = linhas.indexOf(item);
+      const destino = indice + Number(botao.dataset.mover);
+      if (destino < 0 || destino >= linhas.length) return;
+      if (destino < indice) lista.insertBefore(item, linhas[destino]);
+      else lista.insertBefore(linhas[destino], item);
+      atualizar();
+    });
+    atualizar();
+  })();
+</script>
+{% endblock %}

@@ -54,6 +54,24 @@ class EmpresaElaboradora(models.Model):
         return self.nome
 
 
+class ListaMestraConfiguracao(models.Model):
+    contrato = models.OneToOneField(
+        Contrato,
+        verbose_name="contrato",
+        on_delete=models.CASCADE,
+        related_name="configuracao_lista_mestra",
+    )
+    chaves_visiveis = models.JSONField("colunas visíveis", default=list, blank=True)
+    chaves_catalogo = models.JSONField("colunas conhecidas", default=list, blank=True)
+
+    class Meta:
+        verbose_name = "configuração da Lista Mestra"
+        verbose_name_plural = "configurações da Lista Mestra"
+
+    def __str__(self):
+        return f"Colunas da Lista Mestra — {self.contrato}"
+
+
 class Documento(models.Model):
     contrato = models.ForeignKey(
         Contrato,

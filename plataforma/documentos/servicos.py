@@ -5,7 +5,7 @@ from uuid import uuid4
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import F, Prefetch
+from django.db.models import Exists, F, OuterRef, Prefetch
 from django.http import Http404
 from django.urls import reverse
 from django.utils import timezone
@@ -26,7 +26,13 @@ from painel.prazos import (
 )
 from registro.servicos import carregar_eventos
 
-from .models import Analise, CodigoDocumento, Documento, Emissao
+from .models import (
+    Analise,
+    CodigoDocumento,
+    Documento,
+    Emissao,
+    ListaMestraConfiguracao,
+)
 from importacoes.models import ItemPrevisto, PrevisaoEmissao
 
 
@@ -50,8 +56,36 @@ def carregar_lista_mestra(
     mostrar_cancelados=False,
     pagina=1,
 ):
-    contratos = list(contratos_acessiveis(usuario))
-    contrato = resolver_contrato(usuario, contrato_id)
+    contratos_disponiveis = contratos_acessiveis(usuario).select_related(
+        "configuracao_lista_mestra"
+    )
+    if usuario.is_staff:
+        contratos = list(contratos_disponiveis)
+    else:
+        administradores = Participacao.objects.filter(
+            usuario=usuario,
+            contrato_id=OuterRef("pk"),
+            ativo=True,
+            papel=Usuario.Perfil.ADMIN,
+        )
+        contratos = list(
+            contratos_disponiveis.annotate(
+                _usuario_admin=Exists(administradores)
+            )
+        )
+    if contrato_id in (None, ""):
+        contrato = contratos[0] if contratos else None
+    else:
+        try:
+            contrato_pk = int(contrato_id)
+        except (TypeError, ValueError) as erro:
+            raise PermissionDenied("Você não participa deste contrato.") from erro
+        contrato = next(
+            (item for item in contratos if item.pk == contrato_pk),
+            None,
+        )
+        if contrato is None:
+            raise PermissionDenied("Você não participa deste contrato.")
     if contrato is None:
         pagina_obj = Paginator([], TAMANHO_PAGINA_LISTA_MESTRA).get_page(1)
         return {
@@ -60,6 +94,8 @@ def carregar_lista_mestra(
             "pagina": pagina_obj,
             "total_filtrado": 0,
             "segmentos_codigo": [],
+            "colunas_visiveis": [],
+            "chaves_visiveis": [],
             "tipos": [],
             "disciplinas": [],
             "fases": [],
@@ -71,101 +107,217 @@ def carregar_lista_mestra(
             "situacao_selecionada": "",
             "mostrar_cancelados": bool(mostrar_cancelados),
             "setores_distribuicao": [],
+            "exibir_filtro_tipo": False,
+            "exibir_filtro_disciplina": False,
+            "exibir_filtro_fase": False,
+            "exibir_filtro_situacao": False,
+            "buscar_titulo": False,
+            "pode_configurar_colunas": False,
         }
 
-    from grds.models import GrdConfiguracao
-    from grds.servicos import dados_grds_lista_mestra, listar_setores_distribuicao
+    pode_configurar_colunas = usuario.is_staff or any(
+        item.pk == contrato.pk and getattr(item, "_usuario_admin", False)
+        for item in contratos
+    )
 
-    configuracao_grd = GrdConfiguracao.objects.filter(contrato=contrato).only(
-        "setores_distribuicao"
-    ).first()
-    setores_distribuicao = listar_setores_distribuicao(configuracao_grd)
     perfil_modelo, perfil = _perfil_vigente(contrato)
+    catalogo = catalogo_colunas_lista_mestra(perfil)
+    configuracao_colunas = getattr(contrato, "configuracao_lista_mestra", None)
+    colunas_configuradas, chaves_visiveis = _colunas_visiveis_lista_mestra(
+        catalogo, configuracao_colunas
+    )
+    colunas_visiveis = [
+        coluna for coluna in colunas_configuradas if coluna["chave"] != "codigo"
+    ]
+    chaves_ativas = set(chaves_visiveis)
+    campos_visiveis = {
+        coluna["campo"]
+        for coluna in colunas_visiveis
+        if coluna["tipo"] == "segmento"
+    }
     campos_codigo = [
         campo
         for campo in perfil.codigo.campos
         if campo.nome != perfil.codigo.segmento_revisao
+        and campo.nome in campos_visiveis
     ]
-    documentos = _documentos_com_historico(contrato, perfil_modelo)
+    filtro_tipo_visivel = any(
+        coluna["tipo"] == "segmento" and coluna["campo"] == "tipo"
+        for coluna in colunas_visiveis
+    )
+    filtro_disciplina_visivel = "disciplina" in chaves_ativas
+    filtro_fase_visivel = "fase" in chaves_ativas
+    filtro_situacao_visivel = "situacao" in chaves_ativas
+    busca_titulo_visivel = "titulo" in chaves_ativas
+    mostrar_setores = "distribuicao_setor" in chaves_ativas
+    mostrar_grds = "grd" in chaves_ativas or mostrar_setores
+    precisa_analises = bool(
+        chaves_ativas
+        & {"situacao", "data_analise", "documento_retorno", "observacao"}
+    )
+
+    setores_distribuicao = []
+    if mostrar_setores:
+        from grds.models import GrdConfiguracao
+        from grds.servicos import listar_setores_distribuicao
+
+        configuracao_grd = GrdConfiguracao.objects.filter(contrato=contrato).only(
+            "setores_distribuicao"
+        ).first()
+        setores_distribuicao = listar_setores_distribuicao(configuracao_grd)
+
+    documentos = _documentos_com_historico(
+        contrato,
+        perfil_modelo,
+        incluir_analises=precisa_analises,
+        incluir_elaboracao="elaboracao" in chaves_ativas,
+    )
     linhas = []
     ultima_emissao_por_documento = {}
     for documento in documentos:
         if documento.cancelado_em and not mostrar_cancelados:
             continue
-        codigo, valores = _codigo_e_valores(documento, perfil, perfil_modelo.pk)
+        if campos_visiveis or filtro_tipo_visivel:
+            codigo, valores = _codigo_e_valores(documento, perfil, perfil_modelo.pk)
+        else:
+            codigo_obj = next(
+                (
+                    item
+                    for item in documento.codigos.all()
+                    if item.perfil_id == perfil_modelo.pk
+                ),
+                None,
+            )
+            codigo = codigo_obj.codigo if codigo_obj else documento.identificador_base
+            valores = {}
         emissoes = sorted(
             documento.emissoes.all(),
             key=lambda emissao: (emissao.data_emissao, emissao.pk),
         )
         if emissoes:
             ultima_emissao_por_documento[documento.pk] = emissoes[-1]
-        rotulos = rotulo_cronologico(emissoes)
-        for emissao, rotulo in zip(emissoes, rotulos):
-            analise = next(iter(emissao.analises.all()), None)
-            tipo_documental = valores.get("tipo") or documento.tipo or ""
-            disciplina_documento = documento.disciplina or valores.get("classe", "")
+        rotulos = (
+            rotulo_cronologico(emissoes)
+            if "rotulo_cronologico" in chaves_ativas
+            else []
+        )
+        pares_emissao_rotulo = (
+            zip(emissoes, rotulos)
+            if rotulos
+            else ((emissao, "") for emissao in emissoes)
+        )
+        for emissao, rotulo in pares_emissao_rotulo:
+            analise = next(iter(emissao.analises.all()), None) if precisa_analises else None
+            tipo_documental = (
+                (valores.get("tipo") or documento.tipo or "")
+                if filtro_tipo_visivel
+                else ""
+            )
+            disciplina_documento = (
+                documento.disciplina or valores.get("classe", "")
+                if filtro_disciplina_visivel
+                else ""
+            )
+            situacao_emissao = (
+                ((analise.situacao or "—") if analise else "Em análise")
+                if "situacao" in chaves_ativas
+                else ""
+            )
             linhas.append(
                 {
                     "documento": documento,
                     "emissao": emissao,
                     "codigo": codigo,
-                    "segmentos": [valores.get(campo.nome, "") for campo in campos_codigo],
+                    "valores_segmentos": valores,
+                    "segmentos": [
+                        valores.get(campo.nome, "") for campo in campos_codigo
+                    ],
                     "tipo": tipo_documental,
                     "disciplina": disciplina_documento,
-                    "fase": emissao.fase,
-                    "fase_rotulo": emissao.get_fase_display(),
+                    "fase": emissao.fase if filtro_fase_visivel else "",
+                    "fase_rotulo": emissao.get_fase_display() if "fase" in chaves_ativas else "",
                     "rotulo_cronologico": rotulo,
                     "analise": analise,
-                    "situacao": (analise.situacao or "—") if analise else "Em análise",
-                    "data_analise": analise.data_analise if analise else None,
-                    "documento_retorno": analise.documento_retorno if analise else "",
+                    "situacao": situacao_emissao,
+                    "data_analise": (
+                        analise.data_analise
+                        if analise and "data_analise" in chaves_ativas
+                        else None
+                    ),
+                    "documento_retorno": (
+                        analise.documento_retorno
+                        if analise and "documento_retorno" in chaves_ativas
+                        else ""
+                    ),
                     "observacao": (
-                        (analise.observacao or emissao.observacao)
-                        if analise
-                        else emissao.observacao
+                        ((analise.observacao or emissao.observacao) if analise else emissao.observacao)
+                        if "observacao" in chaves_ativas
+                        else ""
                     ),
                 }
             )
 
-    grds_por_emissao, grds_emissao_setor, grds_documento_setor = (
-        dados_grds_lista_mestra(
-            [linha["emissao"] for linha in linhas], setores_distribuicao
+    grds_por_emissao = {}
+    grds_emissao_setor = {}
+    grds_documento_setor = {}
+    if mostrar_grds:
+        from grds.servicos import dados_grds_lista_mestra
+
+        grds_por_emissao, grds_emissao_setor, grds_documento_setor = (
+            dados_grds_lista_mestra(
+                [linha["emissao"] for linha in linhas], setores_distribuicao
+            )
         )
-    )
     for linha in linhas:
-        linha["grds"] = grds_por_emissao.get(linha["emissao"].pk, [])
+        linha["grds"] = (
+            grds_por_emissao.get(linha["emissao"].pk, [])
+            if "grd" in chaves_ativas
+            else []
+        )
         ultima_emissao = ultima_emissao_por_documento.get(linha["documento"].pk)
-        distribuicao_setores = []
-        for setor in setores_distribuicao:
-            nome_setor = setor["nome"]
-            grd_item = grds_emissao_setor.get((linha["emissao"].pk, nome_setor))
-            em_campo_item = grds_documento_setor.get(
-                (linha["documento"].pk, nome_setor)
-            )
-            distribuicao_setores.append(
-                {
-                    "nome": nome_setor,
-                    "grd_item": grd_item,
-                    "data": grd_item.grd.data if grd_item else None,
-                    "em_campo": em_campo_item.emissao if em_campo_item else None,
-                    "desatualizado": bool(
-                        em_campo_item
-                        and ultima_emissao
-                        and em_campo_item.emissao_id != ultima_emissao.pk
-                    ),
-                    "revisao_emitida": ultima_emissao.revisao if ultima_emissao else "",
-                }
-            )
-        linha["distribuicao_setores"] = distribuicao_setores
+        if mostrar_setores:
+            distribuicao_setores = []
+            for setor in setores_distribuicao:
+                nome_setor = setor["nome"]
+                grd_item = grds_emissao_setor.get(
+                    (linha["emissao"].pk, nome_setor)
+                )
+                em_campo_item = grds_documento_setor.get(
+                    (linha["documento"].pk, nome_setor)
+                )
+                distribuicao_setores.append(
+                    {
+                        "nome": nome_setor,
+                        "grd_item": grd_item,
+                        "data": grd_item.grd.data if grd_item else None,
+                        "em_campo": em_campo_item.emissao if em_campo_item else None,
+                        "desatualizado": bool(
+                            em_campo_item
+                            and ultima_emissao
+                            and em_campo_item.emissao_id != ultima_emissao.pk
+                        ),
+                        "revisao_emitida": ultima_emissao.revisao if ultima_emissao else "",
+                    }
+                )
+            linha["distribuicao_setores"] = distribuicao_setores
+        linha["celulas_lista_mestra"] = _celulas_lista_mestra(
+            colunas_visiveis, linha, campos_visiveis
+        )
 
-    tipos = _opcoes_lista_mestra(linhas, "tipo")
-    disciplinas = _opcoes_lista_mestra(linhas, "disciplina")
+    tipos = _opcoes_lista_mestra(linhas, "tipo") if filtro_tipo_visivel else []
+    disciplinas = (
+        _opcoes_lista_mestra(linhas, "disciplina")
+        if filtro_disciplina_visivel
+        else []
+    )
     fases = [
         {"valor": valor, "rotulo": rotulo}
         for valor, rotulo in Emissao.Fase.choices
-        if any(linha["fase"] == valor for linha in linhas)
+        if filtro_fase_visivel and any(linha["fase"] == valor for linha in linhas)
     ]
-    situacoes = _opcoes_lista_mestra(linhas, "situacao")
+    situacoes = (
+        _opcoes_lista_mestra(linhas, "situacao") if filtro_situacao_visivel else []
+    )
     tipo_selecionado = _selecionar_opcao_lista_mestra(tipo, tipos)
     disciplina_selecionada = _selecionar_opcao_lista_mestra(disciplina, disciplinas)
     fase_selecionada = _selecionar_opcao_lista_mestra(fase, fases)
@@ -175,7 +327,14 @@ def carregar_lista_mestra(
     linhas_filtradas = [
         linha
         for linha in linhas
-        if (not termo or termo in linha["codigo"].casefold() or termo in (linha["documento"].titulo or "").casefold())
+        if (
+            not termo
+            or termo in linha["codigo"].casefold()
+            or (
+                busca_titulo_visivel
+                and termo in (linha["documento"].titulo or "").casefold()
+            )
+        )
         and (not tipo_selecionado or linha["tipo"] == tipo_selecionado)
         and (not disciplina_selecionada or linha["disciplina"] == disciplina_selecionada)
         and (not fase_selecionada or linha["fase"] == fase_selecionada)
@@ -196,6 +355,8 @@ def carregar_lista_mestra(
         "pagina": pagina_obj,
         "total_filtrado": len(linhas_filtradas),
         "segmentos_codigo": campos_codigo,
+        "colunas_visiveis": colunas_visiveis,
+        "chaves_visiveis": chaves_visiveis,
         "tipos": tipos,
         "disciplinas": disciplinas,
         "fases": fases,
@@ -207,9 +368,226 @@ def carregar_lista_mestra(
         "situacao_selecionada": situacao_selecionada,
         "mostrar_cancelados": bool(mostrar_cancelados),
         "setores_distribuicao": setores_distribuicao,
+        "exibir_filtro_tipo": filtro_tipo_visivel,
+        "exibir_filtro_disciplina": filtro_disciplina_visivel,
+        "exibir_filtro_fase": filtro_fase_visivel,
+        "exibir_filtro_situacao": filtro_situacao_visivel,
+        "buscar_titulo": busca_titulo_visivel,
+        "pode_configurar_colunas": pode_configurar_colunas,
     }
 
 
+def catalogo_colunas_lista_mestra(perfil):
+    catalogo = [
+        {
+            "chave": "codigo",
+            "rotulo": "Código",
+            "origem": "Documento.identificador_base",
+            "obrigatoria": True,
+            "tipo": "codigo",
+        }
+    ]
+    catalogo.extend(
+        {
+            "chave": f"segmento:{campo.nome}",
+            "rotulo": campo.rotulo or campo.nome,
+            "origem": f"Perfil do contrato: {campo.nome}",
+            "obrigatoria": False,
+            "tipo": "segmento",
+            "campo": campo.nome,
+        }
+        for campo in perfil.codigo.campos
+        if campo.nome != perfil.codigo.segmento_revisao
+    )
+    catalogo.extend(
+        (
+            _coluna_lista_mestra("titulo", "Título", "Documento.titulo", "titulo"),
+            _coluna_lista_mestra("elaboracao", "Elaboração", "Documento.elaborado_por"),
+            _coluna_lista_mestra("disciplina", "Disciplina", "Documento.disciplina"),
+            _coluna_lista_mestra("revisao", "Revisão", "Emissao.revisao"),
+            _coluna_lista_mestra("versao", "Versão", "Emissao.versao"),
+            _coluna_lista_mestra("fase", "Fase", "Emissao.fase"),
+            _coluna_lista_mestra("data_emissao", "Data de emissão", "Emissao.data_emissao", "data"),
+            _coluna_lista_mestra("rotulo_cronologico", "Rótulo cronológico", "Ciclo de emissões"),
+            _coluna_lista_mestra("grd", "GRD", "GrdItem / Emissao.grd_anterior"),
+            _coluna_lista_mestra("situacao", "Situação da análise", "Analise.situacao"),
+            _coluna_lista_mestra("data_analise", "Data da análise", "Analise.data_analise", "data"),
+            _coluna_lista_mestra("documento_retorno", "Documento de retorno", "Analise.documento_retorno", "titulo"),
+            _coluna_lista_mestra("observacao", "Observação", "Analise.observacao / Emissao.observacao", "titulo"),
+            {
+                "chave": "distribuicao_setor",
+                "rotulo": "Distribuição por setor",
+                "origem": "GrdItem por setor e emissão em campo",
+                "obrigatoria": False,
+                "tipo": "distribuicao_setor",
+            },
+        )
+    )
+    return catalogo
+
+
+def _coluna_lista_mestra(chave, rotulo, origem, formato="texto"):
+    return {
+        "chave": chave,
+        "rotulo": rotulo,
+        "origem": origem,
+        "obrigatoria": False,
+        "tipo": formato,
+        "formato": formato,
+    }
+
+
+def _colunas_visiveis_lista_mestra(catalogo, configuracao):
+    por_chave = {coluna["chave"]: coluna for coluna in catalogo}
+    if configuracao is None:
+        return catalogo, [coluna["chave"] for coluna in catalogo]
+
+    conhecidas = configuracao.chaves_catalogo
+    conhecidas = conhecidas if isinstance(conhecidas, list) else []
+    visiveis_salvas = configuracao.chaves_visiveis
+    visiveis_salvas = visiveis_salvas if isinstance(visiveis_salvas, list) else []
+    ordem = []
+    for chave in visiveis_salvas:
+        if (
+            isinstance(chave, str)
+            and chave in por_chave
+            and chave != "codigo"
+            and chave not in ordem
+        ):
+            ordem.append(chave)
+    for coluna in catalogo:
+        chave = coluna["chave"]
+        if coluna["obrigatoria"] and chave not in ordem:
+            ordem.insert(0, chave)
+        elif chave not in conhecidas and chave not in ordem:
+            ordem.append(chave)
+    if "codigo" in ordem:
+        ordem.remove("codigo")
+    chaves = ["codigo", *ordem]
+    return [por_chave[chave] for chave in chaves], chaves
+
+
+def carregar_editor_colunas_lista_mestra(usuario, contrato_id):
+    contrato = resolver_contrato(usuario, contrato_id)
+    if contrato is None:
+        raise PermissionDenied("Você não participa deste contrato.")
+    if not pode_cancelar_documentos(usuario, contrato):
+        raise PermissionDenied(
+            "Somente staff ou o administrador do contrato pode configurar as colunas."
+        )
+    _, perfil = _perfil_vigente(contrato)
+    catalogo = catalogo_colunas_lista_mestra(perfil)
+    configuracao = ListaMestraConfiguracao.objects.filter(contrato=contrato).first()
+    _, chaves_visiveis = _colunas_visiveis_lista_mestra(catalogo, configuracao)
+    chaves_catalogo = [coluna["chave"] for coluna in catalogo]
+    ordem_editor = [chave for chave in chaves_visiveis if chave != "codigo"]
+    ordem_editor.extend(
+        chave
+        for chave in chaves_catalogo
+        if chave != "codigo" and chave not in ordem_editor
+    )
+    por_chave = {coluna["chave"]: coluna for coluna in catalogo}
+    return {
+        "contrato": contrato,
+        "catalogo": catalogo,
+        "colunas_editor": [por_chave[chave] for chave in ordem_editor],
+        "chaves_visiveis": chaves_visiveis,
+        "ordem_editor": ordem_editor,
+    }
+
+
+def salvar_colunas_lista_mestra(usuario, contrato_id, chaves_visiveis, ordem):
+    contexto = carregar_editor_colunas_lista_mestra(usuario, contrato_id)
+    contrato = contexto["contrato"]
+    catalogo = contexto["catalogo"]
+    chaves_catalogo = [coluna["chave"] for coluna in catalogo]
+    chaves_validas = set(chaves_catalogo)
+    selecionadas = set(chaves_visiveis)
+    selecionadas.add("codigo")
+    ordem_normalizada = [
+        chave
+        for chave in dict.fromkeys(ordem)
+        if chave in chaves_validas and chave != "codigo"
+    ]
+    ordem_normalizada.extend(
+        chave
+        for chave in chaves_catalogo
+        if chave != "codigo" and chave not in ordem_normalizada
+    )
+    visiveis = [
+        "codigo",
+        *(chave for chave in ordem_normalizada if chave in selecionadas),
+    ]
+    ListaMestraConfiguracao.objects.update_or_create(
+        contrato=contrato,
+        defaults={
+            "chaves_visiveis": visiveis,
+            "chaves_catalogo": chaves_catalogo,
+        },
+    )
+
+
+def voltar_colunas_lista_mestra_ao_padrao(usuario, contrato_id):
+    contexto = carregar_editor_colunas_lista_mestra(usuario, contrato_id)
+    ListaMestraConfiguracao.objects.filter(contrato=contexto["contrato"]).delete()
+
+
+def _celulas_lista_mestra(colunas, linha, campos_visiveis):
+    valores_segmentos = linha["valores_segmentos"]
+    celulas = []
+    for coluna in colunas:
+        chave = coluna["chave"]
+        if coluna["tipo"] == "segmento":
+            valor = (
+                valores_segmentos.get(coluna["campo"], "")
+                if coluna["campo"] in campos_visiveis
+                else ""
+            )
+            titulo = ""
+        else:
+            valor, titulo = _valor_celula_lista_mestra(chave, linha)
+        celulas.append({"coluna": coluna, "valor": valor, "titulo": titulo})
+    return celulas
+
+
+def _valor_celula_lista_mestra(chave, linha):
+    documento = linha["documento"]
+    emissao = linha["emissao"]
+    if chave == "titulo":
+        valor = documento.titulo or "—"
+        return valor, valor
+    if chave == "elaboracao":
+        elaboradora = documento.elaborado_por
+        valor = elaboradora.nome if elaboradora else "-"
+        return valor, valor
+    if chave == "disciplina":
+        valor = linha["disciplina"] or "—"
+        return valor, valor
+    if chave == "revisao":
+        return emissao.revisao, ""
+    if chave == "versao":
+        return emissao.versao, ""
+    if chave == "fase":
+        return linha["fase_rotulo"], ""
+    if chave == "data_emissao":
+        return emissao.data_emissao, ""
+    if chave == "rotulo_cronologico":
+        return linha["rotulo_cronologico"], ""
+    if chave == "grd":
+        return linha["grds"], ""
+    if chave == "situacao":
+        return linha["situacao"], ""
+    if chave == "data_analise":
+        return linha["data_analise"], ""
+    if chave == "documento_retorno":
+        valor = linha["documento_retorno"] or "—"
+        return valor, valor
+    if chave == "observacao":
+        valor = linha["observacao"] or "—"
+        return valor, valor
+    if chave == "distribuicao_setor":
+        return linha.get("distribuicao_setores", []), ""
+    return "", ""
 def _opcoes_lista_mestra(linhas, campo):
     valores = sorted(
         {linha[campo] for linha in linhas if linha[campo]},
@@ -966,17 +1344,26 @@ def _perfil_vigente(contrato, *, hoje=None):
         raise DocumentosIndisponiveis(f"O perfil vigente não pode alimentar os documentos: {erro}") from erro
 
 
-def _documentos_com_historico(contrato, perfil_modelo):
-    analises = Analise.objects.order_by(
-        F("data_analise").desc(nulls_last=True), "-registrado_em", "-pk"
-    )
-    emissoes = Emissao.objects.order_by("data_emissao", "pk").prefetch_related(
-        Prefetch("analises", queryset=analises)
-    )
+def _documentos_com_historico(
+    contrato,
+    perfil_modelo,
+    *,
+    incluir_analises=True,
+    incluir_elaboracao=True,
+):
+    emissoes = Emissao.objects.order_by("data_emissao", "pk")
+    if incluir_analises:
+        analises = Analise.objects.order_by(
+            F("data_analise").desc(nulls_last=True), "-registrado_em", "-pk"
+        )
+        emissoes = emissoes.prefetch_related(Prefetch("analises", queryset=analises))
     codigos = CodigoDocumento.objects.filter(perfil=perfil_modelo).select_related("perfil")
+    relacionados = ["contrato", "cancelado_por"]
+    if incluir_elaboracao:
+        relacionados.append("elaborado_por")
     return (
         Documento.objects.filter(contrato=contrato)
-        .select_related("contrato", "cancelado_por", "elaborado_por")
+        .select_related(*relacionados)
         .prefetch_related(
             Prefetch("emissoes", queryset=emissoes),
             Prefetch("codigos", queryset=codigos),
