@@ -6,6 +6,12 @@
   .mesa-seletor { display:flex; align-items:flex-end; gap:9px; }
   .mesa-seletor label { display:grid; gap:6px; color:var(--text-secondary); font-size:12px; }
   .mesa-seletor select { min-width:min(280px,54vw); min-height:40px; padding:7px 10px; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--text-primary); }
+  .mesa-indice { display:flex; flex-wrap:wrap; gap:7px; margin:0 0 16px; }
+  .mesa-indice a { display:inline-flex; align-items:center; gap:7px; padding:6px 9px; border:1px solid var(--border); border-radius:999px; background:var(--surface); color:var(--accent-link); font-size:11px; line-height:1.3; text-decoration:none; }
+  .mesa-indice a:hover { background:var(--surface-raised); text-decoration:underline; }
+  .mesa-indice a strong { min-width:18px; padding:2px 5px; border-radius:999px; background:var(--surface-raised); color:var(--text-primary); font-size:10px; text-align:center; }
+  .mesa-indice a.mesa-indice-vazio { color:var(--text-secondary); }
+  .mesa-indice a.mesa-indice-vazio strong { color:var(--text-secondary); }
   .mesa-grade { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
   .mesa-janela { min-width:0; padding:18px; border:1px solid var(--border); border-radius:12px; background:var(--surface); box-shadow:0 2px 8px #1b2b3d12; }
   .mesa-janela-topo { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:13px; }
@@ -55,6 +61,13 @@
     <section class="welcome-panel"><div class="welcome-symbol">LM</div><div><h2>Nenhum contrato disponível</h2><p>Peça à administração para incluir sua participação em um contrato ativo.</p></div></section>
   {% else %}
     {% if perfil_erro %}<div class="notice" style="margin-bottom:16px">{{ perfil_erro }}</div>{% endif %}
+    <nav class="mesa-indice" aria-label="Índice de janelas de pendências">
+      {% for janela in janelas %}
+        <a class="{% if not janela.quantidade %}mesa-indice-vazio{% endif %}" href="#janela-{{ janela.id }}" aria-label="{{ janela.titulo }}: {{ janela.quantidade }}">
+          <span>{{ janela.titulo }}</span><strong>{{ janela.quantidade }}</strong>
+        </a>
+      {% endfor %}
+    </nav>
     <div class="mesa-grade">
       {% for janela in janelas %}
         <section class="mesa-janela" id="janela-{{ janela.id }}" aria-labelledby="titulo-janela-{{ janela.id }}">
@@ -65,6 +78,12 @@
                 {% include "acoes/_item_janela.html" %}
               {% endfor %}
             </div>
+          {% elif janela.id == "titulo-diferente-id" %}
+            {% if janela.id_vigente %}
+              <p class="mesa-vazio">Nenhum título diferente do ID vigente ({{ janela.id_vigente.codigo }}, importado em {{ janela.id_vigente.importado_em|date:"d/m/Y" }}).</p>
+            {% else %}
+              <p class="mesa-vazio">Nenhum ID importado ainda; importe um ID para comparar os títulos.</p>
+            {% endif %}
           {% else %}<p class="mesa-vazio">Nenhum item nesta janela.</p>{% endif %}
           {% if janela.id == "erros" %}<a class="mesa-link" href="{% url 'acoes:ignorados' %}?contrato={{ contrato.pk }}">Ver todos › ignorados</a>{% endif %}
           <a class="mesa-link" href="{% url 'acoes:janela' janela.id %}?contrato={{ contrato.pk }}">Ver todos</a>

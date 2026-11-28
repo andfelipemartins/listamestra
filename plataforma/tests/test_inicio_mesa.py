@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 import yaml
 from django.urls import reverse
+from django.utils import timezone
 
 from acoes.services import carregar_resumo_inicio
 from contas.models import Usuario
@@ -244,3 +245,31 @@ def test_pagina_minha_mesa_renderiza_os_cards_do_layout(
     ):
         assert titulo in html
     assert "Importar situação PW" in html
+    assert (
+        f'href="{reverse("acoes:pendencias")}?contrato={contrato.pk}#janela-titulo-diferente-id">'
+        "Título diferente do ID: 0</a>"
+    ) in html
+
+
+@pytest.mark.django_db
+def test_inicio_mostra_a_contagem_de_prazos_dentro_da_antecedencia(
+    contrato, perfil_modelo, usuario, client
+):
+    _configurar_prazos_corridos(perfil_modelo, dias=1)
+    perfil_modelo.definicao["prazos"]["dias_alerta_vencimento"] = 3
+    perfil_modelo.save(update_fields=("definicao",))
+    client.force_login(usuario)
+
+    sem_prazos_proximos = client.get(reverse("inicio"), {"contrato": contrato.pk})
+    assert "Nenhum prazo vence nos próximos 3 dias." in sem_prazos_proximos.content.decode("utf-8")
+
+    documento = _documento(contrato, "DE-15.25.00.00-6A1-8101")
+    _emissao(documento, timezone.localdate())
+    com_prazo_proximo = client.get(reverse("inicio"), {"contrato": contrato.pk})
+    html = com_prazo_proximo.content.decode("utf-8")
+
+    assert "Vencem nos próximos 3 dias: 1" in html
+    assert (
+        f'href="{reverse("acoes:pendencias")}?contrato={contrato.pk}#janela-analise-cliente">Ver prazos</a>'
+        in html
+    )

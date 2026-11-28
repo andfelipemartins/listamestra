@@ -6,6 +6,9 @@
   .mesa-indicador-wrapper > .mesa-indicador { height:100%; flex:1; }
   .mesa-indicador-subitens { display:grid; gap:3px; padding:4px 2px 0; }
   .mesa-indicador-subitens small { font-size:10px; line-height:1.4; }
+  .mesa-indicador-subitens a { color:var(--accent-link); }
+  .mesa-vencimento-resumo { margin:10px 0 0; color:var(--text-secondary); font-size:11px; line-height:1.5; }
+  .mesa-vencimento-resumo a { margin-left:5px; color:var(--accent-link); }
 </style>
 {% endblock %}
 {% block content %}
@@ -54,9 +57,10 @@
             <small title="{{ indicador.ajuda }}">{{ indicador.ajuda }}</small>
           </span>
         </a>
-        {% if indicador.id == "pendencias" and perfil and perfil.comparar_id_cliente %}
+        {% if indicador.id == "pendencias" %}
           <div class="mesa-indicador-subitens">
-            {% for janela in janelas %}{% if janela.id == "erros" %}{% for contagem in janela.contagens_pendencias_id %}<small><a href="{{ urls_inicio.pendencias }}">{{ contagem.rotulo }}: {{ contagem.quantidade }}</a></small>{% endfor %}{% endif %}{% endfor %}
+            {% if perfil and perfil.comparar_id_cliente %}{% for janela in janelas %}{% if janela.id == "erros" %}{% for contagem in janela.contagens_pendencias_id %}<small><a href="{{ urls_inicio.pendencias }}">{{ contagem.rotulo }}: {{ contagem.quantidade }}</a></small>{% endfor %}{% endif %}{% endfor %}{% endif %}
+            <small><a href="{{ urls_inicio.pendencias_titulo_id }}">Título diferente do ID: {{ quantidade_titulos_id }}</a></small>
           </div>
         {% endif %}
         </div>
@@ -121,6 +125,12 @@
           </ul>
         {% else %}
           <p class="mesa-vazio">Nenhum documento aguardando o cliente.</p>
+        {% endif %}
+        {% if mostrar_alerta_vencimento %}
+          <p class="mesa-vencimento-resumo">
+            {% if quantidade_documentos_vencendo %}Vencem nos próximos {{ dias_alerta_vencimento }} dias: {{ quantidade_documentos_vencendo }}{% else %}Nenhum prazo vence nos próximos {{ dias_alerta_vencimento }} dias.{% endif %}
+            <a href="{{ urls_inicio.pendencias_prazo_analise }}">Ver prazos</a>
+          </p>
         {% endif %}
       </article>
     </section>

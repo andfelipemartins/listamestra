@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import pytest
 from django.db import connection
@@ -308,6 +308,53 @@ def test_secao_tem_card_contagem_e_tela_filtrada(client, contrato, admin_contrat
     assert detalhe.status_code == 200
     assert documento.identificador_base in detalhe.content.decode()
     assert "Usar o título do ID" in detalhe.content.decode()
+
+
+@pytest.mark.django_db
+def test_indice_de_pendencias_tem_link_e_quantidade_de_cada_janela(
+    client, contrato, admin_contrato
+):
+    indice = _indice(contrato, "ID-081-INDICE")
+    documento = _documento(contrato, "DOC-081-1001")
+    _item(indice, documento)
+    client.force_login(admin_contrato)
+
+    resposta = client.get(reverse("acoes:pendencias"), {"contrato": contrato.pk})
+    html = resposta.content.decode("utf-8")
+    mesa = carregar_minha_mesa(admin_contrato, contrato.pk)
+
+    assert resposta.status_code == 200
+    for janela in mesa["janelas"]:
+        assert html.count(f'href="#janela-{janela["id"]}"') == 1
+        assert f'aria-label="{janela["titulo"]}: {janela["quantidade"]}"' in html
+    assert "mesa-indice-vazio" in html
+
+
+@pytest.mark.django_db
+def test_estado_vazio_do_titulo_mostra_id_vigente_e_data(client, contrato, admin_contrato):
+    indice = _indice(
+        contrato,
+        "ID-081-VIGENTE",
+        importado_em=timezone.make_aware(datetime(2026, 4, 9, 12)),
+    )
+    client.force_login(admin_contrato)
+
+    resposta = client.get(reverse("acoes:pendencias"), {"contrato": contrato.pk})
+
+    assert resposta.status_code == 200
+    assert "Nenhum título diferente do ID vigente (ID-081-VIGENTE, importado em 09/04/2026)." in resposta.content.decode("utf-8")
+
+
+@pytest.mark.django_db
+def test_estado_vazio_do_titulo_informa_quando_nao_ha_id_importado(
+    client, contrato, admin_contrato
+):
+    client.force_login(admin_contrato)
+
+    resposta = client.get(reverse("acoes:pendencias"), {"contrato": contrato.pk})
+
+    assert resposta.status_code == 200
+    assert "Nenhum ID importado ainda; importe um ID para comparar os títulos." in resposta.content.decode("utf-8")
 
 
 @pytest.mark.django_db

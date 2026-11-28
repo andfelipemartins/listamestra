@@ -165,18 +165,28 @@ def carregar_minha_mesa(usuario, contrato_id=None, *, hoje=None, limite=10, incl
             _janela("recusadas", TIPOS_JANELA["recusadas"], recusadas, limite),
         )
     )
-    janelas.append(
-        _janela(
-            JANELA_TITULO_DIFERENTE_ID,
-            TIPOS_JANELA[JANELA_TITULO_DIFERENTE_ID],
-            _pendencias_titulo_id(
-                contrato,
-                usuario,
-                incluir_ignorados=incluir_ignorados,
-            ),
-            limite,
-        )
+    indices_titulo_id = _indices_vigentes_do_contrato(contrato)
+    janela_titulo_id = _janela(
+        JANELA_TITULO_DIFERENTE_ID,
+        TIPOS_JANELA[JANELA_TITULO_DIFERENTE_ID],
+        _pendencias_titulo_id(
+            contrato,
+            usuario,
+            incluir_ignorados=incluir_ignorados,
+            indices=indices_titulo_id,
+        ),
+        limite,
     )
+    indice_vigente = indices_titulo_id[0] if indices_titulo_id else None
+    janela_titulo_id["id_vigente"] = (
+        {
+            "codigo": indice_vigente.codigo,
+            "importado_em": timezone.localtime(indice_vigente.importado_em).date(),
+        }
+        if indice_vigente
+        else None
+    )
+    janelas.append(janela_titulo_id)
     return {
         "contratos": contratos,
         "contrato": contrato,
@@ -209,6 +219,24 @@ def carregar_resumo_inicio(usuario, contrato_id=None, *, hoje=None):
     resumo_atrasos = _resumo_atrasos(mesa)
     documentos_analise = _itens_resumo_analise_cliente(mesa)
     urls = _urls_inicio(mesa.get("contrato"), mesa.get("perfil"))
+    janela_analise = next(
+        (janela for janela in mesa["janelas"] if janela["id"] == PRAZO_ANALISE),
+        None,
+    )
+    perfil = mesa.get("perfil")
+    mostrar_alerta_vencimento = bool(perfil and perfil.prazos is not None and janela_analise)
+    dias_alerta_vencimento = (
+        perfil.prazos.dias_alerta_vencimento if mostrar_alerta_vencimento else None
+    )
+    documentos_vencendo = {
+        item["documento"].pk
+        for item in janela_analise["todos"]
+        if not item["atrasado"] and item["dias"] <= dias_alerta_vencimento
+    } if mostrar_alerta_vencimento else set()
+    janela_titulo_id = next(
+        (janela for janela in mesa["janelas"] if janela["id"] == JANELA_TITULO_DIFERENTE_ID),
+        None,
+    )
     mostrar_atividade = _pode_ver_atividade(usuario, mesa.get("contrato")) if mesa.get("contrato") else False
     return {
         **mesa,
@@ -221,6 +249,10 @@ def carregar_resumo_inicio(usuario, contrato_id=None, *, hoje=None):
         "pacotes_pendencias": _pacotes_pendencias(mesa),
         "faixas_atraso_inicio": _faixas_atraso_inicio(mesa, resumo_atrasos),
         "documentos_analise_cliente": documentos_analise[:5],
+        "mostrar_alerta_vencimento": mostrar_alerta_vencimento,
+        "dias_alerta_vencimento": dias_alerta_vencimento,
+        "quantidade_documentos_vencendo": len(documentos_vencendo),
+        "quantidade_titulos_id": janela_titulo_id["quantidade"] if janela_titulo_id else 0,
         "pacotes_destaque": _pacotes_destaque(mesa, documentos_analise),
         "atividade_recente": _atividade_recente(
             usuario, mesa.get("contrato"), permitido=mostrar_atividade
@@ -283,6 +315,12 @@ def _urls_inicio(contrato, perfil=None):
     ) if grupo_aprovado else query
     return {
         "pendencias": f"{reverse('acoes:pendencias')}?{query}",
+        "pendencias_prazo_analise": (
+            f"{reverse('acoes:pendencias')}?{query}#janela-{PRAZO_ANALISE}"
+        ),
+        "pendencias_titulo_id": (
+            f"{reverse('acoes:pendencias')}?{query}#janela-{JANELA_TITULO_DIFERENTE_ID}"
+        ),
         "abertas": f"{reverse('acoes:abertas')}?{query}",
         "analise_cliente": f"{reverse('acoes:janela', args=(PRAZO_ANALISE,))}?{query}",
         "atrasados": f"{reverse('acoes:atrasados')}?{query}",
@@ -959,8 +997,9 @@ def _pendencias_ids(contrato, perfil, *, incluir_ignorados=False):
     return itens_pendencia
 
 
-def _pendencias_titulo_id(contrato, usuario, *, incluir_ignorados=False):
-    indices = _indices_vigentes_do_contrato(contrato)
+def _pendencias_titulo_id(contrato, usuario, *, incluir_ignorados=False, indices=None):
+    if indices is None:
+        indices = _indices_vigentes_do_contrato(contrato)
     itens_id = (
         ItemPrevisto.objects.filter(
             indice_id__in=[indice.pk for indice in indices],
