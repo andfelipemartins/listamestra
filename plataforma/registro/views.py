@@ -37,7 +37,7 @@ class AtividadeView(LoginRequiredMixin, View):
         else:
             contrato = contratos[0]
 
-        eventos = carregar_eventos(contrato)
+        eventos = carregar_eventos(contrato, usuario=request.user)
         pessoas = _opcoes_pessoas(eventos)
         filtros = {
             "contrato": str(contrato.pk),

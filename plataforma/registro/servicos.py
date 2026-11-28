@@ -25,6 +25,7 @@ from grds.models import Grd
 
 ACOES = (
     ("criou", "Criou"),
+    ("concluiu", "Concluiu"),
     ("alterou", "Alterou"),
     ("excluiu", "Excluiu"),
     ("cancelou", "Cancelou"),
@@ -35,7 +36,7 @@ ACOES = (
 _PREFIXO_SITUACAO_PADRAO = "[Planilha padrão] "
 
 
-def carregar_eventos(contrato):
+def carregar_eventos(contrato, usuario=None):
     """Monta uma linha por registro histórico e uma por lote de importação."""
     eventos = []
     documentos_existentes = dict(
@@ -67,6 +68,14 @@ def carregar_eventos(contrato):
                 )
             )
     documentos_ids = set(documentos_por_id) | documentos_existentes_ids
+    eventos.extend(
+        _eventos_tarefas(
+            contrato,
+            usuario=usuario,
+            documentos_por_id=documentos_por_id,
+            documentos_existentes_ids=documentos_existentes_ids,
+        )
+    )
 
     for registro in CodigoDocumento.history.filter(documento_id__in=documentos_ids).select_related("history_user"):
         eventos.append(
@@ -202,6 +211,87 @@ def carregar_eventos(contrato):
         key=lambda evento: (evento["data_hora"], evento["chave"]),
         reverse=True,
     )
+
+
+def _eventos_tarefas(contrato, *, usuario, documentos_por_id, documentos_existentes_ids):
+    from tarefas.models import Tarefa
+
+    historicos = Tarefa.history.filter(contrato_id=contrato.pk)
+    if usuario is not None:
+        from tarefas.servicos import tarefas_visiveis
+
+        tarefas_ids = tarefas_visiveis(usuario, contrato).values_list("pk", flat=True)
+        historicos = historicos.filter(id__in=tarefas_ids)
+
+    eventos = []
+    acoes_status = {
+        Tarefa.Status.CONCLUIDA: "concluiu",
+        Tarefa.Status.CANCELADA: "cancelou",
+    }
+    for registro in historicos.select_related("history_user").order_by(
+        "history_date", "history_id"
+    ):
+        if registro.history_type == "+":
+            acao = "criou"
+        else:
+            anterior = registro.prev_record
+            if anterior is None or anterior.status != Tarefa.Status.ABERTA:
+                continue
+            acao = acoes_status.get(registro.status)
+            if acao is None:
+                continue
+
+        ator = _ator_historico(registro)
+        nome = _nome_usuario(ator)
+        codigo = documentos_por_id.get(registro.documento_id, "")
+        if registro.documento_id in documentos_existentes_ids and not codigo:
+            codigo = Documento.objects.filter(pk=registro.documento_id).values_list(
+                "identificador_base", flat=True
+            ).first() or ""
+        resumo = f'{nome} {acao} a tarefa “{registro.titulo}”'
+        if codigo:
+            resumo += f" · {codigo}"
+        detalhes = [{"campo": "Título", "antes": "", "depois": registro.titulo}]
+        if acao in {"concluiu", "cancelou"}:
+            detalhes.append(
+                {
+                    "campo": "Status",
+                    "antes": Tarefa.Status.ABERTA.label,
+                    "depois": registro.get_status_display(),
+                }
+            )
+        eventos.append(
+            {
+                "chave": f"historico-tarefa-{registro.history_id}",
+                "data_hora": _localizar(registro.history_date),
+                "acao": acao,
+                "acao_rotulo": dict(ACOES).get(acao, acao.title()),
+                "entidade": "tarefa",
+                "tipo_importacao": "",
+                "codigo": codigo,
+                "usuario": ator,
+                "usuario_id": getattr(ator, "pk", None),
+                "usuario_nome": nome,
+                "resumo": resumo,
+                "resumo_antes_codigo": None,
+                "resumo_depois_codigo": None,
+                "documento_id": (
+                    registro.documento_id
+                    if registro.documento_id in documentos_existentes_ids
+                    else None
+                ),
+                "detalhes": detalhes,
+                "registro_id": registro.history_id,
+                "tarefa_id": registro.id,
+                "contrato_id": contrato.pk,
+                "validas": None,
+                "recusadas": None,
+                "link_recusadas": False,
+                "history_change_reason": registro.history_change_reason,
+                "agrupar_no_evento": False,
+            }
+        )
+    return eventos
 
 
 def _eventos_importacao(contrato):
