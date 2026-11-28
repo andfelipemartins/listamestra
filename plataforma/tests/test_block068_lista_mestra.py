@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from html.parser import HTMLParser
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,18 @@ from documentos.servicos import carregar_lista_mestra
 
 
 PERFIL_METRO = Path(__file__).resolve().parents[2] / "core" / "perfil" / "exemplos" / "metro.yaml"
+
+
+class _CelulasTruncadasParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.celulas = []
+
+    def handle_starttag(self, tag, attrs):
+        atributos = dict(attrs)
+        classes = atributos.get("class", "").split()
+        if tag == "td" and "lista-mestra-celula-truncada" in classes:
+            self.celulas.append(atributos)
 
 
 @pytest.fixture
@@ -207,6 +220,34 @@ def test_lista_mestra_tem_uma_linha_por_emissao_e_rotulo_cronologico(
     assert do_desenho[1]["data_analise"] == date(2026, 2, 10)
     assert do_desenho[1]["documento_retorno"] == "RV-22"
     assert do_desenho[1]["observacao"] == "Observação da análise"
+
+
+@pytest.mark.django_db
+def test_lista_mestra_exibe_titulo_completo_no_tooltip_da_celula_truncada(
+    client, contrato, perfil_modelo, usuario
+):
+    titulo = "Projeto executivo da estação Ragueb Chohfi — " * 8
+    documento = _documento(
+        contrato,
+        "DE-15.25.00.00-6A1-1099",
+        titulo,
+        "P7",
+    )
+    _emissao(documento, "1", date(2026, 4, 1))
+    client.force_login(usuario)
+
+    resposta = client.get(reverse("lista_mestra"), {"contrato": contrato.pk})
+
+    celulas_truncadas = _CelulasTruncadasParser()
+    celulas_truncadas.feed(resposta.content.decode())
+    celula_titulo = next(
+        atributos
+        for atributos in celulas_truncadas.celulas
+        if "lista-mestra-titulo" in atributos.get("class", "").split()
+    )
+    assert resposta.status_code == 200
+    assert celula_titulo["title"] == titulo
+    assert "lista-mestra-celula-truncada" in celula_titulo["class"].split()
 
 
 @pytest.mark.django_db

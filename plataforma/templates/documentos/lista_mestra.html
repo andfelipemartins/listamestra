@@ -6,11 +6,20 @@
   .lista-mestra-filtros-grade { display: grid; grid-template-columns: minmax(220px, 1.5fr) repeat(4, minmax(135px, 1fr)); gap: 12px; }
   .lista-mestra-cancelados { display: flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 12px; }
   .lista-mestra-tabela { max-height: 70vh; overflow: auto; }
-  .lista-mestra-tabela table { min-width: 1700px; }
-  .lista-mestra-tabela th { position: sticky; top: 0; z-index: 2; white-space: nowrap; }
-  .lista-mestra-tabela td { min-width: 90px; }
-  .lista-mestra-tabela td:first-child { min-width: 220px; }
-  .lista-mestra-tabela td:last-child { min-width: 180px; max-width: 320px; }
+  .lista-mestra-tabela table { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0; }
+  .lista-mestra-tabela th,
+  .lista-mestra-tabela td { padding: 4px 8px; font-size: 12px; line-height: 1.2; vertical-align: middle; white-space: nowrap; }
+  .lista-mestra-tabela th { position: sticky; top: 0; z-index: 2; }
+  .lista-mestra-coluna-curta { width: 1%; }
+  .lista-mestra-codigo { position: sticky; left: 0; z-index: 1; min-width: 220px; background: var(--surface); }
+  .lista-mestra-tabela th.lista-mestra-codigo { z-index: 3; background: var(--surface-raised); }
+  .lista-mestra-celula-truncada { overflow: hidden; text-overflow: ellipsis; }
+  .lista-mestra-titulo { width: 360px; min-width: 360px; max-width: 360px; }
+  .lista-mestra-texto-longo { width: 200px; min-width: 200px; max-width: 200px; }
+  .lista-mestra-tabela tbody tr:nth-child(even) td { background-color: color-mix(in srgb, var(--surface) 94%, var(--text-primary) 6%); }
+  .lista-mestra-tabela tbody tr:nth-child(even) td.lista-mestra-codigo { background-color: color-mix(in srgb, var(--surface) 94%, var(--text-primary) 6%); }
+  .lista-mestra-tabela tbody tr:hover td { background-color: var(--selection-bg); }
+  .lista-mestra-tabela tbody tr:hover td.lista-mestra-codigo { background-color: var(--selection-bg); }
   .lista-mestra-paginacao { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; color: var(--text-secondary); font-size: 12px; }
   .lista-mestra-paginas { display: flex; flex-wrap: wrap; gap: 5px; }
   .lista-mestra-paginas a, .lista-mestra-paginas span { min-width: 34px; padding: 7px 9px; border: 1px solid var(--border); border-radius: 6px; text-align: center; }
@@ -64,23 +73,23 @@
     <div class="panel-heading"><div><h2>{{ total_filtrado }} {% if total_filtrado == 1 %}emissão{% else %}emissões{% endif %}</h2><p>Página {{ pagina.number }} de {{ pagina.paginator.num_pages|default:1 }} · até 100 linhas por página.</p></div></div>
     <div class="table-wrap lista-mestra-tabela" tabindex="0" role="region" aria-label="Tabela da Lista Mestra; use a rolagem horizontal para ver todas as colunas">
       <table>
-        <thead><tr><th>Código</th>{% for segmento in segmentos_codigo %}<th>{{ segmento.rotulo|default:segmento.nome }}</th>{% endfor %}<th>Título</th><th>Disciplina</th><th>Revisão</th><th>Versão</th><th>Fase</th><th>Data de emissão</th><th>Rótulo cronológico</th><th>Situação da análise</th><th>Data da análise</th><th>Documento de retorno</th><th>Observação</th></tr></thead>
+        <thead><tr><th class="lista-mestra-codigo">Código</th>{% for segmento in segmentos_codigo %}<th class="lista-mestra-coluna-curta">{{ segmento.rotulo|default:segmento.nome }}</th>{% endfor %}<th class="lista-mestra-titulo">Título</th><th class="lista-mestra-texto-longo">Disciplina</th><th class="lista-mestra-coluna-curta">Revisão</th><th class="lista-mestra-coluna-curta">Versão</th><th class="lista-mestra-coluna-curta">Fase</th><th class="lista-mestra-coluna-curta">Data de emissão</th><th class="lista-mestra-coluna-curta">Rótulo cronológico</th><th>Situação da análise</th><th class="lista-mestra-coluna-curta">Data da análise</th><th class="lista-mestra-texto-longo">Documento de retorno</th><th class="lista-mestra-texto-longo">Observação</th></tr></thead>
         <tbody>
           {% for linha in pagina.object_list %}
           <tr>
-            <td><a href="{% url 'documento_pasta' contrato.pk linha.documento.pk %}"><strong>{{ linha.codigo }}</strong></a></td>
-            {% for valor in linha.segmentos %}<td>{{ valor|default:"—" }}</td>{% endfor %}
-            <td>{{ linha.documento.titulo|default:"—" }}</td>
-            <td>{{ linha.disciplina|default:"—" }}</td>
-            <td>{{ linha.emissao.revisao }}</td>
-            <td>{{ linha.emissao.versao|default_if_none:"—" }}</td>
-            <td>{{ linha.fase_rotulo }}</td>
-            <td>{{ linha.emissao.data_emissao|date:"d/m/Y" }}</td>
-            <td>{{ linha.rotulo_cronologico }}</td>
+            <td class="lista-mestra-codigo"><a href="{% url 'documento_pasta' contrato.pk linha.documento.pk %}"><strong>{{ linha.codigo }}</strong></a></td>
+            {% for valor in linha.segmentos %}<td class="lista-mestra-coluna-curta">{{ valor|default:"—" }}</td>{% endfor %}
+            <td class="lista-mestra-celula-truncada lista-mestra-titulo" title="{{ linha.documento.titulo|default:'—' }}">{{ linha.documento.titulo|default:"—" }}</td>
+            <td class="lista-mestra-celula-truncada lista-mestra-texto-longo" title="{{ linha.disciplina|default:'—' }}">{{ linha.disciplina|default:"—" }}</td>
+            <td class="lista-mestra-coluna-curta">{{ linha.emissao.revisao }}</td>
+            <td class="lista-mestra-coluna-curta">{{ linha.emissao.versao|default_if_none:"—" }}</td>
+            <td class="lista-mestra-coluna-curta">{{ linha.fase_rotulo }}</td>
+            <td class="lista-mestra-coluna-curta">{{ linha.emissao.data_emissao|date:"d/m/Y" }}</td>
+            <td class="lista-mestra-coluna-curta">{{ linha.rotulo_cronologico }}</td>
             <td>{{ linha.situacao }}</td>
-            <td>{% if linha.data_analise %}{{ linha.data_analise|date:"d/m/Y" }}{% else %}—{% endif %}</td>
-            <td>{{ linha.documento_retorno|default:"—" }}</td>
-            <td>{{ linha.observacao|default:"—" }}</td>
+            <td class="lista-mestra-coluna-curta">{% if linha.data_analise %}{{ linha.data_analise|date:"d/m/Y" }}{% else %}—{% endif %}</td>
+            <td class="lista-mestra-celula-truncada lista-mestra-texto-longo" title="{{ linha.documento_retorno|default:'—' }}">{{ linha.documento_retorno|default:"—" }}</td>
+            <td class="lista-mestra-celula-truncada lista-mestra-texto-longo" title="{{ linha.observacao|default:'—' }}">{{ linha.observacao|default:"—" }}</td>
           </tr>
           {% empty %}<tr><td colspan="{{ segmentos_codigo|length|add:12 }}" class="painel-sem-dados">Nenhuma emissão corresponde aos filtros.</td></tr>{% endfor %}
         </tbody>
