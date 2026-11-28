@@ -171,6 +171,26 @@ def test_faixas_do_perfil_aparecem_inclusive_com_contagem_zero(
 
 
 @pytest.mark.django_db
+def test_inicio_usa_antecedencia_de_alerta_do_perfil(contrato, perfil_modelo, usuario):
+    perfil_modelo.definicao["prazos"]["regras"][0].update(dias=1, tipo_dia="corridos")
+    perfil_modelo.save(update_fields=("definicao",))
+    documento = _documento(contrato, "DE-15.25.00.00-6A1-9101")
+    _emissao(documento, HOJE + timedelta(days=3))
+
+    resumo_padrao = carregar_resumo_inicio(usuario, contrato.pk, hoje=HOJE)
+
+    assert resumo_padrao["documentos_analise_cliente"] == []
+
+    perfil_modelo.definicao["prazos"]["dias_alerta_vencimento"] = 5
+    perfil_modelo.save(update_fields=("definicao",))
+    resumo_configurado = carregar_resumo_inicio(usuario, contrato.pk, hoje=HOJE)
+
+    assert [
+        item["codigo"] for item in resumo_configurado["documentos_analise_cliente"]
+    ] == [documento.identificador_base]
+
+
+@pytest.mark.django_db
 def test_atividade_recente_so_e_carregada_para_admin_do_contrato(
     contrato, perfil_modelo, usuario, django_user_model
 ):

@@ -79,6 +79,7 @@ def test_indicador_usa_concluidos_e_abertos_vencidos_na_base():
 def test_perfil_metro_carrega_prazos_configurados():
     perfil = carregar_yaml(ROOT / "core" / "perfil" / "exemplos" / "metro.yaml")
 
+    assert perfil.prazos.dias_alerta_vencimento == 3
     assert perfil.prazos.meta_percentual == 80
     assert perfil.prazos.meta_cronograma == 80
     assert perfil.prazos.feriados.nacionais is True
@@ -94,6 +95,30 @@ def test_perfil_metro_carrega_prazos_configurados():
     assert [
         (faixa.ate_dias, faixa.rotulo) for faixa in perfil.prazos.faixas_atraso
     ] == [(5, "Leve"), (30, "Moderado"), (60, "Grave"), (None, "Crítico")]
+
+
+def test_perfil_le_dias_de_antecedencia_do_alerta_de_vencimento():
+    with (ROOT / "core" / "perfil" / "exemplos" / "metro.yaml").open(encoding="utf-8") as arquivo:
+        dados = yaml.safe_load(arquivo)
+    dados["prazos"]["dias_alerta_vencimento"] = 5
+
+    perfil = perfil_de_dict(dados)
+
+    assert perfil.prazos.dias_alerta_vencimento == 5
+
+
+@pytest.mark.parametrize("valor", [-1, "3", True])
+def test_perfil_rejeita_dias_de_antecedencia_invalidos(valor):
+    with (ROOT / "core" / "perfil" / "exemplos" / "metro.yaml").open(encoding="utf-8") as arquivo:
+        dados = yaml.safe_load(arquivo)
+    dados["prazos"]["dias_alerta_vencimento"] = valor
+
+    with pytest.raises(ErroPerfil) as erro:
+        perfil_de_dict(dados)
+
+    assert str(erro.value) == (
+        "'prazos.dias_alerta_vencimento' precisa ser inteiro maior ou igual a 0."
+    )
 
 
 def test_contagem_por_faixa_separa_atrasos_entregues_e_abertos_nos_limites():

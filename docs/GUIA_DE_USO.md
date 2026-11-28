@@ -20,6 +20,8 @@ Este guia descreve as telas presentes na Plataforma. O acesso depende do login, 
 **O que dá para fazer:** trocar o contrato quando houver mais de um, abrir documentos e pendências, ir a importações disponíveis e consultar links de backup quando exibidos. As áreas “Mensagens / Integrações” e “Ações rápidas” só oferecem as opções que estiverem habilitadas.  
 **Como chegar:** é a página aberta após o login; clique em `Início` no menu lateral para voltar.
 
+A antecedência do aviso “Vence em N dias” vem do perfil do contrato e, por padrão, é de 3 dias.
+
 ## Painel
 
 **Menu e título:** `Painel · [código interno]` e `Painel · [código interno]`.  

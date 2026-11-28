@@ -199,6 +199,38 @@ def test_janela_analise_usa_dias_uteis_e_ordena_atrasados_primeiro(contrato, per
 
 
 @pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("antecedencia", "codigos_esperados"),
+    [
+        (5, {"DOC-ALERTA-4", "DOC-ALERTA-3", "DOC-ALERTA-0"}),
+        (None, {"DOC-ALERTA-3", "DOC-ALERTA-0"}),
+        (0, {"DOC-ALERTA-0"}),
+    ],
+)
+def test_janela_analise_usa_antecedencia_de_alerta_do_perfil(
+    contrato, perfil_modelo, usuario, antecedencia, codigos_esperados
+):
+    perfil_modelo.definicao["prazos"]["regras"][0].update(dias=1, tipo_dia="corridos")
+    if antecedencia is None:
+        perfil_modelo.definicao["prazos"].pop("dias_alerta_vencimento", None)
+    else:
+        perfil_modelo.definicao["prazos"]["dias_alerta_vencimento"] = antecedencia
+    perfil_modelo.save(update_fields=("definicao",))
+
+    documentos = (
+        _documento(contrato, "DOC-ALERTA-4"),
+        _documento(contrato, "DOC-ALERTA-3"),
+        _documento(contrato, "DOC-ALERTA-0"),
+    )
+    for documento, dias_ate_vencer in zip(documentos, (4, 3, 0)):
+        _emissao(documento, HOJE + timedelta(days=dias_ate_vencer - 1))
+
+    janela = _janela(carregar_minha_mesa(usuario, contrato.pk, hoje=HOJE), "analise-cliente")
+
+    assert {item["codigo"] for item in janela["todos"]} == codigos_esperados
+
+
+@pytest.mark.django_db
 def test_janela_devolucao_usa_dias_corridos(contrato, perfil_modelo, usuario):
     perfil_modelo.definicao["prazos"]["regras"][1]["dias"] = 2
     perfil_modelo.save(update_fields=("definicao",))
@@ -217,6 +249,33 @@ def test_janela_devolucao_usa_dias_corridos(contrato, perfil_modelo, usuario):
     assert janela["itens"][0]["vencimento"] == date(2026, 11, 24)
     assert janela["itens"][0]["dias"] == 1
     assert janela["itens"][0]["texto_prazo"] == "Vence em 1 dia"
+
+
+@pytest.mark.django_db
+def test_janela_devolucao_usa_antecedencia_de_alerta_do_perfil(
+    contrato, perfil_modelo, usuario
+):
+    perfil_modelo.definicao["prazos"]["regras"][1].update(dias=4, tipo_dia="corridos")
+    perfil_modelo.save(update_fields=("definicao",))
+    documento = _documento(contrato, "DOC-DEVOLUCAO-ALERTA-1001")
+    _emissao(
+        documento,
+        HOJE - timedelta(days=1),
+        situacao="Não Aprovado",
+        data_analise=HOJE,
+        usuario=usuario,
+    )
+
+    padrao = _janela(carregar_minha_mesa(usuario, contrato.pk, hoje=HOJE), "devolucao")
+
+    assert padrao["quantidade"] == 0
+
+    perfil_modelo.definicao["prazos"]["dias_alerta_vencimento"] = 5
+    perfil_modelo.save(update_fields=("definicao",))
+    configurada = _janela(carregar_minha_mesa(usuario, contrato.pk, hoje=HOJE), "devolucao")
+
+    assert configurada["quantidade"] == 1
+    assert configurada["itens"][0]["dias"] == 4
 
 
 @pytest.mark.django_db

@@ -233,6 +233,7 @@ class PrazosPerfil:
     regras: tuple[RegraPrazo, ...]
     meta_cronograma: float | None = None
     faixas_atraso: tuple[FaixaAtraso, ...] | None = None
+    dias_alerta_vencimento: int = 3
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "regras", tuple(self.regras))
@@ -921,6 +922,15 @@ def _prazos_de_dict(dados: Any) -> PrazosPerfil | None:
         dados.get("meta_cronograma", meta), "prazos.meta_cronograma", permite_none=True
     )
     faixas_atraso = _faixas_atraso_prazo(dados.get("faixas_atraso"), "prazos.faixas_atraso")
+    dias_alerta_vencimento = dados.get("dias_alerta_vencimento", 3)
+    if (
+        isinstance(dias_alerta_vencimento, bool)
+        or not isinstance(dias_alerta_vencimento, int)
+        or dias_alerta_vencimento < 0
+    ):
+        raise ErroPerfil(
+            "'prazos.dias_alerta_vencimento' precisa ser inteiro maior ou igual a 0."
+        )
 
     regras_dados = dados.get("regras")
     if not isinstance(regras_dados, (list, tuple)):
@@ -978,6 +988,7 @@ def _prazos_de_dict(dados: Any) -> PrazosPerfil | None:
         tuple(regras),
         meta_cronograma,
         faixas_atraso,
+        dias_alerta_vencimento,
     )
 
 

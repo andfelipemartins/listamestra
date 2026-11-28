@@ -1412,3 +1412,12 @@ Aprovado, Não Conforme, Inconsistente, Erro de Assinatura, Cancelado, Revisão 
   cronograma), a mais recente primeiro: data, tipo, arquivo, quem importou e os contadores, com link para as recusadas.
   Mesma permissão da tela de recusadas. Sem mudança no banco.
 - Fora desta fatia: desfazer uma importação (rollback por lote), comparar dois lotes e baixar o histórico em planilha.
+
+## D-126 · Alerta de prazo vencendo: antecedência no perfil, para os dois prazos (escolha do Claude, a confirmar)
+
+*Origem: esteira contínua (D-100) · 2026-11-28 · aplica D-116 · confirmação na pergunta AN7 e na avaliação do block-079*
+
+- D-116 manda a antecedência do alerta para o perfil do contrato (padrão 3 dias). Hoje ela é fixa em 3 no código.
+- Escolha: o campo `prazos.dias_alerta_vencimento` do perfil (inteiro ≥ 0, padrão 3) vale para os dois prazos que
+  a Plataforma já avisa: a análise do cliente e a nossa devolução (opção recomendada em AN7, que é o comportamento atual).
+- Fora desta fatia: antecedência diferente por regra de prazo e aviso por e-mail.

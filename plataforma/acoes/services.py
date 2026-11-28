@@ -41,7 +41,6 @@ TIPOS_JANELA = {
     CLASSES_SEM_ESCOPO: "Classe sem escopo",
     JANELA_TITULO_DIFERENTE_ID: "Título diferente do ID",
 }
-_DIAS_PARA_VENCER = 3
 _DIAS_CRONOGRAMA = 7
 PENDENCIA_FALTA_NO_PW = "falta_no_pw"
 PENDENCIA_FALTA_NO_NOSSO_ID = "falta_no_nosso_id"
@@ -1081,7 +1080,7 @@ def _itens_regras_prazo(perfil, regras, documentos, hoje):
                     faixa_atraso, faixa_atraso_tom = _classificar_faixa_atraso(faixas, dias)
                 else:
                     dias = dias_ate_vencimento(regra, hoje, avaliacao.vencimento, feriados)
-                    if dias > _DIAS_PARA_VENCER:
+                    if dias > perfil.prazos.dias_alerta_vencimento:
                         continue
                     texto_prazo = "Vence hoje" if dias == 0 else f"Vence em {dias} {('dia' if dias == 1 else 'dias')}"
                     atrasado = False
