@@ -3,9 +3,10 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth import views as auth_views
 from django.urls import include, path
 
-from contas.views import InicioView
+from acoes.views import AtivarContratoView, HomeContratosView, InicioView
 from importacoes.views import (
     ImportarCronogramaView,
+    ImportarElaboracaoView,
     ImportarIDView,
     ImportarSituacaoPadraoView,
     ImportarSituacaoPWView,
@@ -16,6 +17,8 @@ from importacoes.views import (
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("contratos/escolher/", HomeContratosView.as_view(), name="contratos_escolher"),
+    path("contratos/ativar/", AtivarContratoView.as_view(), name="contrato_ativar"),
     path(
         "contas/login/",
         auth_views.LoginView.as_view(template_name="contas/login.html"),
@@ -31,6 +34,7 @@ urlpatterns = [
     path("importacoes/situacao-padrao/", ImportarSituacaoPadraoView.as_view(), name="importar_situacao_padrao"),
     path("importacoes/situacao-padrao/modelo/", BaixarModeloSituacaoPadraoView.as_view(), name="modelo_situacao_padrao"),
     path("importacoes/cronograma/", ImportarCronogramaView.as_view(), name="importar_cronograma"),
+    path("importacoes/elaboracao/", ImportarElaboracaoView.as_view(), name="importar_elaboracao"),
     path("importacoes/recusadas/<int:contrato_id>/", LinhasRecusadasView.as_view(), name="linhas_recusadas"),
     path("importacoes/historico/<int:contrato_id>/", HistoricoImportacoesView.as_view(), name="historico_importacoes"),
     path("painel/", include("painel.urls")),

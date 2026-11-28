@@ -30,13 +30,16 @@ def test_usuario_logado_ve_nome_e_perfil(client, django_user_model):
     )
     client.force_login(usuario)
 
-    response = client.get(reverse("inicio"))
+    response = client.get(reverse("inicio"), follow=True)
 
     assert response.status_code == 200
+    assert response.redirect_chain == [(reverse("contratos_escolher"), 302)]
+    assert response.request["PATH_INFO"] == reverse("contratos_escolher")
     html = response.content.decode()
-    assert "Minha mesa" in html
-    assert "Visão geral do contrato, alertas e próximos acompanhamentos." in html
-    assert "Chefia / coordenação" in response.content.decode()
+    assert "Escolha um contrato" in html
+    assert "Nenhum contrato disponível" in html
+    assert "Ana Silva" in html
+    assert "Chefia / coordenação" in html
 
 
 def test_import_core_parsers_na_plataforma():

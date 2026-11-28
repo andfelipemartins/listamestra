@@ -5,6 +5,7 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views import View
 
+from .services import contratos_para_selecao, resolver_contrato
 from .services import (
     JANELA_TITULO_DIFERENTE_ID,
     PENDENCIA_TITULO_DIFERENTE_ID,
@@ -14,16 +15,100 @@ from .services import (
     carregar_atrasados_lado,
     carregar_janela,
     carregar_minha_mesa,
+    carregar_resumo_inicio,
     reativar_ignorado,
     registrar_acao,
 )
+
+
+def _contrato_da_requisicao(request, *, incluir_post=False):
+    contrato_id = request.GET.get("contrato")
+    if not contrato_id and incluir_post:
+        contrato_id = request.POST.get("contrato")
+
+    if contrato_id:
+        contrato = resolver_contrato(request.user, contrato_id)
+        if not contrato.ativo and not request.user.is_staff:
+            raise PermissionDenied("Este contrato est\u00e1 inativo.")
+        request.session["contrato_ativo_id"] = contrato.pk
+        return contrato.pk
+
+    contrato_id = request.session.get("contrato_ativo_id")
+    if not contrato_id:
+        return None
+    try:
+        contrato = resolver_contrato(request.user, contrato_id)
+    except PermissionDenied:
+        request.session.pop("contrato_ativo_id", None)
+        return None
+    if not contrato.ativo:
+        request.session.pop("contrato_ativo_id", None)
+        return None
+    return contrato.pk
+
+
+def _sem_contrato():
+    return redirect("contratos_escolher")
+
+
+class InicioView(LoginRequiredMixin, View):
+    template_name = "inicio.html"
+
+    def get(self, request):
+        contrato_id = _contrato_da_requisicao(request)
+        if contrato_id is None:
+            return _sem_contrato()
+        contexto = carregar_resumo_inicio(request.user, contrato_id)
+        return render(request, self.template_name, contexto)
+
+
+class HomeContratosView(LoginRequiredMixin, View):
+    template_name = "contratos_escolher.html"
+
+    def get(self, request):
+        contratos = contratos_para_selecao(request.user)
+        ids_disponiveis = {item["contrato"].pk for item in contratos}
+        if request.session.get("contrato_ativo_id") not in ids_disponiveis:
+            request.session.pop("contrato_ativo_id", None)
+        if len(contratos) == 1:
+            request.session["contrato_ativo_id"] = contratos[0]["contrato"].pk
+            return redirect("inicio")
+        return render(
+            request,
+            self.template_name,
+            {
+                "contratos_disponiveis": contratos,
+                "modo_contratos": request.session.get("modo_contratos", "grade"),
+            },
+        )
+
+    def post(self, request):
+        modo = request.POST.get("modo")
+        if modo in {"grade", "lista"}:
+            request.session["modo_contratos"] = modo
+        return redirect("contratos_escolher")
+
+
+class AtivarContratoView(LoginRequiredMixin, View):
+    def post(self, request):
+        contrato_id = request.POST.get("contrato")
+        if not contrato_id:
+            raise PermissionDenied("Informe um contrato para ativar.")
+        contrato = resolver_contrato(request.user, contrato_id)
+        if not contrato.ativo:
+            raise PermissionDenied("Este contrato est\u00e1 inativo.")
+        request.session["contrato_ativo_id"] = contrato.pk
+        return redirect("inicio")
 
 
 class PendenciasView(LoginRequiredMixin, View):
     template_name = "acoes/pendencias.html"
 
     def get(self, request):
-        contexto = carregar_minha_mesa(request.user, request.GET.get("contrato"))
+        contrato_id = _contrato_da_requisicao(request)
+        if contrato_id is None:
+            return _sem_contrato()
+        contexto = carregar_minha_mesa(request.user, contrato_id)
         contexto["email_aberto"] = request.GET.get("email", "")
         return render(request, self.template_name, contexto)
 
@@ -32,7 +117,10 @@ class AtrasadosView(LoginRequiredMixin, View):
     template_name = "acoes/atrasados.html"
 
     def get(self, request):
-        contexto = carregar_atrasados(request.user, request.GET.get("contrato"))
+        contrato_id = _contrato_da_requisicao(request)
+        if contrato_id is None:
+            return _sem_contrato()
+        contexto = carregar_atrasados(request.user, contrato_id)
         return render(request, self.template_name, contexto)
 
 
@@ -40,7 +128,10 @@ class AbertasView(LoginRequiredMixin, View):
     template_name = "acoes/abertas.html"
 
     def get(self, request):
-        contexto = carregar_abertas(request.user, request.GET.get("contrato"))
+        contrato_id = _contrato_da_requisicao(request)
+        if contrato_id is None:
+            return _sem_contrato()
+        contexto = carregar_abertas(request.user, contrato_id)
         return render(request, self.template_name, contexto)
 
 
@@ -48,10 +139,11 @@ class AtrasadosLadoView(LoginRequiredMixin, View):
     template_name = "acoes/atrasados_lado.html"
 
     def get(self, request, lado):
+        contrato_id = _contrato_da_requisicao(request)
+        if contrato_id is None:
+            return _sem_contrato()
         try:
-            contexto = carregar_atrasados_lado(
-                request.user, request.GET.get("contrato"), lado
-            )
+            contexto = carregar_atrasados_lado(request.user, contrato_id, lado)
         except ValueError as erro:
             from django.http import Http404
 
@@ -61,10 +153,11 @@ class AtrasadosLadoView(LoginRequiredMixin, View):
 
 class AtrasadosLegadoView(LoginRequiredMixin, View):
     def get(self, request):
-        contrato_id = request.GET.get("contrato")
+        contrato_id = _contrato_da_requisicao(request)
+        if contrato_id is None:
+            return _sem_contrato()
         destino = reverse("acoes:atrasados")
-        if contrato_id:
-            destino = f"{destino}?contrato={contrato_id}"
+        destino = f"{destino}?contrato={contrato_id}"
         return redirect(destino)
 
 
@@ -72,8 +165,11 @@ class JanelaView(LoginRequiredMixin, View):
     template_name = "acoes/janela.html"
 
     def get(self, request, tipo):
+        contrato_id = _contrato_da_requisicao(request)
+        if contrato_id is None:
+            return _sem_contrato()
         try:
-            contexto = carregar_janela(request.user, request.GET.get("contrato"), tipo)
+            contexto = carregar_janela(request.user, contrato_id, tipo)
         except ValueError as erro:
             from django.http import Http404
 
@@ -86,13 +182,18 @@ class IgnoradosView(LoginRequiredMixin, View):
     template_name = "acoes/ignorados.html"
 
     def get(self, request):
-        contexto = carregar_ignorados(request.user, request.GET.get("contrato"))
+        contrato_id = _contrato_da_requisicao(request)
+        if contrato_id is None:
+            return _sem_contrato()
+        contexto = carregar_ignorados(request.user, contrato_id)
         return render(request, self.template_name, contexto)
 
 
 class AcaoView(LoginRequiredMixin, View):
     def post(self, request):
-        contrato_id = request.POST.get("contrato")
+        contrato_id = _contrato_da_requisicao(request, incluir_post=True)
+        if contrato_id is None:
+            return _sem_contrato()
         tipo_pendencia = request.POST.get("tipo_pendencia", "")
         tipo_janela = (
             JANELA_TITULO_DIFERENTE_ID
@@ -130,7 +231,9 @@ class AcaoView(LoginRequiredMixin, View):
 
 class UsarTituloIDView(LoginRequiredMixin, View):
     def post(self, request):
-        contrato_id = request.POST.get("contrato")
+        contrato_id = _contrato_da_requisicao(request, incluir_post=True)
+        if contrato_id is None:
+            return _sem_contrato()
         try:
             contexto = carregar_janela(
                 request.user,
@@ -172,7 +275,9 @@ class UsarTituloIDView(LoginRequiredMixin, View):
 
 class ReativarView(LoginRequiredMixin, View):
     def post(self, request):
-        contrato_id = request.POST.get("contrato")
+        contrato_id = _contrato_da_requisicao(request, incluir_post=True)
+        if contrato_id is None:
+            return _sem_contrato()
         try:
             reativar_ignorado(
                 request.user,

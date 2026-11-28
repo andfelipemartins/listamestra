@@ -144,7 +144,7 @@ ASGI_APPLICATION = "config.asgi.application"
 
 AUTH_USER_MODEL = "contas.Usuario"
 LOGIN_URL = "login"
-LOGIN_REDIRECT_URL = "inicio"
+LOGIN_REDIRECT_URL = "contratos_escolher"
 LOGOUT_REDIRECT_URL = "login"
 
 AUTH_PASSWORD_VALIDATORS = [

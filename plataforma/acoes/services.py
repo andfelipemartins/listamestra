@@ -68,6 +68,51 @@ def contratos_acessiveis(usuario):
     return contratos.distinct().order_by("nome", "pk")
 
 
+def contratos_para_selecao(usuario):
+    """Lista contratos ativos disponíveis para a pessoa, com papel e contagem."""
+    if usuario.is_staff:
+        contratos = list(
+            Contrato.objects.filter(ativo=True)
+            .annotate(total_documentos=Count("documentos", distinct=True))
+            .order_by("nome", "pk")
+        )
+        papeis = {
+            participacao.contrato_id: participacao.get_papel_display()
+            for participacao in Participacao.objects.filter(
+                usuario=usuario,
+                ativo=True,
+                contrato__in=contratos,
+            )
+        }
+        return [
+            {
+                "contrato": contrato,
+                "papel": papeis.get(contrato.pk, "Acesso administrativo"),
+                "total_documentos": contrato.total_documentos,
+            }
+            for contrato in contratos
+        ]
+
+    participacoes = (
+        Participacao.objects.filter(
+            usuario=usuario,
+            ativo=True,
+            contrato__ativo=True,
+        )
+        .select_related("contrato")
+        .annotate(total_documentos=Count("contrato__documentos", distinct=True))
+        .order_by("contrato__nome", "contrato_id")
+    )
+    return [
+        {
+            "contrato": participacao.contrato,
+            "papel": participacao.get_papel_display(),
+            "total_documentos": participacao.total_documentos,
+        }
+        for participacao in participacoes
+    ]
+
+
 def resolver_contrato(usuario, contrato_id=None):
     contratos = contratos_acessiveis(usuario)
     if contrato_id in (None, ""):

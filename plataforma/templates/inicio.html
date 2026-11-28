@@ -18,16 +18,6 @@
       <h1>Minha mesa</h1>
       <p>Visão geral do contrato, alertas e próximos acompanhamentos.</p>
     </div>
-    {% if contratos %}
-      <form class="mesa-seletor" method="get">
-        <label for="mesa-contrato">Contrato
-          <select id="mesa-contrato" name="contrato" onchange="this.form.submit()">
-            {% for opcao in contratos %}<option value="{{ opcao.pk }}" {% if contrato.pk == opcao.pk %}selected{% endif %}>{{ opcao.codigo_interno }} · {{ opcao.nome }}</option>{% endfor %}
-          </select>
-        </label>
-        <noscript><button class="button button-quiet" type="submit">Abrir</button></noscript>
-      </form>
-    {% endif %}
   </header>
 
   {% if not contrato %}

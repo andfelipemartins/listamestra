@@ -1,4 +1,4 @@
-{% load static %}
+{% load static contrato_tags %}
 <!doctype html>
 <html lang="pt-br">
 <head>
@@ -6,6 +6,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}SCLME{% endblock %} · Lista Mestra</title>
   <link rel="stylesheet" href="{% static 'css/plataforma.css' %}">
+  <style>
+    .account-contrato { display:flex; min-width:0; flex-direction:column; align-items:flex-end; max-width:220px; font-size:12px; }
+    .account-contrato strong,.account-contrato span { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .account-contrato span { color:var(--text-secondary); font-size:11px; }
+    @media(max-width:700px) { .account-contrato { max-width:100px; } .account-contrato span { display:none; } }
+    @media(max-width:480px) { .account-contrato { max-width:64px; } }
+  </style>
   {% block extra_head %}{% endblock %}
   <script src="https://unpkg.com/htmx.org@2.0.3" defer></script>
 </head>
@@ -13,8 +20,11 @@
   <header class="topbar topbar--fixed">
     <a class="brand" href="{% url 'inicio' %}"><span class="brand-mark">LM</span><span>Lista Mestra <small>Plataforma da equipe</small></span></a>
     {% if user.is_authenticated %}
+    {% contrato_ativo request as contrato_atual %}
     <div class="account">
       <div class="account-copy"><strong>{{ user.get_full_name|default:user.username }}</strong><span>{{ user.get_perfil_display }}</span></div>
+      {% if contrato_atual %}<div class="account-contrato" title="{{ contrato_atual.codigo_interno }} · {{ contrato_atual.nome }}"><strong>{{ contrato_atual.codigo_interno }}</strong><span>{{ contrato_atual.nome }}</span></div>{% endif %}
+      <a class="button button-quiet" href="{% url 'contratos_escolher' %}">Trocar contrato</a>
       <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="button button-quiet" type="submit">Sair</button></form>
     </div>
     {% endif %}
