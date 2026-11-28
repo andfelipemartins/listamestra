@@ -1,4 +1,5 @@
 import re
+from datetime import date
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -70,6 +71,152 @@ class ListaMestraConfiguracao(models.Model):
 
     def __str__(self):
         return f"Colunas da Lista Mestra — {self.contrato}"
+
+
+class ColunaPersonalizada(models.Model):
+    class Tipo(models.TextChoices):
+        TEXTO = "texto", "Texto"
+        DATA = "data", "Data"
+        LISTA = "lista", "Lista de opções"
+
+    class Nivel(models.TextChoices):
+        DOCUMENTO = "documento", "Documento"
+        REVISAO = "revisao", "Revisão / emissão"
+
+    contrato = models.ForeignKey(
+        Contrato,
+        verbose_name="contrato",
+        on_delete=models.CASCADE,
+        related_name="colunas_personalizadas",
+    )
+    nome = models.CharField("nome", max_length=120)
+    nome_normalizado = models.CharField("nome normalizado", max_length=120, editable=False)
+    tipo = models.CharField("tipo", max_length=12, choices=Tipo.choices)
+    opcoes = models.JSONField("opções", default=list, blank=True)
+    nivel = models.CharField("nível", max_length=12, choices=Nivel.choices)
+    ativa = models.BooleanField("ativa", default=True)
+    history = HistoricalRecords()
+
+    class Meta:
+        verbose_name = "coluna personalizada"
+        verbose_name_plural = "colunas personalizadas"
+        ordering = ("nome", "pk")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("contrato", "nome_normalizado"),
+                name="col_personalizada_ct_nome_uq",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        self.nome = re.sub(r"\s+", " ", self.nome or "").strip()
+        self.nome_normalizado = self.nome.casefold()
+        if not self.nome:
+            raise ValidationError({"nome": "Informe o nome da coluna."})
+        opcoes = self.opcoes if isinstance(self.opcoes, list) else []
+        normalizadas = []
+        vistos = set()
+        for opcao in opcoes:
+            opcao = re.sub(r"\s+", " ", str(opcao or "")).strip()
+            if opcao and opcao.casefold() not in vistos:
+                normalizadas.append(opcao)
+                vistos.add(opcao.casefold())
+        if self.tipo == self.Tipo.LISTA and not normalizadas:
+            raise ValidationError({"opcoes": "Informe ao menos uma opção para a lista."})
+        if self.tipo != self.Tipo.LISTA and normalizadas:
+            raise ValidationError({"opcoes": "Somente colunas do tipo lista podem ter opções."})
+        self.opcoes = normalizadas
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        if kwargs.get("update_fields") is not None:
+            kwargs["update_fields"] = set(kwargs["update_fields"]) | {
+                "nome",
+                "nome_normalizado",
+                "opcoes",
+            }
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.nome
+
+
+class ValorColunaPersonalizada(models.Model):
+    coluna = models.ForeignKey(
+        ColunaPersonalizada,
+        verbose_name="coluna",
+        on_delete=models.PROTECT,
+        related_name="valores",
+    )
+    documento = models.ForeignKey(
+        "documentos.Documento",
+        verbose_name="documento",
+        on_delete=models.CASCADE,
+        related_name="valores_colunas_personalizadas",
+    )
+    emissao = models.ForeignKey(
+        "documentos.Emissao",
+        verbose_name="emissão",
+        on_delete=models.CASCADE,
+        related_name="valores_colunas_personalizadas",
+        null=True,
+        blank=True,
+    )
+    valor = models.CharField("valor", max_length=2000, blank=True, default="")
+    history = HistoricalRecords()
+
+    class Meta:
+        verbose_name = "valor de coluna personalizada"
+        verbose_name_plural = "valores de colunas personalizadas"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("coluna", "documento"),
+                condition=models.Q(emissao__isnull=True),
+                name="valor_col_doc_s_emissao_uq",
+            ),
+            models.UniqueConstraint(
+                fields=("coluna", "documento", "emissao"),
+                condition=models.Q(emissao__isnull=False),
+                name="valor_col_doc_emissao_uq",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        self.valor = str(self.valor or "").strip()
+        if self.coluna_id and self.documento_id:
+            if self.coluna.contrato_id != self.documento.contrato_id:
+                raise ValidationError({"documento": "A coluna e o documento devem pertencer ao mesmo contrato."})
+            if self.coluna.nivel == ColunaPersonalizada.Nivel.DOCUMENTO and self.emissao_id:
+                raise ValidationError({"emissao": "Esta coluna pertence ao documento, sem emissão."})
+            if self.coluna.nivel == ColunaPersonalizada.Nivel.REVISAO:
+                if not self.emissao_id:
+                    raise ValidationError({"emissao": "Selecione a emissão desta coluna."})
+                if self.emissao.documento_id != self.documento_id:
+                    raise ValidationError({"emissao": "A emissão deve pertencer ao documento selecionado."})
+        if self.coluna_id:
+            if self.coluna.tipo == ColunaPersonalizada.Tipo.DATA and self.valor:
+                try:
+                    data = date.fromisoformat(self.valor)
+                except ValueError as erro:
+                    raise ValidationError({"valor": "Informe uma data válida no formato AAAA-MM-DD."}) from erro
+                self.valor = data.isoformat()
+            elif self.coluna.tipo == ColunaPersonalizada.Tipo.LISTA and self.valor:
+                opcoes = self.coluna.opcoes if isinstance(self.coluna.opcoes, list) else []
+                if self.valor not in opcoes:
+                    raise ValidationError({"valor": "Selecione uma das opções da coluna."})
+        if len(self.valor) > self._meta.get_field("valor").max_length:
+            raise ValidationError({"valor": "O valor deve ter no máximo 2000 caracteres."})
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        if kwargs.get("update_fields") is not None:
+            kwargs["update_fields"] = set(kwargs["update_fields"]) | {"valor"}
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.coluna}: {self.valor}"
 
 
 class Documento(models.Model):

@@ -36,7 +36,14 @@
   .pasta-atividade { padding: 12px 13px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
   .pasta-atividade-topo { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 5px 12px; font-size: 12px; }
   .pasta-atividade p { margin: 7px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+  .pasta-campo-contrato { display: grid; grid-template-columns: minmax(140px, .7fr) minmax(220px, 2fr); align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .pasta-campo-contrato small { display: block; margin-top: 3px; color: var(--text-secondary); font-size: 10px; }
+  .pasta-campo-contrato p { margin: 0; }
+  .pasta-campo-forma { display: grid; grid-template-columns: minmax(130px, 1fr) minmax(160px, 1fr) auto; gap: 8px; }
+  .pasta-campo-forma input, .pasta-campo-forma select { min-width: 0; width: 100%; }
+  .pasta-campos-emissao { margin-top: 13px; padding: 12px; border-radius: 8px; background: var(--surface-raised); }
   @media (max-width: 767px) { .pasta-cabecalho { grid-template-columns: 1fr; } .pasta-cabecalho .button { justify-self: start; } .pasta-emissao { padding: 13px; } }
+  @media (max-width: 767px) { .pasta-campo-contrato { grid-template-columns: 1fr; } .pasta-campo-forma { grid-template-columns: 1fr; } }
 </style>
 {% endblock %}
 {% block content %}
@@ -75,6 +82,27 @@
   </div>
 </section>
 
+<section class="panel" aria-labelledby="campos-contrato-titulo">
+  <div class="panel-heading"><div><h2 id="campos-contrato-titulo">Campos do contrato</h2><p>Valores adicionais definidos para este contrato, preservados no histórico do documento.</p></div></div>
+  {% if campos_contrato_documento %}
+    {% for campo in campos_contrato_documento %}
+    <div class="pasta-campo-contrato">
+      <div><strong>{{ campo.coluna.nome }}</strong><small>{{ campo.coluna.get_tipo_display }}</small></div>
+      {% if pode_editar_campos_contrato %}
+      <form method="post" class="pasta-campo-forma">
+        {% csrf_token %}<input type="hidden" name="acao" value="valor_coluna_personalizada"><input type="hidden" name="coluna_id" value="{{ campo.coluna.pk }}">
+        {% if campo.coluna.tipo == "data" %}<input aria-label="{{ campo.coluna.nome }}" name="valor" type="date" value="{{ campo.valor }}">
+        {% elif campo.coluna.tipo == "lista" %}<select aria-label="{{ campo.coluna.nome }}" name="valor"><option value="">—</option>{% for opcao in campo.coluna.opcoes %}<option value="{{ opcao }}" {% if campo.valor == opcao %}selected{% endif %}>{{ opcao }}</option>{% endfor %}</select>
+        {% else %}<input aria-label="{{ campo.coluna.nome }}" name="valor" type="text" maxlength="2000" value="{{ campo.valor }}">{% endif %}
+        <input name="motivo" type="text" maxlength="100" placeholder="Motivo (obrigatório)" aria-label="Motivo da alteração de {{ campo.coluna.nome }}" required>
+        <button class="button button-primary" type="submit">Salvar</button>
+      </form>
+      {% else %}<p>{{ campo.valor|default:"—" }}</p>{% endif %}
+    </div>
+    {% endfor %}
+  {% else %}<p class="painel-sem-dados">Este contrato não tem campos personalizados no nível do documento.</p>{% endif %}
+</section>
+
 <section class="panel" aria-labelledby="linha-do-tempo-titulo">
   <div class="panel-heading"><div><h2 id="linha-do-tempo-titulo">Linha do tempo das emissões</h2><p>Uma sequência contínua de emissões e análises; uma reabertura continua a mesma pasta.</p></div></div>
   {% if linha_tempo %}
@@ -83,6 +111,25 @@
     <li class="pasta-emissao">
       <div class="pasta-emissao-topo"><div><h3>{{ item.rotulo }}</h3><p class="pasta-emissao-meta">Rev {{ item.emissao.revisao }}{% if item.emissao.versao != None %} · Ver {{ item.emissao.versao }}{% endif %} · {{ item.emissao.get_fase_display }}</p></div><strong>{{ item.emissao.data_emissao|date:"d/m/Y" }}</strong></div>
       {% if item.grds or item.emissao.grd_anterior %}<p class="pasta-emissao-meta">{% if item.grds %}<span>GRD do sistema: {% for grd in item.grds %}{% if not forloop.first %} · {% endif %}<a href="{% url 'grds:detalhe' contrato.pk grd.pk %}">{{ grd.rotulo }}</a>{% endfor %}</span>{% endif %}{% if item.emissao.grd_anterior %}{% if item.grds %}<br>{% endif %}<span>GRD: {{ item.emissao.grd_anterior }} <small class="pasta-grd-anterior">anterior ao sistema</small></span>{% endif %}</p>{% endif %}
+      {% if item.campos_contrato %}
+      <div class="pasta-campos-emissao"><strong>Campos do contrato nesta revisão</strong>
+        {% for campo in item.campos_contrato %}
+        <div class="pasta-campo-contrato">
+          <div><strong>{{ campo.coluna.nome }}</strong><small>{{ campo.coluna.get_tipo_display }}</small></div>
+          {% if pode_editar_campos_contrato %}
+          <form method="post" class="pasta-campo-forma">
+            {% csrf_token %}<input type="hidden" name="acao" value="valor_coluna_personalizada"><input type="hidden" name="coluna_id" value="{{ campo.coluna.pk }}"><input type="hidden" name="emissao_id" value="{{ item.emissao.pk }}">
+            {% if campo.coluna.tipo == "data" %}<input aria-label="{{ campo.coluna.nome }}" name="valor" type="date" value="{{ campo.valor }}">
+            {% elif campo.coluna.tipo == "lista" %}<select aria-label="{{ campo.coluna.nome }}" name="valor"><option value="">—</option>{% for opcao in campo.coluna.opcoes %}<option value="{{ opcao }}" {% if campo.valor == opcao %}selected{% endif %}>{{ opcao }}</option>{% endfor %}</select>
+            {% else %}<input aria-label="{{ campo.coluna.nome }}" name="valor" type="text" maxlength="2000" value="{{ campo.valor }}">{% endif %}
+            <input name="motivo" type="text" maxlength="100" placeholder="Motivo (obrigatório)" aria-label="Motivo da alteração de {{ campo.coluna.nome }}" required>
+            <button class="button button-primary" type="submit">Salvar</button>
+          </form>
+          {% else %}<p>{{ campo.valor|default:"—" }}</p>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
       {% if item.serie %}
       <div class="pasta-motivo-reabertura">
         <p><strong>Motivo da reabertura {{ item.serie }}:</strong> {{ item.motivo_rotulo }}{% if item.motivo_obs %} · {{ item.motivo_obs }}{% endif %}</p>

@@ -1,6 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import QueryDict
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -8,7 +8,11 @@ from django.views import View
 
 from acoes.views import _contrato_da_requisicao
 
-from .forms import ColunasListaMestraForm
+from .forms import (
+    ColunaPersonalizadaForm,
+    ColunasListaMestraForm,
+    PreencherLoteColunaForm,
+)
 from .servicos import (
     DocumentosIndisponiveis,
     atualizar_motivo_reabertura,
@@ -16,14 +20,21 @@ from .servicos import (
     carregar_confirmacao_cancelamento,
     carregar_confirmacao_reativacao,
     carregar_editor_colunas_lista_mestra,
+    carregar_coluna_personalizada_lote,
     carregar_edicao_titulo,
     carregar_lista_documentos,
     carregar_lista_mestra,
     carregar_painel_documento,
     carregar_pasta_documento,
     editar_titulo_documento,
+    criar_coluna_personalizada,
+    desativar_coluna_personalizada,
+    editar_coluna_personalizada,
+    aplicar_preenchimento_lote_coluna,
+    prever_preenchimento_lote_coluna,
     reativar_documentos,
     salvar_colunas_lista_mestra,
+    salvar_valor_coluna_personalizada,
     voltar_colunas_lista_mestra_ao_padrao,
 )
 
@@ -96,6 +107,7 @@ class ColunasListaMestraView(LoginRequiredMixin, View):
             return redirect("contratos_escolher")
         contexto = carregar_editor_colunas_lista_mestra(request.user, contrato_id)
         contexto["form"] = self._formulario(contexto)
+        self._preparar_formularios_personalizados(contexto)
         contexto["url_lista"] = _url_lista_mestra(contexto["contrato"].pk)
         return render(request, self.template_name, contexto)
 
@@ -104,7 +116,69 @@ class ColunasListaMestraView(LoginRequiredMixin, View):
         if contrato_id is None:
             return redirect("contratos_escolher")
         contexto = carregar_editor_colunas_lista_mestra(request.user, contrato_id)
-        if request.POST.get("acao") == "padrao":
+        acao = request.POST.get("acao")
+        if acao == "criar_coluna":
+            form_coluna = ColunaPersonalizadaForm(data=request.POST)
+            if form_coluna.is_valid():
+                try:
+                    criar_coluna_personalizada(
+                        request.user,
+                        contrato_id,
+                        **form_coluna.cleaned_data,
+                    )
+                except (ValueError, ValidationError) as erro:
+                    form_coluna.add_error(None, str(erro))
+                else:
+                    messages.success(request, "Coluna do contrato criada.")
+                    return redirect(_url_colunas_lista_mestra(contexto["contrato"].pk))
+            contexto["form"] = self._formulario(contexto)
+            self._preparar_formularios_personalizados(contexto, form_criacao=form_coluna)
+            contexto["url_lista"] = _url_lista_mestra(contexto["contrato"].pk)
+            return render(request, self.template_name, contexto, status=400)
+
+        if acao == "editar_coluna":
+            coluna = next(
+                (
+                    item
+                    for item in contexto["colunas_personalizadas"]
+                    if item.pk == _int_ou_none(request.POST.get("coluna_id")) and item.ativa
+                ),
+                None,
+            )
+            if coluna is None:
+                raise PermissionDenied("A coluna selecionada não está disponível.")
+            form_edicao = ColunaPersonalizadaForm(instance=coluna, data=request.POST)
+            if form_edicao.is_valid():
+                try:
+                    editar_coluna_personalizada(
+                        request.user,
+                        contrato_id,
+                        coluna.pk,
+                        **form_edicao.cleaned_data,
+                    )
+                except (ValueError, ValidationError) as erro:
+                    form_edicao.add_error(None, str(erro))
+                else:
+                    messages.success(request, "Coluna do contrato atualizada.")
+                    return redirect(_url_colunas_lista_mestra(contexto["contrato"].pk))
+            contexto["form"] = self._formulario(contexto)
+            self._preparar_formularios_personalizados(
+                contexto,
+                formularios_edicao={coluna.pk: form_edicao},
+            )
+            contexto["url_lista"] = _url_lista_mestra(contexto["contrato"].pk)
+            return render(request, self.template_name, contexto, status=400)
+
+        if acao == "desativar_coluna":
+            desativar_coluna_personalizada(
+                request.user,
+                contrato_id,
+                request.POST.get("coluna_id"),
+            )
+            messages.success(request, "Coluna desativada. Os valores foram preservados.")
+            return redirect(_url_colunas_lista_mestra(contexto["contrato"].pk))
+
+        if acao == "padrao":
             voltar_colunas_lista_mestra_ao_padrao(request.user, contrato_id)
             messages.success(request, "As colunas voltaram ao padrão da Lista Mestra.")
             return redirect(_url_lista_mestra(contexto["contrato"].pk))
@@ -128,8 +202,24 @@ class ColunasListaMestraView(LoginRequiredMixin, View):
             return redirect(_url_lista_mestra(contexto["contrato"].pk))
 
         contexto["form"] = form
+        self._preparar_formularios_personalizados(contexto)
         contexto["url_lista"] = _url_lista_mestra(contexto["contrato"].pk)
         return render(request, self.template_name, contexto, status=400)
+
+    @staticmethod
+    def _preparar_formularios_personalizados(
+        contexto,
+        *,
+        form_criacao=None,
+        formularios_edicao=None,
+    ):
+        contexto["form_coluna_personalizada"] = form_criacao or ColunaPersonalizadaForm()
+        formularios_edicao = formularios_edicao or {}
+        for coluna in contexto["colunas_personalizadas"]:
+            coluna.form_edicao = formularios_edicao.get(
+                coluna.pk,
+                ColunaPersonalizadaForm(instance=coluna) if coluna.ativa else None,
+            )
 
     @staticmethod
     def _formulario(contexto, data=None):
@@ -142,6 +232,67 @@ class ColunasListaMestraView(LoginRequiredMixin, View):
             data=data,
         )
 
+
+class PreencherLoteColunaView(LoginRequiredMixin, View):
+    template_name = "documentos/preencher_lote_coluna.html"
+
+    def get(self, request, coluna_id):
+        contrato_id = _contrato_da_requisicao(request)
+        if contrato_id is None:
+            return redirect("contratos_escolher")
+        contexto = carregar_coluna_personalizada_lote(request.user, contrato_id, coluna_id)
+        contexto["form"] = PreencherLoteColunaForm(coluna=contexto["coluna"])
+        contexto["url_colunas"] = _url_colunas_lista_mestra(contexto["contrato"].pk)
+        return render(request, self.template_name, contexto)
+
+    def post(self, request, coluna_id):
+        contrato_id = _contrato_da_requisicao(request, incluir_post=True)
+        if contrato_id is None:
+            return redirect("contratos_escolher")
+        contexto = carregar_coluna_personalizada_lote(request.user, contrato_id, coluna_id)
+        form = PreencherLoteColunaForm(coluna=contexto["coluna"], data=request.POST)
+        previa = None
+        erro = ""
+        if form.is_valid():
+            dados = form.cleaned_data
+            try:
+                if request.POST.get("acao") == "aplicar":
+                    resultado = aplicar_preenchimento_lote_coluna(
+                        request.user,
+                        contrato_id,
+                        coluna_id,
+                        codigos=dados["codigos"],
+                        valor=dados["valor"],
+                        motivo=dados["motivo"],
+                        substituir=dados["substituir"],
+                        revisao=dados.get("revisao", ""),
+                    )
+                    messages.success(
+                        request,
+                        f'{resultado["aplicados"]} valor(es) atualizado(s); '
+                        f'{resultado["sem_alteracao"]} sem alteração; '
+                        f'{resultado["conflitos_ignorados"]} conflito(s) preservado(s).',
+                    )
+                    return redirect(_url_coluna_lote(contexto["contrato"].pk, coluna_id))
+                previa = prever_preenchimento_lote_coluna(
+                    request.user,
+                    contrato_id,
+                    coluna_id,
+                    codigos=dados["codigos"],
+                    valor=dados["valor"],
+                    revisao=dados.get("revisao", ""),
+                )
+            except (ValueError, ValidationError) as excecao:
+                erro = str(excecao)
+        contexto.update(
+            {
+                "form": form,
+                "previa": previa,
+                "erro": erro,
+                "url_colunas": _url_colunas_lista_mestra(contexto["contrato"].pk),
+            }
+        )
+        return render(request, self.template_name, contexto, status=400 if erro or not form.is_valid() else 200)
 
 class CancelarDocumentosView(LoginRequiredMixin, View):
     template_name = "documentos/lista.html"
@@ -288,6 +439,28 @@ class DocumentoPastaView(LoginRequiredMixin, View):
         return render(request, self.template_name, contexto)
 
     def post(self, request, contrato_id, documento_id):
+        if request.POST.get("acao") == "valor_coluna_personalizada":
+            try:
+                _, mudou = salvar_valor_coluna_personalizada(
+                    request.user,
+                    contrato_id,
+                    documento_id,
+                    request.POST.get("coluna_id"),
+                    valor=request.POST.get("valor", ""),
+                    motivo=request.POST.get("motivo", ""),
+                    emissao_id=request.POST.get("emissao_id") or None,
+                )
+            except PermissionDenied:
+                raise
+            except (TypeError, ValueError, ValidationError) as erro:
+                messages.error(request, str(erro))
+            else:
+                if mudou:
+                    messages.success(request, "Campo do contrato atualizado.")
+                else:
+                    messages.info(request, "O campo já tinha esse valor; nenhuma alteração foi registrada.")
+            return redirect("documento_pasta", contrato_id=contrato_id, documento_id=documento_id)
+
         try:
             atualizar_motivo_reabertura(
                 request.user,
@@ -359,3 +532,18 @@ def _url_lista(contrato_id, consulta):
 
 def _url_lista_mestra(contrato_id):
     return f"{reverse('lista_mestra')}?contrato={contrato_id}"
+
+
+def _url_colunas_lista_mestra(contrato_id):
+    return f"{reverse('lista_mestra_colunas')}?contrato={contrato_id}"
+
+
+def _url_coluna_lote(contrato_id, coluna_id):
+    return f"{reverse('lista_mestra_coluna_lote', args=(coluna_id,))}?contrato={contrato_id}"
+
+
+def _int_ou_none(valor):
+    try:
+        return int(valor)
+    except (TypeError, ValueError):
+        return None

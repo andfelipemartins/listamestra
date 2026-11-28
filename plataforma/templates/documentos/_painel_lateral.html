@@ -63,6 +63,12 @@
           <dt>Situação</dt>
           <dd>{{ situacao_rotulo }}{% if situacao %} · {{ situacao }}{% endif %}</dd>
         </div>
+        {% for campo in campos_contrato_painel %}
+        <div class="documento-painel-dado">
+          <dt>{{ campo.nome }}{% if campo.emissao %} · {{ campo.emissao }}{% endif %}</dt>
+          <dd>{{ campo.valor|default:"—" }}</dd>
+        </div>
+        {% endfor %}
       </dl>
       <a class="button button-primary documento-painel-link" href="{% url 'documento_pasta' contrato.pk documento.pk %}">Abrir pasta completa</a>
     </section>

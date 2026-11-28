@@ -36,6 +36,43 @@
     </div>
   </form>
 </section>
+<section class="panel" aria-labelledby="colunas-personalizadas-titulo">
+  <div class="panel-heading"><div><h2 id="colunas-personalizadas-titulo">Colunas do contrato</h2><p>Crie campos específicos deste contrato. Colunas desativadas deixam de aparecer na Lista Mestra e mantêm os valores registrados.</p></div></div>
+  {% for coluna in colunas_personalizadas %}
+  <article class="coluna-personalizada-item">
+    <div class="panel-heading"><div><h3>{{ coluna.nome }}{% if not coluna.ativa %} <small>(desativada)</small>{% endif %}</h3><p>{{ coluna.get_tipo_display }} · {{ coluna.get_nivel_display }}</p></div>
+      {% if coluna.ativa %}<a class="button button-quiet" href="{% url 'lista_mestra_coluna_lote' coluna.pk %}?contrato={{ contrato.pk }}">Preencher em lote</a>{% endif %}
+    </div>
+    {% if coluna.ativa %}
+    <form method="post" class="coluna-personalizada-edicao">
+      {% csrf_token %}<input type="hidden" name="contrato" value="{{ contrato.pk }}"><input type="hidden" name="coluna_id" value="{{ coluna.pk }}">
+      <input type="hidden" name="acao" value="editar_coluna">
+      <label>Nome {{ coluna.form_edicao.nome }}</label>
+      {% if coluna.form_edicao.opcoes %}<label>Opções, uma por linha {{ coluna.form_edicao.opcoes }}</label>{% endif %}
+      {% if coluna.form_edicao.non_field_errors %}<div class="notice notice-error">{{ coluna.form_edicao.non_field_errors }}</div>{% endif %}
+      {% if coluna.form_edicao.nome.errors %}<div class="notice notice-error">{{ coluna.form_edicao.nome.errors }}</div>{% endif %}
+      {% if coluna.form_edicao.opcoes.errors %}<div class="notice notice-error">{{ coluna.form_edicao.opcoes.errors }}</div>{% endif %}
+      <div class="painel-filtros-acoes"><button class="button button-primary" type="submit">Salvar coluna</button></div>
+    </form>
+    <form method="post" class="coluna-personalizada-desativar" onsubmit="return confirm('Desativar esta coluna? Os valores serão preservados.');">
+      {% csrf_token %}<input type="hidden" name="contrato" value="{{ contrato.pk }}"><input type="hidden" name="coluna_id" value="{{ coluna.pk }}"><input type="hidden" name="acao" value="desativar_coluna">
+      <button class="button button-quiet" type="submit">Desativar coluna</button>
+    </form>
+    {% endif %}
+  </article>
+  {% empty %}<p class="painel-sem-dados">Este contrato ainda não tem colunas personalizadas.</p>{% endfor %}
+
+  <h3>Criar coluna</h3>
+  {% if form_coluna_personalizada.errors %}<div class="notice notice-error">{{ form_coluna_personalizada.non_field_errors }}{% for field in form_coluna_personalizada %}{% if field.errors %}<p>{{ field.label }}: {{ field.errors }}</p>{% endif %}{% endfor %}</div>{% endif %}
+  <form method="post" class="coluna-personalizada-criacao">
+    {% csrf_token %}<input type="hidden" name="contrato" value="{{ contrato.pk }}"><input type="hidden" name="acao" value="criar_coluna">
+    <label>Nome {{ form_coluna_personalizada.nome }}</label>
+    <label>Tipo {{ form_coluna_personalizada.tipo }}</label>
+    <label>Nível {{ form_coluna_personalizada.nivel }}</label>
+    <label>Opções, uma por linha {{ form_coluna_personalizada.opcoes }}</label>
+    <div class="painel-filtros-acoes"><button class="button button-primary" type="submit">Criar coluna</button></div>
+  </form>
+</section>
 <style>
   .lista-colunas-configuracao { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
   .lista-coluna-configuracao { display: flex; align-items: center; gap: 12px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
@@ -43,6 +80,13 @@
   .lista-coluna-controles button { min-width: 36px; padding: 6px; }
   .lista-coluna-rotulos { display: flex; flex: 1; align-items: center; gap: 10px; }
   .lista-coluna-rotulos small { color: var(--text-secondary); }
+  .coluna-personalizada-item { padding: 14px 0; border-bottom: 1px solid var(--border); }
+  .coluna-personalizada-item h3 { margin: 0; }
+  .coluna-personalizada-item p { margin: 5px 0 0; color: var(--text-secondary); font-size: 12px; }
+  .coluna-personalizada-edicao, .coluna-personalizada-criacao { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+  .coluna-personalizada-edicao label, .coluna-personalizada-criacao label { display: grid; gap: 5px; }
+  .coluna-personalizada-edicao .painel-filtros-acoes, .coluna-personalizada-criacao .painel-filtros-acoes { grid-column: 1 / -1; }
+  .coluna-personalizada-desativar { margin-top: 8px; }
 </style>
 <script>
   (() => {

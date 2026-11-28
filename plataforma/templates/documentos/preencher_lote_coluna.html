@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Preencher em lote · {{ coluna.nome }}{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <div><span class="eyebrow">{{ contrato.codigo_interno }} · LISTA MESTRA</span><h1>Preencher em lote</h1><p>{{ coluna.nome }} · {{ coluna.get_tipo_display }} · {{ coluna.get_nivel_display }}</p></div>
+  <a class="button button-quiet" href="{{ url_colunas }}">Voltar às colunas</a>
+</section>
+<section class="panel">
+  <div class="panel-heading"><div><h2>Códigos e valor</h2><p>Cole um código por linha. Códigos repetidos são consolidados na prévia.</p></div></div>
+  {% if erro %}<div class="notice notice-error">{{ erro }}</div>{% endif %}
+  {% if form.errors %}<div class="notice notice-error">Revise os campos do lote antes de continuar.</div>{% endif %}
+  <form method="post" class="painel-filtros-grade">
+    {% csrf_token %}<input type="hidden" name="contrato" value="{{ contrato.pk }}">
+    <label class="painel-filtro">{{ form.codigos.label }} {{ form.codigos }}{% if form.codigos.errors %}{{ form.codigos.errors }}{% endif %}</label>
+    {% if form.revisao %}<label class="painel-filtro">{{ form.revisao.label }} {{ form.revisao }}{% if form.revisao.errors %}{{ form.revisao.errors }}{% endif %}</label>{% endif %}
+    <label class="painel-filtro">{{ form.valor.label }} {{ form.valor }}{% if form.valor.errors %}{{ form.valor.errors }}{% endif %}</label>
+    <label class="painel-filtro">{{ form.motivo.label }} {{ form.motivo }}{% if form.motivo.errors %}{{ form.motivo.errors }}{% endif %}</label>
+    <label class="lista-mestra-cancelados">{{ form.substituir }} Substituir valores diferentes{% if form.substituir.errors %}{{ form.substituir.errors }}{% endif %}</label>
+    <div class="painel-filtros-acoes"><button class="button button-primary" type="submit" name="acao" value="prever">Prévia</button>{% if previa %}<button class="button button-primary" type="submit" name="acao" value="aplicar">Aplicar lote</button>{% endif %}</div>
+  </form>
+</section>
+{% if previa %}
+<section class="panel" aria-labelledby="previa-lote-titulo">
+  <div class="panel-heading"><div><h2 id="previa-lote-titulo">Prévia do lote</h2><p>{{ previa.codigos_normalizados|length }} código(s) únicos · valor proposto: {{ previa.valor_normalizado|default:"—" }}</p></div></div>
+  <h3>Aceitos ({{ previa.aceitos|length }})</h3>
+  <ul>{% for item in previa.aceitos %}<li>{{ item.codigo }}{% if item.emissao %} · Rev. {{ item.emissao.revisao }}{% endif %}{% if item.valor_atual %} · já contém esse valor{% endif %}</li>{% empty %}<li>Nenhum código aceito.</li>{% endfor %}</ul>
+  <h3>Conflitos ({{ previa.conflitos|length }})</h3>
+  <ul>{% for item in previa.conflitos %}<li>{{ item.codigo }} · valor atual: {{ item.valor_atual }}{% if form.cleaned_data.substituir %} · será substituído{% else %} · será preservado{% endif %}</li>{% empty %}<li>Nenhum conflito.</li>{% endfor %}</ul>
+  <h3>Não encontrados ({{ previa.inexistentes|length }})</h3>
+  <ul>{% for item in previa.inexistentes %}<li>{{ item.codigo }}</li>{% empty %}<li>Nenhum.</li>{% endfor %}</ul>
+  {% if previa.sem_emissao %}<h3>Sem emissão correspondente ({{ previa.sem_emissao|length }})</h3><ul>{% for item in previa.sem_emissao %}<li>{{ item.codigo }}</li>{% endfor %}</ul>{% endif %}
+  {% if previa.ambiguos %}<h3>Ambíguos ({{ previa.ambiguos|length }})</h3><ul>{% for item in previa.ambiguos %}<li>{{ item.codigo }}</li>{% endfor %}</ul>{% endif %}
+</section>
+{% endif %}
+{% endblock %}

@@ -45,7 +45,7 @@
   <div class="panel"><h2>Nenhum contrato disponível</h2><p class="painel-sem-dados">Você ainda não participa de um contrato ativo.</p></div>
 {% else %}
   <section class="panel" aria-labelledby="lista-mestra-filtros-titulo">
-    <div class="panel-heading"><div><h2 id="lista-mestra-filtros-titulo">{{ contrato.codigo_interno }} · {{ contrato.nome }}</h2><p>Busque pelo código{% if buscar_titulo %} ou título{% endif %} e filtre as emissões. Os filtros ficam na URL.</p></div></div>
+    <div class="panel-heading"><div><h2 id="lista-mestra-filtros-titulo">{{ contrato.codigo_interno }} · {{ contrato.nome }}</h2><p>Busque pelo código{% if buscar_titulo %}, título{% endif %}{% if buscar_campos_contrato %} ou valor dos campos do contrato{% endif %} e filtre as emissões. Os filtros ficam na URL.</p></div></div>
     <form class="lista-mestra-filtros" method="get">
       {% if contratos|length > 1 %}
       <div class="lista-mestra-filtros-grade">
@@ -124,7 +124,7 @@
               {% else %}
                 <td{% if celula.coluna.tipo == "segmento" or celula.coluna.chave == "revisao" or celula.coluna.chave == "versao" or celula.coluna.chave == "fase" or celula.coluna.chave == "data_emissao" or celula.coluna.chave == "rotulo_cronologico" or celula.coluna.chave == "grd" or celula.coluna.chave == "data_analise" %} class="lista-mestra-coluna-curta"{% elif celula.coluna.chave == "titulo" %} class="lista-mestra-celula-truncada lista-mestra-titulo"{% elif celula.coluna.chave == "elaboracao" or celula.coluna.chave == "disciplina" or celula.coluna.chave == "documento_retorno" or celula.coluna.chave == "observacao" %} class="lista-mestra-celula-truncada lista-mestra-texto-longo"{% endif %}{% if celula.titulo %} title="{{ celula.titulo }}"{% endif %}>
                   {% if celula.coluna.tipo == "segmento" %}{{ celula.valor|default:"—" }}
-                  {% elif celula.coluna.chave == "data_emissao" or celula.coluna.chave == "data_analise" %}{% if celula.valor %}{{ celula.valor|date:"d/m/Y" }}{% else %}—{% endif %}
+                  {% elif celula.coluna.chave == "data_emissao" or celula.coluna.chave == "data_analise" or celula.coluna.formato == "data" %}{% if celula.valor %}{{ celula.valor|date:"d/m/Y" }}{% else %}—{% endif %}
                   {% elif celula.coluna.chave == "grd" %}{% if celula.valor %}{% for grd in celula.valor %}{% if not forloop.first %}<br>{% endif %}<span title="{{ grd.rotulo }}">{{ grd.rotulo }}</span>{% endfor %}{% elif linha.emissao.grd_anterior %}<span title="GRD anterior ao sistema: {{ linha.emissao.grd_anterior }}">{{ linha.emissao.grd_anterior }} <small>(ant.)</small></span>{% else %}—{% endif %}
                   {% elif celula.coluna.chave == "versao" %}{{ celula.valor|default_if_none:"—" }}
                   {% else %}{{ celula.valor|default:"—" }}{% endif %}

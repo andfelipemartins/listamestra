@@ -5,7 +5,7 @@ from uuid import uuid4
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Exists, F, OuterRef, Prefetch
+from django.db.models import Exists, F, OuterRef, Prefetch, Q
 from django.http import Http404
 from django.urls import reverse
 from django.utils import timezone
@@ -29,9 +29,11 @@ from registro.servicos import carregar_eventos
 from .models import (
     Analise,
     CodigoDocumento,
+    ColunaPersonalizada,
     Documento,
     Emissao,
     ListaMestraConfiguracao,
+    ValorColunaPersonalizada,
 )
 from importacoes.models import ItemPrevisto, PrevisaoEmissao
 
@@ -112,6 +114,7 @@ def carregar_lista_mestra(
             "exibir_filtro_fase": False,
             "exibir_filtro_situacao": False,
             "buscar_titulo": False,
+            "buscar_campos_contrato": False,
             "pode_configurar_colunas": False,
         }
 
@@ -121,7 +124,14 @@ def carregar_lista_mestra(
     )
 
     perfil_modelo, perfil = _perfil_vigente(contrato)
-    catalogo = catalogo_colunas_lista_mestra(perfil)
+    colunas_personalizadas = list(
+        ColunaPersonalizada.objects.filter(contrato=contrato, ativa=True)
+    )
+    catalogo = catalogo_colunas_lista_mestra(
+        perfil,
+        contrato,
+        colunas_personalizadas=colunas_personalizadas,
+    )
     configuracao_colunas = getattr(contrato, "configuracao_lista_mestra", None)
     colunas_configuradas, chaves_visiveis = _colunas_visiveis_lista_mestra(
         catalogo, configuracao_colunas
@@ -172,6 +182,14 @@ def carregar_lista_mestra(
         incluir_analises=precisa_analises,
         incluir_elaboracao="elaboracao" in chaves_ativas,
     )
+    valores_personalizados = {
+        (valor.coluna_id, valor.documento_id, valor.emissao_id): valor.valor
+        for valor in (
+            ValorColunaPersonalizada.objects.filter(coluna__in=colunas_personalizadas)
+            if colunas_personalizadas
+            else ()
+        )
+    }
     linhas = []
     ultima_emissao_por_documento = {}
     for documento in documentos:
@@ -208,6 +226,17 @@ def carregar_lista_mestra(
         )
         for emissao, rotulo in pares_emissao_rotulo:
             analise = next(iter(emissao.analises.all()), None) if precisa_analises else None
+            campos_contrato = {
+                coluna.pk: valores_personalizados.get(
+                    (
+                        coluna.pk,
+                        documento.pk,
+                        emissao.pk if coluna.nivel == ColunaPersonalizada.Nivel.REVISAO else None,
+                    ),
+                    "",
+                )
+                for coluna in colunas_personalizadas
+            }
             tipo_documental = (
                 (valores.get("tipo") or documento.tipo or "")
                 if filtro_tipo_visivel
@@ -254,6 +283,7 @@ def carregar_lista_mestra(
                         if "observacao" in chaves_ativas
                         else ""
                     ),
+                    "campos_contrato": campos_contrato,
                 }
             )
 
@@ -334,6 +364,10 @@ def carregar_lista_mestra(
                 busca_titulo_visivel
                 and termo in (linha["documento"].titulo or "").casefold()
             )
+            or any(
+                termo in str(valor).casefold()
+                for valor in linha["campos_contrato"].values()
+            )
         )
         and (not tipo_selecionado or linha["tipo"] == tipo_selecionado)
         and (not disciplina_selecionada or linha["disciplina"] == disciplina_selecionada)
@@ -373,11 +407,17 @@ def carregar_lista_mestra(
         "exibir_filtro_fase": filtro_fase_visivel,
         "exibir_filtro_situacao": filtro_situacao_visivel,
         "buscar_titulo": busca_titulo_visivel,
+        "buscar_campos_contrato": bool(colunas_personalizadas),
         "pode_configurar_colunas": pode_configurar_colunas,
     }
 
 
-def catalogo_colunas_lista_mestra(perfil):
+def catalogo_colunas_lista_mestra(
+    perfil,
+    contrato=None,
+    *,
+    colunas_personalizadas=None,
+):
     catalogo = [
         {
             "chave": "codigo",
@@ -423,6 +463,25 @@ def catalogo_colunas_lista_mestra(perfil):
             },
         )
     )
+    if colunas_personalizadas is None and contrato is not None:
+        colunas_personalizadas = ColunaPersonalizada.objects.filter(
+            contrato=contrato,
+            ativa=True,
+        )
+    if colunas_personalizadas:
+        catalogo.extend(
+            {
+                "chave": f"personalizada:{coluna.pk}",
+                "rotulo": coluna.nome,
+                "origem": "Campos do contrato",
+                "obrigatoria": False,
+                "tipo": "personalizada",
+                "formato": coluna.tipo,
+                "nivel": coluna.nivel,
+                "personalizada_id": coluna.pk,
+            }
+            for coluna in colunas_personalizadas
+        )
     return catalogo
 
 
@@ -476,7 +535,14 @@ def carregar_editor_colunas_lista_mestra(usuario, contrato_id):
             "Somente staff ou o administrador do contrato pode configurar as colunas."
         )
     _, perfil = _perfil_vigente(contrato)
-    catalogo = catalogo_colunas_lista_mestra(perfil)
+    colunas_personalizadas = list(
+        ColunaPersonalizada.objects.filter(contrato=contrato)
+    )
+    catalogo = catalogo_colunas_lista_mestra(
+        perfil,
+        contrato,
+        colunas_personalizadas=[coluna for coluna in colunas_personalizadas if coluna.ativa],
+    )
     configuracao = ListaMestraConfiguracao.objects.filter(contrato=contrato).first()
     _, chaves_visiveis = _colunas_visiveis_lista_mestra(catalogo, configuracao)
     chaves_catalogo = [coluna["chave"] for coluna in catalogo]
@@ -490,6 +556,7 @@ def carregar_editor_colunas_lista_mestra(usuario, contrato_id):
     return {
         "contrato": contrato,
         "catalogo": catalogo,
+        "colunas_personalizadas": colunas_personalizadas,
         "colunas_editor": [por_chave[chave] for chave in ordem_editor],
         "chaves_visiveis": chaves_visiveis,
         "ordem_editor": ordem_editor,
@@ -532,6 +599,324 @@ def voltar_colunas_lista_mestra_ao_padrao(usuario, contrato_id):
     ListaMestraConfiguracao.objects.filter(contrato=contexto["contrato"]).delete()
 
 
+def criar_coluna_personalizada(usuario, contrato_id, *, nome, tipo, nivel, opcoes=None):
+    contrato = _contrato_administravel(usuario, contrato_id)
+    coluna = ColunaPersonalizada(
+        contrato=contrato,
+        nome=nome,
+        tipo=tipo,
+        nivel=nivel,
+        opcoes=opcoes or [],
+    )
+    coluna.full_clean()
+    coluna.save()
+    return coluna
+
+
+def editar_coluna_personalizada(usuario, contrato_id, coluna_id, *, nome, opcoes=None):
+    contrato = _contrato_administravel(usuario, contrato_id)
+    coluna = ColunaPersonalizada.objects.filter(
+        contrato=contrato,
+        pk=coluna_id,
+        ativa=True,
+    ).first()
+    if coluna is None:
+        raise Http404
+    opcoes = opcoes or []
+    if coluna.tipo == ColunaPersonalizada.Tipo.LISTA:
+        valores_utilizados = set(
+            ValorColunaPersonalizada.objects.filter(coluna=coluna)
+            .exclude(valor="")
+            .values_list("valor", flat=True)
+        )
+        removidas = valores_utilizados - set(opcoes)
+        if removidas:
+            raise ValueError(
+                "Não remova opções que já estão em uso: "
+                + ", ".join(sorted(removidas, key=str.casefold))
+                + "."
+            )
+    coluna.nome = nome
+    coluna.opcoes = opcoes
+    coluna.full_clean()
+    coluna.save(update_fields=("nome", "opcoes"))
+    return coluna
+
+
+def desativar_coluna_personalizada(usuario, contrato_id, coluna_id):
+    contrato = _contrato_administravel(usuario, contrato_id)
+    coluna = ColunaPersonalizada.objects.filter(
+        contrato=contrato,
+        pk=coluna_id,
+        ativa=True,
+    ).first()
+    if coluna is None:
+        raise Http404
+    coluna.ativa = False
+    coluna._history_user = usuario
+    coluna._change_reason = "Coluna desativada pelo administrador do contrato."
+    coluna.save(update_fields=("ativa",))
+    return coluna
+
+
+def carregar_coluna_personalizada_lote(usuario, contrato_id, coluna_id):
+    contrato = _contrato_administravel(usuario, contrato_id)
+    coluna = ColunaPersonalizada.objects.filter(
+        contrato=contrato,
+        pk=coluna_id,
+        ativa=True,
+    ).first()
+    if coluna is None:
+        raise Http404
+    return {"contrato": contrato, "coluna": coluna}
+
+
+def salvar_valor_coluna_personalizada(
+    usuario,
+    contrato_id,
+    documento_id,
+    coluna_id,
+    *,
+    valor,
+    motivo,
+    emissao_id=None,
+):
+    with transaction.atomic():
+        contrato = _contrato_administravel(usuario, contrato_id)
+        coluna = ColunaPersonalizada.objects.filter(
+            contrato=contrato,
+            pk=coluna_id,
+            ativa=True,
+        ).first()
+        if coluna is None:
+            raise Http404
+        documento = Documento.objects.filter(contrato=contrato, pk=documento_id).first()
+        if documento is None:
+            raise Http404
+        emissao = None
+        if emissao_id not in (None, ""):
+            emissao = Emissao.objects.filter(documento=documento, pk=emissao_id).first()
+            if emissao is None:
+                raise ValueError("A emissão selecionada não pertence ao documento.")
+        if coluna.nivel == ColunaPersonalizada.Nivel.DOCUMENTO and emissao is not None:
+            raise ValueError("Esta coluna pertence ao documento, sem emissão.")
+        if coluna.nivel == ColunaPersonalizada.Nivel.REVISAO and emissao is None:
+            raise ValueError("Selecione a emissão desta coluna.")
+        valor_normalizado = _normalizar_valor_coluna(coluna, valor)
+        motivo = (motivo or "").strip()
+        if not motivo:
+            raise ValueError("Informe o motivo da alteração.")
+        if len(motivo) > 100:
+            raise ValueError("O motivo deve ter no máximo 100 caracteres.")
+
+        chave = {
+            "coluna": coluna,
+            "documento": documento,
+            "emissao": emissao,
+        }
+        registro = (
+            ValorColunaPersonalizada.objects.select_for_update()
+            .filter(**chave)
+            .first()
+        )
+        mudou = registro is None or registro.valor != valor_normalizado
+        if registro is None:
+            registro = ValorColunaPersonalizada(**chave)
+        if mudou:
+            registro.valor = valor_normalizado
+            registro._history_user = usuario
+            registro._change_reason = motivo
+            registro.save()
+        return registro, mudou
+
+
+def prever_preenchimento_lote_coluna(
+    usuario,
+    contrato_id,
+    coluna_id,
+    *,
+    codigos,
+    valor,
+    revisao="",
+):
+    contexto = carregar_coluna_personalizada_lote(usuario, contrato_id, coluna_id)
+    coluna = contexto["coluna"]
+    valor_normalizado = _normalizar_valor_coluna(coluna, valor)
+    revisao = (revisao or "").strip()
+    if coluna.nivel == ColunaPersonalizada.Nivel.REVISAO and not revisao:
+        raise ValueError("Informe a revisão que receberá o valor.")
+    codigos_normalizados = list(
+        dict.fromkeys(
+            linha.strip()
+            for linha in (codigos or "").splitlines()
+            if linha.strip()
+        )
+    )
+    if not codigos_normalizados:
+        raise ValueError("Cole ao menos um código.")
+
+    documentos = list(
+        Documento.objects.filter(contrato=contexto["contrato"])
+        .filter(
+            Q(identificador_base__in=codigos_normalizados)
+            | Q(codigos__codigo__in=codigos_normalizados)
+        )
+        .prefetch_related("codigos", "emissoes")
+        .distinct()
+    )
+    por_codigo = defaultdict(list)
+    for documento in documentos:
+        aliases = {documento.identificador_base}
+        aliases.update(item.codigo for item in documento.codigos.all())
+        for codigo in aliases.intersection(codigos_normalizados):
+            por_codigo[codigo].append(documento)
+
+    aceitos = []
+    conflitos = []
+    inexistentes = []
+    sem_emissao = []
+    ambiguos = []
+    for codigo in codigos_normalizados:
+        encontrados = por_codigo.get(codigo, [])
+        if not encontrados:
+            inexistentes.append({"codigo": codigo})
+            continue
+        if len(encontrados) > 1:
+            ambiguos.append({"codigo": codigo})
+            continue
+        documento = encontrados[0]
+        emissao = None
+        if coluna.nivel == ColunaPersonalizada.Nivel.REVISAO:
+            emissoes = [
+                item for item in documento.emissoes.all() if item.revisao == revisao
+            ]
+            if not emissoes:
+                sem_emissao.append({"codigo": codigo, "documento": documento})
+                continue
+            if len(emissoes) > 1:
+                ambiguos.append({"codigo": codigo, "documento": documento})
+                continue
+            emissao = emissoes[0]
+        valor_existente = (
+            ValorColunaPersonalizada.objects.filter(
+                coluna=coluna,
+                documento=documento,
+                emissao=emissao,
+            )
+            .values_list("valor", flat=True)
+            .first()
+        )
+        item = {
+            "codigo": codigo,
+            "documento": documento,
+            "emissao": emissao,
+            "valor_atual": valor_existente or "",
+            "valor_novo": valor_normalizado,
+        }
+        if valor_existente not in (None, "") and valor_existente != valor_normalizado:
+            conflitos.append(item)
+        else:
+            aceitos.append(item)
+    return {
+        **contexto,
+        "aceitos": aceitos,
+        "conflitos": conflitos,
+        "inexistentes": inexistentes,
+        "sem_emissao": sem_emissao,
+        "ambiguos": ambiguos,
+        "valor_normalizado": valor_normalizado,
+        "revisao": revisao,
+        "codigos_normalizados": codigos_normalizados,
+    }
+
+
+def aplicar_preenchimento_lote_coluna(
+    usuario,
+    contrato_id,
+    coluna_id,
+    *,
+    codigos,
+    valor,
+    motivo,
+    substituir=False,
+    revisao="",
+):
+    motivo = (motivo or "").strip()
+    if not motivo:
+        raise ValueError("Informe o motivo da alteração.")
+    if len(motivo) > 100:
+        raise ValueError("O motivo deve ter no máximo 100 caracteres.")
+    with transaction.atomic():
+        previa = prever_preenchimento_lote_coluna(
+            usuario,
+            contrato_id,
+            coluna_id,
+            codigos=codigos,
+            valor=valor,
+            revisao=revisao,
+        )
+        candidatos = [*previa["aceitos"]]
+        if substituir:
+            candidatos.extend(previa["conflitos"])
+        processados = set()
+        aplicados = 0
+        sem_alteracao = 0
+        for item in candidatos:
+            emissao_id = item["emissao"].pk if item["emissao"] else None
+            chave = (item["documento"].pk, emissao_id)
+            if chave in processados:
+                continue
+            processados.add(chave)
+            _, mudou = salvar_valor_coluna_personalizada(
+                usuario,
+                contrato_id,
+                item["documento"].pk,
+                coluna_id,
+                valor=previa["valor_normalizado"],
+                motivo=motivo,
+                emissao_id=emissao_id,
+            )
+            aplicados += int(mudou)
+            sem_alteracao += int(not mudou)
+        return {
+            "aplicados": aplicados,
+            "sem_alteracao": sem_alteracao,
+            "conflitos_ignorados": 0 if substituir else len(previa["conflitos"]),
+            "inexistentes": len(previa["inexistentes"]),
+            "sem_emissao": len(previa["sem_emissao"]),
+            "ambiguos": len(previa["ambiguos"]),
+        }
+
+
+def _contrato_administravel(usuario, contrato_id):
+    contrato = resolver_contrato(usuario, contrato_id)
+    if contrato is None:
+        raise PermissionDenied("Você não participa deste contrato.")
+    if not pode_cancelar_documentos(usuario, contrato):
+        raise PermissionDenied(
+            "Somente staff ou o administrador do contrato pode editar campos personalizados."
+        )
+    return contrato
+
+
+def _normalizar_valor_coluna(coluna, valor):
+    if hasattr(valor, "isoformat"):
+        valor = valor.isoformat()
+    valor = str(valor or "").strip()
+    if len(valor) > 2000:
+        raise ValueError("O valor deve ter no máximo 2000 caracteres.")
+    if not valor:
+        return ""
+    if coluna.tipo == ColunaPersonalizada.Tipo.DATA:
+        try:
+            return date.fromisoformat(valor).isoformat()
+        except ValueError as erro:
+            raise ValueError("Informe uma data válida no formato AAAA-MM-DD.") from erro
+    if coluna.tipo == ColunaPersonalizada.Tipo.LISTA and valor not in (coluna.opcoes or []):
+        raise ValueError("Selecione uma das opções da coluna.")
+    return valor
+
+
 def _celulas_lista_mestra(colunas, linha, campos_visiveis):
     valores_segmentos = linha["valores_segmentos"]
     celulas = []
@@ -545,12 +930,12 @@ def _celulas_lista_mestra(colunas, linha, campos_visiveis):
             )
             titulo = ""
         else:
-            valor, titulo = _valor_celula_lista_mestra(chave, linha)
+            valor, titulo = _valor_celula_lista_mestra(chave, linha, coluna)
         celulas.append({"coluna": coluna, "valor": valor, "titulo": titulo})
     return celulas
 
 
-def _valor_celula_lista_mestra(chave, linha):
+def _valor_celula_lista_mestra(chave, linha, coluna=None):
     documento = linha["documento"]
     emissao = linha["emissao"]
     if chave == "titulo":
@@ -587,6 +972,19 @@ def _valor_celula_lista_mestra(chave, linha):
         return valor, valor
     if chave == "distribuicao_setor":
         return linha.get("distribuicao_setores", []), ""
+    if chave.startswith("personalizada:"):
+        try:
+            identificador = int(chave.split(":", 1)[1])
+        except (TypeError, ValueError):
+            return "", ""
+        valor = linha.get("campos_contrato", {}).get(identificador, "")
+        if coluna and coluna.get("formato") == ColunaPersonalizada.Tipo.DATA and valor:
+            try:
+                data = date.fromisoformat(valor)
+                return data, data.strftime("%d/%m/%Y")
+            except ValueError:
+                pass
+        return valor, str(valor or "")
     return "", ""
 def _opcoes_lista_mestra(linhas, campo):
     valores = sorted(
@@ -993,6 +1391,44 @@ def _normalizar_ids_documentos(ids_documentos):
     return ids
 
 
+def _campos_contrato_documento(documento, linha_tempo):
+    colunas = list(
+        ColunaPersonalizada.objects.filter(
+            contrato_id=documento.contrato_id,
+            ativa=True,
+        )
+    )
+    valores = {
+        (valor.coluna_id, valor.emissao_id): valor.valor
+        for valor in ValorColunaPersonalizada.objects.filter(
+            coluna__in=colunas,
+            documento=documento,
+        )
+    }
+    campos_documento = []
+    campos_painel = []
+    for coluna in colunas:
+        if coluna.nivel == ColunaPersonalizada.Nivel.DOCUMENTO:
+            valor = valores.get((coluna.pk, None), "")
+            campo = {"coluna": coluna, "valor": valor}
+            campos_documento.append(campo)
+            campos_painel.append({"nome": coluna.nome, "valor": valor, "emissao": ""})
+        else:
+            for item in linha_tempo:
+                emissao = item["emissao"]
+                valor = valores.get((coluna.pk, emissao.pk), "")
+                campo = {"coluna": coluna, "valor": valor}
+                item.setdefault("campos_contrato", []).append(campo)
+                if valor:
+                    rotulo = f"Rev. {emissao.revisao}"
+                    if emissao.versao is not None:
+                        rotulo += f" · Ver {emissao.versao}"
+                    campos_painel.append(
+                        {"nome": coluna.nome, "valor": valor, "emissao": rotulo}
+                    )
+    return campos_documento, campos_painel
+
+
 def carregar_pasta_documento(usuario, contrato_id, documento_id, *, hoje=None):
     contrato = resolver_contrato(usuario, contrato_id)
     if contrato is None:
@@ -1022,6 +1458,10 @@ def carregar_pasta_documento(usuario, contrato_id, documento_id, *, hoje=None):
     )
     hoje = hoje or timezone.localdate()
     linha_tempo = _linha_tempo(perfil, documento, hoje)
+    campos_contrato_documento, campos_contrato_painel = _campos_contrato_documento(
+        documento,
+        linha_tempo,
+    )
     from grds.servicos import grds_por_emissoes
 
     grds_por_emissao = grds_por_emissoes(
@@ -1066,6 +1506,9 @@ def carregar_pasta_documento(usuario, contrato_id, documento_id, *, hoje=None):
         ),
         "previsao": previsao,
         "linha_tempo": linha_tempo,
+        "campos_contrato_documento": campos_contrato_documento,
+        "campos_contrato_painel": campos_contrato_painel,
+        "pode_editar_campos_contrato": pode_cancelar_documentos(usuario, contrato),
         "motivos_reabertura": [
             ("", "Não informado"),
             *Emissao.MotivoReabertura.choices,
@@ -1591,6 +2034,54 @@ def _atividades_documento(contrato, documento, codigo):
                 "resumo": acao.motivo or acao.tipo_pendencia,
                 "usuario": _nome_usuario(acao.usuario),
                 "resolvida_em": acao.resolvida_em,
+            }
+        )
+
+    colunas_por_id = dict(
+        ColunaPersonalizada.objects.filter(
+            contrato=contrato,
+            pk__in=ValorColunaPersonalizada.history.filter(
+                documento_id=documento.pk
+            ).values_list("coluna_id", flat=True),
+        ).values_list("pk", "nome")
+    )
+    historicos_campos = list(
+        ValorColunaPersonalizada.history.filter(documento_id=documento.pk)
+        .select_related("history_user")
+        .order_by("history_date", "history_id")
+    )
+    emissoes_por_id = {
+        emissao_id: (revisao, versao)
+        for emissao_id, revisao, versao in Emissao.objects.filter(
+            pk__in={registro.emissao_id for registro in historicos_campos if registro.emissao_id}
+        ).values_list("pk", "revisao", "versao")
+    }
+    valores_historicos_por_registro = {}
+    for registro in historicos_campos:
+        nome_coluna = colunas_por_id.get(registro.coluna_id, "Campo do contrato")
+        atual = registro.valor or "—"
+        resumo = f"{nome_coluna}: {atual}"
+        anterior = valores_historicos_por_registro.get(registro.id)
+        if anterior is not None and anterior != registro.valor:
+            resumo = f"{nome_coluna}: {anterior or '—'} → {atual}"
+        valores_historicos_por_registro[registro.id] = registro.valor
+        if registro.history_change_reason:
+            resumo += f" · Motivo: {registro.history_change_reason}"
+        emissao = ""
+        if registro.emissao_id:
+            revisao, versao = emissoes_por_id.get(registro.emissao_id, (None, None))
+            if revisao is not None:
+                emissao = f" · Rev. {revisao}"
+                if versao is not None:
+                    emissao += f" · Ver {versao}"
+        atividades.append(
+            {
+                "data_hora": registro.history_date,
+                "tipo": "atividade",
+                "titulo": "Campo do contrato alterado",
+                "resumo": resumo + emissao,
+                "usuario": _nome_usuario(registro.history_user),
+                "resolvida_em": None,
             }
         )
 

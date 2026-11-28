@@ -8,6 +8,7 @@ from .views import (
     DocumentosListaView,
     EditarTituloDocumentoView,
     ListaMestraView,
+    PreencherLoteColunaView,
     ReativarDocumentosView,
 )
 
@@ -19,6 +20,11 @@ urlpatterns = [
         "lista-mestra/colunas/",
         ColunasListaMestraView.as_view(),
         name="lista_mestra_colunas",
+    ),
+    path(
+        "lista-mestra/colunas/<int:coluna_id>/lote/",
+        PreencherLoteColunaView.as_view(),
+        name="lista_mestra_coluna_lote",
     ),
     path(
         "cancelar/<int:contrato_id>/",
