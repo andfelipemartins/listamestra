@@ -31,7 +31,7 @@
           <td>{{ item.nome_perfil|default:"—" }}</td>
           <td class="contrato-papeis">{% for papel in item.participacoes_por_papel %}{% if not forloop.first %}<br>{% endif %}{{ papel.rotulo }}: {{ papel.quantidade }}{% endfor %}</td>
           <td>{{ item.total_documentos_em_conta }}</td>
-          <td class="contrato-acoes"><a href="{% url 'painel' item.contrato.pk %}">Painel</a><a href="{% url 'lista_mestra' %}?contrato={{ item.contrato.pk }}">Lista Mestra</a><a href="{% url 'admin:contratos_contrato_change' item.contrato.pk %}">Editar no admin</a></td>
+          <td class="contrato-acoes"><a href="{% url 'contrato_detalhe' item.contrato.pk %}">Abrir</a><a href="{% url 'painel' item.contrato.pk %}">Painel</a><a href="{% url 'lista_mestra' %}?contrato={{ item.contrato.pk }}">Lista Mestra</a><a href="{% url 'admin:contratos_contrato_change' item.contrato.pk %}">Editar no admin</a></td>
         </tr>
         {% endfor %}
       </tbody>

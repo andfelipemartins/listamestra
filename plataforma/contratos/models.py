@@ -18,6 +18,12 @@ class Contrato(models.Model):
     codigo_interno = models.CharField("código interno", max_length=100)
     cliente = models.CharField("cliente", max_length=200)
     descricao = models.TextField("descrição", blank=True)
+    regiao_uf = models.CharField(
+        "UF da região", max_length=2, blank=True, default="", db_default=""
+    )
+    regiao_municipio = models.CharField(
+        "município da região", max_length=120, blank=True, default="", db_default=""
+    )
     ativo = models.BooleanField("ativo", default=True)
     pin_painel = models.CharField("PIN do painel (hash)", max_length=128, blank=True, default="")
     criado_em = models.DateTimeField("criado em", auto_now_add=True)
@@ -48,6 +54,7 @@ class EscopoContrato(models.Model):
         related_name="escopos",
     )
     nome = models.CharField("nome", max_length=100)
+    classes = models.JSONField("classes", default=list, blank=True, db_default="[]")
 
     class Meta:
         verbose_name = "escopo do contrato"
@@ -256,6 +263,9 @@ class Participacao(models.Model):
         related_name="participacoes",
     )
     papel = models.CharField("papel", max_length=16, choices=Usuario.Perfil.choices)
+    funcao = models.CharField(
+        "função", max_length=120, blank=True, default="", db_default=""
+    )
     ativo = models.BooleanField("ativo", default=True)
 
     class Meta:
@@ -271,3 +281,28 @@ class Participacao(models.Model):
 
     def __str__(self):
         return f"{self.usuario} — {self.contrato} ({self.get_papel_display()})"
+
+
+class DiaNaoUtilContrato(models.Model):
+    contrato = models.ForeignKey(
+        Contrato,
+        verbose_name="contrato",
+        on_delete=models.CASCADE,
+        related_name="dias_nao_uteis",
+    )
+    data = models.DateField("data")
+    descricao = models.CharField("descrição", max_length=200)
+
+    class Meta:
+        verbose_name = "dia não útil do contrato"
+        verbose_name_plural = "dias não úteis do contrato"
+        ordering = ("data",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=("contrato", "data"),
+                name="dia_nao_util_contrato_data_unica",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.data:%d/%m/%Y} — {self.descricao}"
