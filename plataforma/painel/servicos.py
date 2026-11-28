@@ -917,13 +917,10 @@ def _grafico_distribuicao(distribuicao, indicador):
     }
 
 
-def carregar_resumo_executivo(contrato, usuario, *, hoje=None):
-    """Monta o resumo imprimível com os números usados pelo Painel e Pendências."""
-    hoje = hoje or timezone.localdate()
+def _carregar_numeros_foto(contrato, usuario, hoje):
     painel = carregar_painel(contrato)
     resumo = painel["resumo"]
     contagens = resumo.contagens
-
     pendentes = sum(
         contagens.get(grupo.id, 0)
         for grupo in resumo.grupos
@@ -944,24 +941,9 @@ def carregar_resumo_executivo(contrato, usuario, *, hoje=None):
         for item in painel["fora_do_painel"]
         if _grupo_corresponde(item["grupo"], "cancelado")
     )
-
     inicio = carregar_resumo_inicio(usuario, contrato.pk, hoje=hoje)
     atrasados = carregar_atrasados(usuario, contrato.pk, hoje=hoje)
-    linhas_atrasadas = sorted(
-        (*atrasados["atrasos_cliente"], *atrasados["atrasos_nossos"]),
-        key=lambda item: (-item["dias"], item["codigo"].casefold()),
-    )
-
-    nome_disciplina = _nome_recorte_executivo(painel, "disciplina")
-    nome_trecho = _nome_recorte_executivo(painel, "trecho")
-    por_disciplina = _carregar_tabela_recorte(contrato, nome_disciplina, "Disciplina")
-    por_trecho = _carregar_tabela_recorte(contrato, nome_trecho, "Trecho")
-
     return {
-        "contrato": contrato,
-        "gerado_em": timezone.localtime(),
-        "ultima_importacao_id": painel["ultima_importacao_id"],
-        "ultima_importacao_situacao": painel["ultima_situacao_pw"],
         "avanco_percentual": resumo.percentual_avanco,
         "previstos": resumo.total_previsto,
         "emitidos": max(0, resumo.total_previsto - pendentes),
@@ -974,17 +956,6 @@ def carregar_resumo_executivo(contrato, usuario, *, hoje=None):
         ),
         "atrasos_cliente": len(atrasados["atrasos_cliente"]),
         "atrasos_nossos": len(atrasados["atrasos_nossos"]),
-        "atrasos_mais_antigos": [
-            {
-                "codigo": item["codigo"],
-                "revisao": item["revisao"],
-                "dias": item["dias"],
-            }
-            for item in linhas_atrasadas[:5]
-        ],
-        "por_disciplina": por_disciplina,
-        "por_trecho": por_trecho,
-        "tabelas_avanco": (por_disciplina, por_trecho),
     }
 
 
@@ -1009,44 +980,6 @@ def _grupo_corresponde(grupo, significado):
     return any(termo in identificacao.split() for termo in termos)
 
 
-def _nome_recorte_executivo(painel, finalidade):
-    caixas = painel["caixas"]
-    nomes = {caixa.nome for caixa in caixas}
-    if finalidade == "disciplina" and "escopo" in nomes:
-        return "escopo"
-
-    candidatos = {
-        "disciplina": ("disciplina", "classe", "especialidade", "discipline", "class"),
-        "trecho": ("trecho", "segmento", "section"),
-    }[finalidade]
-    for caixa in caixas:
-        rotulos = (_normalizar_rotulo(caixa.nome), _normalizar_rotulo(caixa.rotulo))
-        if any(
-            rotulo == candidato or rotulo.startswith(f"{candidato} ")
-            for rotulo in rotulos
-            for candidato in candidatos
-        ):
-            return caixa.nome
-    return None
-
-
-def _carregar_tabela_recorte(contrato, nome_recorte, rotulo):
-    if nome_recorte is None:
-        return {"rotulo": rotulo, "grupos": (), "linhas": (), "linhas_omitidas": 0}
-
-    dados = carregar_painel(contrato, por=nome_recorte)
-    linhas = sorted(
-        dados["recortes"],
-        key=lambda item: (-item["total"], item["rotulo"].casefold()),
-    )
-    return {
-        "rotulo": rotulo,
-        "grupos": dados["grupos_recorte"],
-        "linhas": linhas[:12],
-        "linhas_omitidas": max(0, len(linhas) - 12),
-    }
-
-
 def _normalizar_rotulo(valor):
     sem_acentos = (
         unicodedata.normalize("NFKD", str(valor))
@@ -1058,8 +991,7 @@ def _normalizar_rotulo(valor):
 
 def guardar_foto(contrato, usuario, hoje=None):
     hoje = hoje or timezone.localdate()
-    resumo = carregar_resumo_executivo(contrato, usuario, hoje=hoje)
-    numeros = {campo: resumo[campo] for campo, _ in CAMPOS_FOTO_PAINEL}
+    numeros = _carregar_numeros_foto(contrato, usuario, hoje)
     foto, _ = FotoPainel.objects.update_or_create(
         contrato=contrato,
         data=hoje,

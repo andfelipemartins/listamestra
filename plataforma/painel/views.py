@@ -3,7 +3,6 @@ from datetime import datetime, timedelta
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
-from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views import View
@@ -15,7 +14,6 @@ from importacoes.models import InconsistenciaImportacao
 from .servicos import (
     PainelIndisponivel,
     carregar_painel,
-    carregar_resumo_executivo,
     guardar_foto,
     listar_fotos,
 )
@@ -53,28 +51,6 @@ class PainelRecorteView(View):
         except PainelIndisponivel as erro:
             return render(request, "painel/indisponivel.html", {"contrato": contrato, "erro": erro})
         return render(request, "painel/_recortes.html", contexto)
-
-
-class ResumoExecutivoView(View):
-    def get(self, request, contrato_id):
-        contrato = get_object_or_404(Contrato, pk=contrato_id, ativo=True)
-        if not request.user.is_authenticated or not Participacao.objects.filter(
-            usuario=request.user,
-            contrato=contrato,
-            ativo=True,
-        ).exists():
-            return HttpResponseForbidden()
-        try:
-            contexto = carregar_resumo_executivo(contrato, request.user)
-        except PainelIndisponivel as erro:
-            return render(
-                request,
-                "painel/indisponivel.html",
-                {"contrato": contrato, "erro": erro},
-            )
-        response = render(request, "painel/resumo_executivo.html", contexto)
-        response["Cache-Control"] = "private, no-store"
-        return response
 
 
 class GuardarFotoPainelView(LoginRequiredMixin, View):
@@ -215,7 +191,7 @@ def _contexto_painel(contrato, por, filtros=None, *, usuario=None):
         if tem_acesso_recusadas
         else 0
     )
-    dados["pode_ver_resumo_executivo"] = bool(
+    dados["pode_ver_fotos"] = bool(
         usuario
         and usuario.is_authenticated
         and Participacao.objects.filter(

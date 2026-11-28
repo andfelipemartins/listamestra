@@ -79,19 +79,14 @@ def _numeros(**alteracoes):
 
 
 @pytest.mark.django_db
-def test_guardar_foto_persiste_os_numeros_do_resumo_executivo(
+def test_guardar_foto_persiste_os_numeros_do_painel(
     contrato, perfil_modelo, participante
 ):
-    from painel.servicos import carregar_resumo_executivo
-
-    resumo = carregar_resumo_executivo(contrato, participante, hoje=HOJE)
-    esperado = {campo: resumo[campo] for campo, _ in CAMPOS_FOTO_PAINEL}
-
     foto = guardar_foto(contrato, participante, hoje=HOJE)
 
     assert foto.data == HOJE
     assert foto.criado_por == participante
-    assert foto.numeros == esperado
+    assert foto.numeros == _numeros()
 
 
 @pytest.mark.django_db
@@ -100,11 +95,11 @@ def test_guardar_de_novo_no_mesmo_dia_substitui_a_foto(
 ):
     import painel.servicos as servicos
 
-    resumo = {campo: 1 for campo, _ in CAMPOS_FOTO_PAINEL}
-    monkeypatch.setattr(servicos, "carregar_resumo_executivo", lambda *args, **kwargs: resumo)
+    numeros = {campo: 1 for campo, _ in CAMPOS_FOTO_PAINEL}
+    monkeypatch.setattr(servicos, "_carregar_numeros_foto", lambda *args: numeros)
     guardar_foto(contrato, participante, hoje=HOJE)
 
-    resumo["previstos"] = 4
+    numeros["previstos"] = 4
     foto = guardar_foto(contrato, participante, hoje=HOJE)
 
     assert FotoPainel.objects.filter(contrato=contrato, data=HOJE).count() == 1

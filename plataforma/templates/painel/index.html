@@ -1,12 +1,57 @@
 {% extends "base.html" %}
 {% load static %}
 {% block title %}Painel · {{ contrato.codigo_interno }}{% endblock %}
-{% block extra_head %}<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>{% endblock %}
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+<style>
+  .painel-cabecalho-impressao { display: none; }
+  @page { size: A4 landscape; margin: 10mm; }
+  @media print {
+    *, *::before, *::after { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    html, body { background: #fff !important; }
+    .topbar, .sidebar, .painel-acoes-heading, .painel-filtros, .painel-filtros-ativos,
+    .painel-botao-imprimir, form { display: none !important; }
+    .app-shell { display: block !important; min-height: 0 !important; }
+    .main-content { display: block !important; width: auto !important; max-width: none !important; margin: 0 !important; padding: 0 !important; }
+    #painel-dados { overflow: visible !important; }
+    .painel-cabecalho-impressao { display: flex !important; justify-content: space-between; gap: 16px; margin-bottom: 8mm; padding-bottom: 3mm; border-bottom: 1px solid #64748b; font-size: 10pt; }
+    .painel-heading { align-items: flex-start; margin-bottom: 5mm; }
+    .painel-titulo-contrato { overflow: visible; white-space: normal; }
+    .painel-grupos { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2mm; }
+    .painel-grupo-card { min-height: 0; padding: 3mm; box-shadow: none; }
+    .painel-grupo-card strong { font-size: 22pt; }
+    .panel, .painel-total, .painel-categoria-card, .painel-grupo-card, .painel-avanco,
+    .painel-chart-panel, .painel-fora-id, .painel-recorte-panel, .painel-indicador,
+    .painel-pizza-wrap, .painel-barras-wrap, .painel-indicador-grafico-wrap, table, tr {
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    .painel-destaques { grid-template-columns: minmax(0, 1.35fr) minmax(220px, .65fr); gap: 3mm; }
+    .painel-pizza-wrap { width: 100%; height: 68mm; }
+    .painel-barras-wrap { height: min(155mm, max(75mm, calc(var(--linhas) * 7mm))); max-height: none; }
+    .painel-indicador-grafico-wrap { height: 70mm; max-height: 70mm; overflow: hidden !important; }
+    .painel-fora-id { min-height: 0; padding: 5mm; }
+    .painel-fora-id > strong { font-size: 34pt; }
+    .table-wrap { overflow: visible !important; }
+    a { color: inherit; text-decoration: none; }
+  }
+</style>
+{% endblock %}
 {% block content %}
 <div id="painel-dados">{% include "painel/_conteudo.html" %}</div>
 <script>
   let graficoPizzaPainel;
   let graficoRecortesPainel;
+
+  function atualizarDataImpressao() {
+    const elemento = document.getElementById("painel-data-impressao");
+    if (elemento) elemento.textContent = new Intl.DateTimeFormat("pt-BR", {dateStyle: "short", timeStyle: "short"}).format(new Date());
+  }
+
+  function imprimirPainel() {
+    atualizarDataImpressao();
+    window.print();
+  }
 
   function desenharPizzaPainel() {
     if (!window.Chart) return;
@@ -18,7 +63,7 @@
       graficoPizzaPainel = new Chart(canvas, {
         type: "pie",
         data: JSON.parse(dadosEl.textContent),
-        options: {responsive: true, maintainAspectRatio: false, plugins: {legend: {position: "bottom"}}}
+        options: {responsive: true, maintainAspectRatio: false, animation: {duration: 0}, plugins: {legend: {position: "bottom"}}}
       });
     }
   }
@@ -33,7 +78,7 @@
       graficoRecortesPainel = new Chart(canvas, {
         type: "bar",
         data: JSON.parse(dadosEl.textContent),
-        options: {indexAxis: "y", responsive: true, maintainAspectRatio: false, scales: {x: {stacked: true, beginAtZero: true}, y: {stacked: true}}, plugins: {legend: {position: "bottom"}}}
+        options: {indexAxis: "y", responsive: true, maintainAspectRatio: false, animation: {duration: 0}, scales: {x: {stacked: true, beginAtZero: true}, y: {stacked: true}}, plugins: {legend: {position: "bottom"}}}
       });
     }
   }
@@ -44,6 +89,18 @@
   }
 
   document.addEventListener("DOMContentLoaded", desenharGraficosPainel);
+  window.addEventListener("beforeprint", function() {
+    atualizarDataImpressao();
+    desenharGraficosPainel();
+    [graficoPizzaPainel, graficoRecortesPainel].forEach(function(grafico) {
+      if (grafico) { grafico.resize(); grafico.update("none"); }
+    });
+  });
+  window.addEventListener("afterprint", function() {
+    [graficoPizzaPainel, graficoRecortesPainel].forEach(function(grafico) {
+      if (grafico) grafico.resize();
+    });
+  });
   document.body.addEventListener("htmx:afterSwap", function(event) {
     if (event.detail.target.id === "painel-dados") desenharGraficosPainel();
     if (event.detail.target.id === "painel-recortes") desenharRecortesPainel();

@@ -1,8 +1,13 @@
+<div class="painel-cabecalho-impressao" aria-hidden="true">
+  <strong>{{ contrato.nome }} ({{ contrato.codigo_interno }})</strong>
+  <span>Impresso em <time id="painel-data-impressao"></time></span>
+</div>
+
 <section class="page-heading painel-heading">
   <div class="painel-heading-info"><span class="eyebrow">ACOMPANHAMENTO EXECUTIVO</span><h1 class="painel-titulo-contrato" title="{{ contrato.nome }}">{{ contrato.nome }}</h1><p>{{ contrato.codigo_interno }} · {{ contrato.cliente }}</p></div>
   <div class="painel-acoes-heading" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-    {% if pode_ver_resumo_executivo %}
-      <a class="button button-primary painel-resumo-link" href="{% url 'resumo_executivo' contrato.pk %}">Resumo executivo</a>
+    <button class="button button-primary painel-botao-imprimir" type="button" onclick="imprimirPainel()">Imprimir</button>
+    {% if pode_ver_fotos %}
       <a class="button" href="{% url 'painel_fotos' contrato.pk %}">Fotos</a>
     {% endif %}
     {% if pode_guardar_foto %}

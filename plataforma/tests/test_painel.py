@@ -921,7 +921,7 @@ def test_perfil_sem_indicador_nao_mostra_bloco_no_painel(
     resposta = client.get(reverse("painel", args=(contrato.pk,)))
 
     assert resposta.status_code == 200
-    assert "painel-indicador" not in resposta.content.decode()
+    assert '<article class="painel-indicador"' not in resposta.content.decode()
     assert "Prazos" not in resposta.content.decode()
 
 

@@ -1,18 +1,18 @@
 from django.urls import path
+from django.views.generic import RedirectView
 
 from .views import (
     FotosPainelView,
     GuardarFotoPainelView,
     PainelRecorteView,
     PainelView,
-    ResumoExecutivoView,
 )
 
 urlpatterns = [
     path("<int:contrato_id>/", PainelView.as_view(), name="painel"),
     path(
         "<int:contrato_id>/resumo-executivo/",
-        ResumoExecutivoView.as_view(),
+        RedirectView.as_view(pattern_name="painel", permanent=True),
         name="resumo_executivo",
     ),
     path("<int:contrato_id>/fotos/", FotosPainelView.as_view(), name="painel_fotos"),
