@@ -15,6 +15,7 @@ from documentos.models import Analise, Documento, Emissao
 
 from .forms import (
     ImportarCronogramaForm,
+    ImportarElaboracaoForm,
     ImportarIDForm,
     ImportarSituacaoPadraoForm,
     ImportarSituacaoPWForm,
@@ -52,6 +53,13 @@ from .cronograma import (
     aplicar_previa_cronograma,
     gerar_previa_cronograma,
 )
+from .elaboracao import (
+    ErroFormatoElaboracao,
+    aplicar_previa_elaboracao,
+    gerar_previa_elaboracao,
+    previa_da_sessao,
+    serializar_previa,
+)
 from .models import ImportacaoCronograma
 from .situacao_padrao import (
     ErroFormatoSituacaoPadrao,
@@ -69,6 +77,7 @@ CHAVE_SESSAO_SITUACAO = "previa_importacao_situacao_pw"
 CHAVE_SESSAO_REPROCESSAMENTO = "previa_reprocessamento_recusadas"
 CHAVE_SESSAO_CRONOGRAMA = "previa_importacao_cronograma"
 CHAVE_SESSAO_SITUACAO_PADRAO = "previa_importacao_situacao_padrao"
+CHAVE_SESSAO_ELABORACAO = "previa_importacao_elaboracao"
 PREFIXO_ARQUIVO_SITUACAO_PADRAO = "[Planilha padrão] "
 
 
@@ -1465,6 +1474,74 @@ class ImportarCronogramaView(LoginRequiredMixin, UserPassesTestMixin, View):
             f"{importacao.linhas_recusadas} linhas recusadas.",
         )
         return redirect("importar_cronograma")
+
+
+class ImportarElaboracaoView(LoginRequiredMixin, UserPassesTestMixin, View):
+    template_name = "importacoes/elaboracao.html"
+    raise_exception = True
+
+    def test_func(self):
+        return self.request.user.is_staff
+
+    def get(self, request):
+        request.session.pop(CHAVE_SESSAO_ELABORACAO, None)
+        return render(
+            request,
+            self.template_name,
+            {"form": ImportarElaboracaoForm(initial={"contrato": request.GET.get("contrato", "")})},
+        )
+
+    def post(self, request):
+        if request.POST.get("acao") == "confirmar":
+            return self._confirmar(request)
+
+        form = ImportarElaboracaoForm(request.POST, request.FILES)
+        if not form.is_valid():
+            return render(request, self.template_name, {"form": form})
+        try:
+            arquivo = form.cleaned_data["arquivo"]
+            previa = gerar_previa_elaboracao(
+                arquivo,
+                form.cleaned_data["contrato"],
+                nome_arquivo=arquivo.name,
+            )
+        except (ErroFormatoElaboracao, ValueError) as erro:
+            return render(request, self.template_name, {"form": form, "erro": str(erro)})
+
+        request.session[CHAVE_SESSAO_ELABORACAO] = {
+            "usuario_id": request.user.pk,
+            "previa": serializar_previa(previa),
+        }
+        return render(request, self.template_name, {"form": form, "previa": previa})
+
+    def _confirmar(self, request):
+        dados = request.session.get(CHAVE_SESSAO_ELABORACAO)
+        if not dados or dados.get("usuario_id") != request.user.pk:
+            messages.error(request, "A prévia expirou. Envie a planilha novamente.")
+            return redirect("importar_elaboracao")
+        try:
+            contrato_id = int(dados["previa"]["contrato_id"])
+            contrato = get_object_or_404(Contrato, pk=contrato_id, ativo=True)
+            previa = previa_da_sessao(dados["previa"], contrato)
+            resultado = aplicar_previa_elaboracao(previa, contrato, request.user)
+        except (ErroFormatoElaboracao, ValueError, KeyError, TypeError) as erro:
+            messages.error(request, str(erro))
+            return redirect("importar_elaboracao")
+
+        request.session.pop(CHAVE_SESSAO_ELABORACAO, None)
+        messages.success(
+            request,
+            "Elaboração importada: "
+            f"{resultado['documentos_vinculados']} documento(s) vinculado(s), "
+            f"{resultado['empresas_criadas']} empresa(s) criada(s), "
+            f"{resultado['ja_vinculados']} já vinculado(s).",
+        )
+        if resultado["conflitos"]:
+            messages.warning(
+                request,
+                f"{len(resultado['conflitos'])} conflito(s) de empresa existente foram ignorados.",
+            )
+        return redirect("importar_elaboracao")
 
 
 def _serializar_previa_cronograma(previa):

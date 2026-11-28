@@ -1,3 +1,5 @@
+import re
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -5,6 +7,51 @@ from django.db.models import Q
 from simple_history.models import HistoricalRecords
 
 from contratos.models import Contrato, PerfilContrato
+
+
+class EmpresaElaboradora(models.Model):
+    contrato = models.ForeignKey(
+        Contrato,
+        verbose_name="contrato",
+        on_delete=models.PROTECT,
+        related_name="empresas_elaboradoras",
+    )
+    nome = models.CharField("nome", max_length=200)
+    nome_normalizado = models.CharField("nome normalizado", max_length=200, editable=False)
+
+    class Meta:
+        verbose_name = "empresa elaboradora"
+        verbose_name_plural = "empresas elaboradoras"
+        ordering = ("nome",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=("contrato", "nome_normalizado"),
+                name="emp_elab_ct_nome_norm_uq",
+            ),
+        ]
+
+    @staticmethod
+    def normalizar_nome(nome):
+        return re.sub(r"\s+", " ", str(nome or "")).strip().casefold()
+
+    def save(self, *args, **kwargs):
+        self.nome = re.sub(r"\s+", " ", self.nome or "").strip()
+        if not self.nome:
+            raise ValidationError({"nome": "Informe o nome da empresa elaboradora."})
+        self.nome_normalizado = self.normalizar_nome(self.nome)
+        if kwargs.get("update_fields") is not None:
+            kwargs["update_fields"] = set(kwargs["update_fields"]) | {"nome_normalizado"}
+        super().save(*args, **kwargs)
+
+    def clean(self):
+        super().clean()
+        self.nome = re.sub(r"\s+", " ", self.nome or "").strip()
+        self.nome_normalizado = self.normalizar_nome(self.nome)
+        if not self.nome:
+            raise ValidationError({"nome": "Informe o nome da empresa elaboradora."})
+
+    def __str__(self):
+        return self.nome
 
 
 class Documento(models.Model):
@@ -18,6 +65,14 @@ class Documento(models.Model):
     tipo = models.CharField("tipo documental", max_length=80, blank=True)
     titulo = models.CharField("título", max_length=500, blank=True)
     disciplina = models.CharField("disciplina", max_length=100, blank=True)
+    elaborado_por = models.ForeignKey(
+        EmpresaElaboradora,
+        verbose_name="elaborado por",
+        on_delete=models.SET_NULL,
+        related_name="documentos_elaborados",
+        null=True,
+        blank=True,
+    )
     trecho = models.CharField("trecho", max_length=100, blank=True)
     atributos = models.JSONField("atributos interpretados", default=dict, blank=True)
     fora_do_id = models.BooleanField("fora do ID", default=False)
@@ -65,6 +120,17 @@ class Documento(models.Model):
 
     def __str__(self):
         return self.identificador_base
+
+    def clean(self):
+        super().clean()
+        if (
+            self.elaborado_por_id
+            and self.contrato_id
+            and self.elaborado_por.contrato_id != self.contrato_id
+        ):
+            raise ValidationError(
+                {"elaborado_por": "A empresa elaboradora deve pertencer ao contrato do documento."}
+            )
 
 
 class CodigoDocumento(models.Model):

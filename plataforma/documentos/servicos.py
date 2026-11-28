@@ -895,7 +895,7 @@ def _documentos_com_historico(contrato, perfil_modelo):
     codigos = CodigoDocumento.objects.filter(perfil=perfil_modelo).select_related("perfil")
     return (
         Documento.objects.filter(contrato=contrato)
-        .select_related("contrato", "cancelado_por")
+        .select_related("contrato", "cancelado_por", "elaborado_por")
         .prefetch_related(
             Prefetch("emissoes", queryset=emissoes),
             Prefetch("codigos", queryset=codigos),

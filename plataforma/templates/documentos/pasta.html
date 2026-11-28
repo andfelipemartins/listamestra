@@ -51,6 +51,7 @@
     <span class="eyebrow">{{ contrato.codigo_interno }} · PASTA DO DOCUMENTO</span>
     <h1 class="pasta-codigo">{{ codigo }}</h1>
     <p class="pasta-titulo">{{ documento.titulo|default:"(sem título)" }}</p>
+    <p class="pasta-titulo">Elaborado por: {{ documento.elaborado_por|default:"-" }}</p>
     {% if cancelamento %}<div class="pasta-cancelamento"><strong>Cancelado em {{ cancelamento.em|date:"d/m/Y" }} por {{ cancelamento.por }}</strong> · {{ cancelamento.motivo }}{% if cancelamento.observacao %} · {{ cancelamento.observacao }}{% endif %}</div>{% endif %}
     <div class="pasta-destaques">
       <div class="pasta-destaque"><span>Categoria</span>{{ categoria }}</div>

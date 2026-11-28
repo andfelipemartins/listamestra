@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Importar elaboração{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <div>
+    <span class="eyebrow">Importações</span>
+    <h1>Elaboração da Lista Mestra</h1>
+    <p>A prévia localiza as colunas CÓDIGO e ELABORAÇÃO pelo cabeçalho e reúne as revisões por documento.</p>
+    <p><a href="{% url 'importar_id' %}">Voltar às importações</a></p>
+  </div>
+</section>
+
+{% if messages %}
+  {% for message in messages %}<p class="notice notice-{{ message.tags }}">{{ message }}</p>{% endfor %}
+{% endif %}
+{% if erro %}<p class="notice notice-error">{{ erro }}</p>{% endif %}
+
+<section class="panel">
+  <h2>Arquivo e contrato</h2>
+  <form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    <p>{{ form.contrato.label_tag }} {{ form.contrato }} {{ form.contrato.errors }}</p>
+    <p>{{ form.arquivo.label_tag }} {{ form.arquivo }} {{ form.arquivo.errors }}</p>
+    <button class="button button-primary" type="submit">Gerar prévia</button>
+  </form>
+</section>
+
+{% if previa %}
+<section class="panel" aria-labelledby="previa-elaboracao-titulo">
+  <div class="panel-heading">
+    <div>
+      <h2 id="previa-elaboracao-titulo">Prévia · {{ previa.arquivo_nome }}</h2>
+      <p>{{ previa.documentos|length }} documento(s) encontrados para vínculo.</p>
+    </div>
+  </div>
+  <h3>Documentos</h3>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Código</th><th>Empresa</th><th>Ação</th></tr></thead>
+    <tbody>
+      {% for linha in previa.documentos %}<tr><td>{{ linha.codigo }}</td><td>{{ linha.empresa }}</td><td>{{ linha.acao }}</td></tr>
+      {% empty %}<tr><td colspan="3">Nenhum vínculo aplicável.</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+
+  <h3>Empresas novas</h3>
+  <ul>{% for empresa in previa.empresas_novas %}<li>{{ empresa }}</li>{% empty %}<li>Nenhuma empresa nova.</li>{% endfor %}</ul>
+
+  <h3>Códigos inexistentes no contrato</h3>
+  <ul>{% for codigo in previa.codigos_inexistentes %}<li>{{ codigo }}</li>{% empty %}<li>Nenhum.</li>{% endfor %}</ul>
+
+  <h3>Conflitos na planilha · mais de uma empresa para o código</h3>
+  <ul>{% for conflito in previa.conflitos_planilha %}<li>{{ conflito.codigo }}: {{ conflito.empresas|join:", " }}</li>{% empty %}<li>Nenhum.</li>{% endfor %}</ul>
+
+  <h3>Conflitos com vínculo existente</h3>
+  <ul>{% for conflito in previa.conflitos_existentes %}<li>{{ conflito.codigo }}: {{ conflito.empresa_atual }} / {{ conflito.empresa_planilha }}</li>{% empty %}<li>Nenhum.</li>{% endfor %}</ul>
+
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="acao" value="confirmar">
+    <button class="button button-primary" type="submit">Aplicar vínculos da prévia</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

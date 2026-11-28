@@ -150,3 +150,17 @@ class ImportarCronogramaForm(forms.Form):
         if not arquivo.name.lower().endswith((".xlsx", ".csv")):
             raise forms.ValidationError("Envie um arquivo .xlsx ou .csv.")
         return arquivo
+
+
+class ImportarElaboracaoForm(forms.Form):
+    contrato = forms.ModelChoiceField(
+        label="Contrato",
+        queryset=Contrato.objects.filter(ativo=True).order_by("nome"),
+    )
+    arquivo = forms.FileField(label="Lista Mestra (.xlsx ou .xlsm)")
+
+    def clean_arquivo(self):
+        arquivo = self.cleaned_data["arquivo"]
+        if not arquivo.name.lower().endswith((".xlsx", ".xlsm")):
+            raise forms.ValidationError("Envie um arquivo .xlsx ou .xlsm.")
+        return arquivo

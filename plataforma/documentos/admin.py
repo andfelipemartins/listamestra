@@ -1,6 +1,13 @@
 from django.contrib import admin
 
-from .models import Analise, CodigoDocumento, Documento, Emissao
+from .models import Analise, CodigoDocumento, Documento, Emissao, EmpresaElaboradora
+
+
+@admin.register(EmpresaElaboradora)
+class EmpresaElaboradoraAdmin(admin.ModelAdmin):
+    list_display = ("nome", "contrato")
+    list_filter = ("contrato",)
+    search_fields = ("nome", "contrato__nome", "contrato__codigo_interno")
 
 
 class CodigoDocumentoInline(admin.TabularInline):
@@ -40,6 +47,7 @@ class DocumentoAdmin(admin.ModelAdmin):
         "tipo",
         "disciplina",
         "trecho",
+        "elaborado_por",
         "contrato",
         "ativo",
         "cancelado_em",
@@ -50,11 +58,12 @@ class DocumentoAdmin(admin.ModelAdmin):
         "tipo",
         "disciplina",
         "trecho",
+        "elaborado_por",
         "contrato",
         "motivo_cancelamento",
         ("cancelado_em", admin.EmptyFieldListFilter),
     )
-    search_fields = ("identificador_base", "titulo", "codigos__codigo", "contrato__nome")
+    search_fields = ("identificador_base", "titulo", "codigos__codigo", "contrato__nome", "elaborado_por__nome")
     inlines = (CodigoDocumentoInline, EmissaoInline)
     readonly_fields = ("criado_em", "cancelado_por", "cancelado_em", "observacao_reativacao")
     fields = (
@@ -63,6 +72,7 @@ class DocumentoAdmin(admin.ModelAdmin):
         "tipo",
         "titulo",
         "disciplina",
+        "elaborado_por",
         "trecho",
         "atributos",
         "fora_do_id",

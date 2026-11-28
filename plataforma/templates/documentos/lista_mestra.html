@@ -73,13 +73,14 @@
     <div class="panel-heading"><div><h2>{{ total_filtrado }} {% if total_filtrado == 1 %}emissão{% else %}emissões{% endif %}</h2><p>Página {{ pagina.number }} de {{ pagina.paginator.num_pages|default:1 }} · até 100 linhas por página.</p></div></div>
     <div class="table-wrap lista-mestra-tabela" tabindex="0" role="region" aria-label="Tabela da Lista Mestra; use a rolagem horizontal para ver todas as colunas">
       <table>
-        <thead><tr><th class="lista-mestra-codigo">Código</th>{% for segmento in segmentos_codigo %}<th class="lista-mestra-coluna-curta">{{ segmento.rotulo|default:segmento.nome }}</th>{% endfor %}<th class="lista-mestra-titulo">Título</th><th class="lista-mestra-texto-longo">Disciplina</th><th class="lista-mestra-coluna-curta">Revisão</th><th class="lista-mestra-coluna-curta">Versão</th><th class="lista-mestra-coluna-curta">Fase</th><th class="lista-mestra-coluna-curta">Data de emissão</th><th class="lista-mestra-coluna-curta">Rótulo cronológico</th><th>Situação da análise</th><th class="lista-mestra-coluna-curta">Data da análise</th><th class="lista-mestra-texto-longo">Documento de retorno</th><th class="lista-mestra-texto-longo">Observação</th></tr></thead>
+        <thead><tr><th class="lista-mestra-codigo">Código</th>{% for segmento in segmentos_codigo %}<th class="lista-mestra-coluna-curta">{{ segmento.rotulo|default:segmento.nome }}</th>{% endfor %}<th class="lista-mestra-titulo">Título</th><th class="lista-mestra-texto-longo">Elabora&#231;&#227;o</th><th class="lista-mestra-texto-longo">Disciplina</th><th class="lista-mestra-coluna-curta">Revisão</th><th class="lista-mestra-coluna-curta">Versão</th><th class="lista-mestra-coluna-curta">Fase</th><th class="lista-mestra-coluna-curta">Data de emissão</th><th class="lista-mestra-coluna-curta">Rótulo cronológico</th><th>Situação da análise</th><th class="lista-mestra-coluna-curta">Data da análise</th><th class="lista-mestra-texto-longo">Documento de retorno</th><th class="lista-mestra-texto-longo">Observação</th></tr></thead>
         <tbody>
           {% for linha in pagina.object_list %}
           <tr>
             <td class="lista-mestra-codigo"><a href="{% url 'documento_pasta' contrato.pk linha.documento.pk %}"><strong>{{ linha.codigo }}</strong></a></td>
             {% for valor in linha.segmentos %}<td class="lista-mestra-coluna-curta">{{ valor|default:"—" }}</td>{% endfor %}
             <td class="lista-mestra-celula-truncada lista-mestra-titulo" title="{{ linha.documento.titulo|default:'—' }}">{{ linha.documento.titulo|default:"—" }}</td>
+            <td class="lista-mestra-celula-truncada lista-mestra-texto-longo" title="{{ linha.documento.elaborado_por|default:'-' }}">{{ linha.documento.elaborado_por|default:"-" }}</td>
             <td class="lista-mestra-celula-truncada lista-mestra-texto-longo" title="{{ linha.disciplina|default:'—' }}">{{ linha.disciplina|default:"—" }}</td>
             <td class="lista-mestra-coluna-curta">{{ linha.emissao.revisao }}</td>
             <td class="lista-mestra-coluna-curta">{{ linha.emissao.versao|default_if_none:"—" }}</td>
@@ -91,7 +92,7 @@
             <td class="lista-mestra-celula-truncada lista-mestra-texto-longo" title="{{ linha.documento_retorno|default:'—' }}">{{ linha.documento_retorno|default:"—" }}</td>
             <td class="lista-mestra-celula-truncada lista-mestra-texto-longo" title="{{ linha.observacao|default:'—' }}">{{ linha.observacao|default:"—" }}</td>
           </tr>
-          {% empty %}<tr><td colspan="{{ segmentos_codigo|length|add:12 }}" class="painel-sem-dados">Nenhuma emissão corresponde aos filtros.</td></tr>{% endfor %}
+          {% empty %}<tr><td colspan="{{ segmentos_codigo|length|add:13 }}" class="painel-sem-dados">Nenhuma emissão corresponde aos filtros.</td></tr>{% endfor %}
         </tbody>
       </table>
     </div>
